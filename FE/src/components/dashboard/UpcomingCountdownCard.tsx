@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen, Clock, UserCheck } from 'lucide-react';
 import { formatSessionDuration, formatSessionWhen } from '../../utils/sessionDuration';
+import type { UpcomingModalSession } from './UpcomingSessionModal';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
@@ -25,6 +26,9 @@ export type UpcomingSession = {
   id?: string;
   peerUserId?: string;
   pending?: boolean;
+  /** Same session details the dashboard's session lists open, when the session has them. */
+  detail?: UpcomingModalSession['detail'];
+  briefLabel?: string;
 };
 
 function CountdownRow({
@@ -36,6 +40,7 @@ function CountdownRow({
   session,
   now,
   onJoin,
+  onOpenDetails,
 }: {
   icon: React.ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean }>;
   iconClass: string;
@@ -45,6 +50,7 @@ function CountdownRow({
   session: UpcomingSession | null;
   now: number;
   onJoin?: () => void;
+  onOpenDetails?: (session: UpcomingSession) => void;
 }) {
   return (
     <div className="relative rounded-xl border-2 border-[#234C6A]/60 bg-[#F8FAFC] p-4">
@@ -62,9 +68,20 @@ function CountdownRow({
             </span>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-900">{label}</p>
-              <p className="truncate text-[12px] font-semibold text-slate-700">
-                {session ? session.title : emptyLabel}
-              </p>
+              {session?.detail && onOpenDetails ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenDetails(session)}
+                  title={session.briefLabel ? `View ${session.briefLabel.toLowerCase()}` : 'View session details'}
+                  className="block max-w-full truncate text-left text-[12px] font-semibold text-slate-700 hover:underline"
+                >
+                  {session.title}
+                </button>
+              ) : (
+                <p className="truncate text-[12px] font-semibold text-slate-700">
+                  {session ? session.title : emptyLabel}
+                </p>
+              )}
               {session ? (
                 <p className="text-[11px] text-slate-500">
                   {[formatSessionWhen(session.startAt), formatSessionDuration(session.durationMinutes)]
@@ -112,9 +129,11 @@ export default function UpcomingCountdownCard({
   onJoinOneToOne,
   nextSeminar = null,
   nextOneToOne = null,
+  onOpenDetails,
 }: {
   onJoinSeminar?: () => void;
   onJoinOneToOne?: () => void;
+  onOpenDetails?: (session: UpcomingSession) => void;
   nextSeminar?: UpcomingSession | null;
   nextOneToOne?: UpcomingSession | null;
 }) {
@@ -148,6 +167,7 @@ export default function UpcomingCountdownCard({
           session={nextSeminar}
           now={now}
           onJoin={onJoinSeminar}
+          onOpenDetails={onOpenDetails}
         />
         <CountdownRow
           icon={UserCheck}
@@ -158,6 +178,7 @@ export default function UpcomingCountdownCard({
           session={nextOneToOne}
           now={now}
           onJoin={onJoinOneToOne}
+          onOpenDetails={onOpenDetails}
         />
       </div>
     </aside>

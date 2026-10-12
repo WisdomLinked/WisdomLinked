@@ -27,12 +27,14 @@ import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import { fetchDirectCallHistory, startMeeting } from "../../../../api/chatApi";
 import { fetchChatUserProfile } from "../../../../api/chatApi";
-import {doLeftSeminar, doUpdateProfile, proposeIndividualAppointment} from "../../../../api/api";
+import {doLeftSeminar, doUpdateProfile, proposeIndividualAppointment, leaveAdminChatRoom} from "../../../../api/api";
+import { ADMIN_ROOMS_CHANGED_EVENT, isChatAdminViewer } from "../../../../utils/adminChatRooms";
 import { proposedTimeNeedsOverride, hasBookingConflict, presetAvailabilityRanges } from "../../../../utils/proposeAvailability";
 import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
 import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appActions";
 import { updateMe } from "../../../../actions/authActions";
 import { notify } from '../../../../utils/notify';
+import { EXPERT_SETUP_INCOMPLETE_FOR_EXPERT, isExpertSetupComplete } from '../../../../components/dashboard/expertSetup/setupSteps';
 import { addNewMessage, resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
 import CommunityProfileModal from "./CommunityProfileModal";
@@ -102,6 +104,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const [proposePriceEdited, setProposePriceEdited] = useState(false);
     const [proposeCustomerEmail, setProposeCustomerEmail] = useState<string | null>(null);
     const [outsideConfirm, setOutsideConfirm] = useState(false);
+    const [proposeSetupBlocked, setProposeSetupBlocked] = useState(false);
 
     const proposeSuggestedPrice = (durationMin: number) => {
         const rate = normalizeExpertPrice((userDetails as any)?.price) ?? 0;
@@ -185,6 +188,19 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const handleLeaveGroup = async () => {
         set_buttonsModalShow(false);
         if (!chosenGroupChatDetails?.groupId) return;
+        // A joined admin is not a member, so the member leave paths would refuse them.
+        if (isChatAdminViewer(chosenGroupChatDetails, userDetails)) {
+            if (!window.confirm("Leave this chat? Its members are not affected, and you can join it again from search.")) return;
+            const res: any = await leaveAdminChatRoom(String(chosenGroupChatDetails.groupId));
+            if (res?.status === 'SUCCESS') {
+                dispatch(resetChatAction());
+                window.dispatchEvent(new Event(ADMIN_ROOMS_CHANGED_EVENT));
+                notify.success('You left this chat');
+            } else {
+                notify.error(res?.error || 'Could not leave this chat');
+            }
+            return;
+        }
         if (chosenGroupChatDetails.type === 'community') {
             setHeaderLeaveCommunityOpen(true);
             return;
@@ -434,6 +450,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         setProposePriceEdited(false);
         setProposeCustomerEmail(null);
         setOutsideConfirm(false);
+        setProposeSetupBlocked(false);
         setProposeOpen(true);
         void fetchChatUserProfile(String(chosenChatDetails.userId)).then((r: any) => {
             if (r?.success && r?.result?.email) setProposeCustomerEmail(String(r.result.email));
@@ -441,6 +458,10 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     };
 
     const submitPropose = async (override = false) => {
+        if (userDetails?.role === "expert" && !isExpertSetupComplete(userDetails)) {
+            setProposeSetupBlocked(true);
+            return;
+        }
         if (!proposeTitle.trim()) {
             notify.warning("Add a title for the session.");
             return;
@@ -1257,6 +1278,12 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                         </p>
                                     </div>
                                 </div>
+
+                                {proposeSetupBlocked ? (
+                                    <p role="alert" className={`mt-5 text-xs font-semibold ${theme === "light" ? "text-rose-600" : "text-rose-400"}`}>
+                                        {EXPERT_SETUP_INCOMPLETE_FOR_EXPERT}
+                                    </p>
+                                ) : null}
 
                                 {outsideConfirm ? (
                                     <div className={`mt-5 rounded-lg border p-3 ${theme === "light" ? "border-amber-300 bg-amber-50" : "border-amber-500/40 bg-amber-500/10"}`}>

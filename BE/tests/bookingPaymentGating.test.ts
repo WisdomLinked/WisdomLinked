@@ -105,6 +105,8 @@ const expertDoc = () => ({
   email: "expert@test.com",
   username: "Expert",
   price: [100],
+  bufferMinutes: 0,
+  bookingNoticeHours: 24,
   // Half-hour slot indices (hour * 2): 09:00–10:00 UTC needs 18 and 19.
   timeSlots: [18, 19, 20],
   timeZone: "UTC",
@@ -255,6 +257,28 @@ test("1:1 booking is refused when the intent is neither authorized nor captured"
   }
 });
 
+test("1:1 booking with an expert who has not finished profile setup is refused and the hold released", async () => {
+  resetCalls();
+  const restore = withOneToOneModels();
+  try {
+    stubs.authorized = () => heldIntent();
+    User.findById = async (id: any) =>
+      String(id) === EXPERT_ID ? { ...expertDoc(), bufferMinutes: undefined } : studentDoc();
+
+    const req: any = { user: { userId: STUDENT_ID }, body: oneToOneBody };
+    const res = createRes();
+    await groupController.createGroupChatByUser(req, res);
+
+    assert.equal(res.statusCode, 409);
+    assert.match(String(res.body), /hasn't completed their profile setup/);
+    assert.equal(calls.groupCreate, undefined, "no session may be created");
+    assert.equal(calls.capture, undefined, "nothing may be captured");
+    assert.equal(calls.cancel?.length, 1, "the student's hold must be released");
+  } finally {
+    restore();
+  }
+});
+
 test("1:1 booking is refused when the hold belongs to another account, and that hold is left alone", async () => {
   resetCalls();
   const restore = withOneToOneModels();
@@ -381,7 +405,7 @@ test("1:1 booking rolls the session back when the hold cannot be recorded", asyn
   }
 });
 
-test("a free 1:1 booking needs no payment intent", async () => {
+test("an expert with a $0 rate has not finished setup, so cannot be booked", async () => {
   resetCalls();
   const restore = withOneToOneModels();
   try {
@@ -395,8 +419,8 @@ test("a free 1:1 booking needs no payment intent", async () => {
     const res = createRes();
     await groupController.createGroupChatByUser(req, res);
 
-    assert.equal(res.statusCode, 200);
-    assert.equal(calls.groupCreate?.length, 1);
+    assert.equal(res.statusCode, 409);
+    assert.equal(calls.groupCreate, undefined);
     assert.equal(calls.capture, undefined);
   } finally {
     restore();

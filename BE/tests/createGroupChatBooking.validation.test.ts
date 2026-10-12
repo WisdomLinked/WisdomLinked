@@ -30,6 +30,9 @@ const expertDoc = {
   _id: "expert-id-1",
   email: "expert@test.com",
   username: "Expert",
+  price: [25],
+  bufferMinutes: 0,
+  bookingNoticeHours: 24,
   timeSlots: [18, 19, 20],
   timeZone: "UTC",
   blockedBookingDates: [],
@@ -57,6 +60,7 @@ const baseBody = {
   price: 0,
   expert: "expert-id-1",
   payment_intent: "pi_test",
+  paymentMode: "wallet",
 };
 
 test("createGroupChatByUser rejects blocked booking date", async () => {

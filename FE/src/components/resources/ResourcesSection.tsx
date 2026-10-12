@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { CONTAINER_CLASS } from '../landing/Container';
 import { RESOURCES_CLOSING, RESOURCES_HEADER, RESOURCES_TIMELINE } from '../../content/resourcesTimeline';
 import PlanChart from './PlanChart';
@@ -14,6 +14,23 @@ export default function ResourcesSection() {
   const ids = useMemo(() => RESOURCES_TIMELINE.map((s) => s.id), []);
   const { activeId, scrollToStage } = useActiveStage(ids);
   const { expertHref } = useResourceLinks();
+  const { hash } = useLocation();
+
+  // Waits for web fonts so the page doesn't reflow after the scroll and leave the stage under the header.
+  useEffect(() => {
+    const id = decodeURIComponent(hash.slice(1));
+    if (!ids.includes(id)) return undefined;
+    let cancelled = false;
+    const fontsReady: Promise<unknown> = document.fonts?.ready ?? Promise.resolve();
+    fontsReady.then(() =>
+      requestAnimationFrame(() => {
+        if (!cancelled) scrollToStage(id);
+      }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [hash, ids, scrollToStage]);
 
   return (
     <div className="bg-white">

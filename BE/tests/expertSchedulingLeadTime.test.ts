@@ -22,6 +22,7 @@ const makeRes = () => ({
 
 const expert = () => ({
   _id: 'host', email: 'host@example.com', username: 'host', bookingNoticeHours: 48,
+  price: [25], bufferMinutes: 0, timeSlots: [18],
   groupChats: [], save: async () => {},
 });
 

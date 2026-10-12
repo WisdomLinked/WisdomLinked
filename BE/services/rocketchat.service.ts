@@ -895,26 +895,26 @@ const applyAlertOnlyUnreadCounts = async (
     });
 };
 
-export const getChatUnreadSnapshotAsUser = async (
-    reader: RCParticipantSession
-): Promise<{
+type UnreadSubscriptions = {
+    ok: boolean;
     unreadByRid: Record<string, number>;
     nameByRid: Record<string, string>;
-    displayNameByRid: Record<string, string>;
-    knownRids: string[];
-    nameResolutionFailed: boolean;
-}> => {
+    rooms: { rid: string; rawName: string; type: string }[];
+};
+
+const readUnreadSubscriptionsAsUser = async (reader: RCParticipantSession): Promise<UnreadSubscriptions> => {
     const unreadByRid: Record<string, number> = {};
     const nameByRid: Record<string, string> = {};
+    const rooms: { rid: string; rawName: string; type: string }[] = [];
     const tok = await generateUserToken(reader);
-    if (!tok) return { unreadByRid, nameByRid, displayNameByRid: {}, knownRids: [], nameResolutionFailed: false };
+    if (!tok) return { ok: false, unreadByRid, nameByRid, rooms };
     const headers = {
         'X-Auth-Token': tok.authToken,
         'X-User-Id': tok.userId,
         'Content-Type': 'application/json',
     };
-    const rooms: { rid: string; rawName: string; type: string }[] = [];
     const alertedWithoutCount: { rid: string; type: string }[] = [];
+    let ok = true;
     try {
         const res = await axios.get(`${RC_URL}/api/v1/subscriptions.get`, { headers });
         const list = extractSubscriptionRowsFromRocketGet(res.data);
@@ -931,6 +931,7 @@ export const getChatUnreadSnapshotAsUser = async (
             rooms.push({ rid, rawName: label, type });
         });
     } catch (e: any) {
+        ok = false;
         const st = e.response?.status;
         if (st !== 404 && st !== 403 && st !== 429) {
             console.warn('[getChatUnreadSnapshotAsUser]', st, e.response?.data || e.message);
@@ -938,6 +939,20 @@ export const getChatUnreadSnapshotAsUser = async (
     }
 
     await applyAlertOnlyUnreadCounts(alertedWithoutCount, headers, unreadByRid);
+
+    return { ok, unreadByRid, nameByRid, rooms };
+};
+
+export const getChatUnreadSnapshotAsUser = async (
+    reader: RCParticipantSession
+): Promise<{
+    unreadByRid: Record<string, number>;
+    nameByRid: Record<string, string>;
+    displayNameByRid: Record<string, string>;
+    knownRids: string[];
+    nameResolutionFailed: boolean;
+}> => {
+    const { unreadByRid, nameByRid, rooms } = await readUnreadSubscriptionsAsUser(reader);
 
     const resolved = await resolveRoomDisplayNames(rooms, String(reader?.email || ''));
     const displayNameByRid: Record<string, string> = {};
@@ -962,6 +977,13 @@ export const getDmUnreadByRoomAsUser = async (
 ): Promise<Record<string, number>> => {
     const { unreadByRid } = await getChatUnreadSnapshotAsUser(reader);
     return unreadByRid;
+};
+
+export const getChatUnreadCountsAsUser = async (
+    reader: RCParticipantSession
+): Promise<Record<string, number> | null> => {
+    const { ok, unreadByRid } = await readUnreadSubscriptionsAsUser(reader);
+    return ok ? unreadByRid : null;
 };
 
 /** Snapshot of Rocket.Chat usernames with an active chat connection (admin-scoped). */

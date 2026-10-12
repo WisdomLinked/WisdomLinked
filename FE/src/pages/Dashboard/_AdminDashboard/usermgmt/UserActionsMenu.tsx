@@ -1,7 +1,8 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MoreVertical } from 'lucide-react';
+import { Check, MoreVertical } from 'lucide-react';
 import { OVERLAY_Z_PANEL } from '../../../../utils/overlayLayers';
+import { USER_STATUS_OPTIONS, userStatusOption, type UserStatus } from './userStatus';
 
 export type UserActionsUser = {
   _id?: string;
@@ -15,23 +16,20 @@ type Item = {
   label: string;
   onSelect: () => void;
   className?: string;
+  checked?: boolean;
 };
 
 const MENU_MIN_WIDTH = 176;
 
 export default function UserActionsMenu({
   user,
-  isReviewQueue,
-  onApprove,
-  onBlock,
+  onStatusChange,
   onManage,
   onImpersonate,
   onAudit,
 }: {
   user: UserActionsUser;
-  isReviewQueue: boolean;
-  onApprove: () => void;
-  onBlock: () => void;
+  onStatusChange: (status: UserStatus) => void;
   onManage: () => void;
   onImpersonate: () => void;
   onAudit: () => void;
@@ -43,21 +41,25 @@ export default function UserActionsMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  const showReviewActions = isReviewQueue || user.status === 'review';
+  const currentStatus = userStatusOption(user.status).value;
 
   const items = useMemo<Item[]>(() => {
-    const next: Item[] = [];
-    if (showReviewActions) {
-      next.push({ id: 'approve', label: 'Approve', onSelect: onApprove, className: 'text-green' });
-      next.push({ id: 'block', label: 'Block', onSelect: onBlock, className: 'text-red' });
-    }
+    const next: Item[] = USER_STATUS_OPTIONS.map(option => ({
+      id: `status-${option.value}`,
+      label: option.label,
+      className: option.menuClassName ?? option.className,
+      checked: option.value === currentStatus,
+      onSelect: () => {
+        if (option.value !== currentStatus) onStatusChange(option.value);
+      },
+    }));
     next.push({ id: 'manage', label: 'Manage', onSelect: onManage });
     if (user.role !== 'admin') {
       next.push({ id: 'impersonate', label: 'Impersonate', onSelect: onImpersonate });
     }
     next.push({ id: 'audit', label: 'Audit', onSelect: onAudit });
     return next;
-  }, [showReviewActions, user.role, onApprove, onBlock, onManage, onImpersonate, onAudit]);
+  }, [currentStatus, user.role, onStatusChange, onManage, onImpersonate, onAudit]);
 
   const updatePosition = () => {
     const trigger = triggerRef.current;
@@ -168,22 +170,28 @@ export default function UserActionsMenu({
               }}
             >
               {items.map((item, index) => (
-                <button
-                  key={item.id}
-                  ref={el => {
-                    itemRefs.current[index] = el;
-                  }}
-                  type="button"
-                  role="menuitem"
-                  tabIndex={index === activeIndex ? 0 : -1}
-                  className={`block w-full px-3 py-2 text-left text-sm hover:bg-wl-pageAlt focus:bg-wl-pageAlt focus:outline-none ${item.className ?? 'text-wl-ink'}`}
-                  onClick={() => {
-                    setOpen(false);
-                    item.onSelect();
-                  }}
-                >
-                  {item.label}
-                </button>
+                <React.Fragment key={item.id}>
+                  {index === USER_STATUS_OPTIONS.length ? (
+                    <div role="separator" className="my-1 border-t border-wl-line" />
+                  ) : null}
+                  <button
+                    ref={el => {
+                      itemRefs.current[index] = el;
+                    }}
+                    type="button"
+                    role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
+                    aria-checked={item.checked}
+                    tabIndex={index === activeIndex ? 0 : -1}
+                    className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-wl-pageAlt focus:bg-wl-pageAlt focus:outline-none ${item.className ?? 'text-wl-ink'}`}
+                    onClick={() => {
+                      setOpen(false);
+                      item.onSelect();
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    {item.checked ? <Check size={14} aria-hidden /> : null}
+                  </button>
+                </React.Fragment>
               ))}
             </div>,
             document.body,

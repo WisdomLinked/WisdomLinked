@@ -5,6 +5,7 @@ import FeaturedExperts from '../components/FeaturedExperts';
 import { homePage } from '../content/publicPages';
 import SiteSearchBox from '../components/search/SiteSearchBox';
 import PricingSection from '../components/landing/pricing/PricingSection';
+import ResourcesBand from '../components/landing/ResourcesBand';
 import SiteFooter from '../components/landing/footer/SiteFooter';
 import {
   Star, Users, Briefcase, GraduationCap, TrendingUp, MessageCircle, CheckCircle,
@@ -569,6 +570,8 @@ const PILL_STEPS = [5, 7, 9, 11];
 // Slightly different cycle intervals so pills don't all swap at once
 const PILL_CYCLES = [7000, 8200, 7600, 9000];
 
+const SHOW_STATS = false;
+
 export default function TOEConsulting() {
   const navigate = useNavigate();
   const [isVisible, setIsVisible] = useState(false);
@@ -590,7 +593,7 @@ export default function TOEConsulting() {
   const expertsRef = useRef<HTMLDivElement>(null);
   const pricingRef = useRef<HTMLDivElement>(null);
 
-  const sectionRefs = [statsRef, aboutRef, servicesRef, guidelinesRef, successRef, expertsRef, pricingRef];
+  const sectionRefs = [...(SHOW_STATS ? [statsRef] : []), aboutRef, servicesRef, pricingRef, guidelinesRef, successRef, expertsRef];
 
   const getCurrentSectionIndex = () => {
     const viewportTop = window.scrollY + 100;
@@ -813,7 +816,7 @@ export default function TOEConsulting() {
 
           <div className="hidden min-w-0 items-center justify-center gap-4 lg:flex xl:gap-5 2xl:gap-6">
             <nav className="flex shrink-0 items-center gap-4 xl:gap-5 2xl:gap-6" aria-label="Main">
-              {([["About Us", () => scrollTo(aboutRef)], ["Services", () => scrollTo(servicesRef)], ["Guidelines", () => scrollTo(guidelinesRef)], ["Pricing", () => scrollTo(pricingRef)], ["Resources", () => navigate('/resources')], ["Contact Us", openContact]] as const).map(([label, action]) => (
+              {([["About Us", () => scrollTo(aboutRef)], ["Services", () => scrollTo(servicesRef)], ["Pricing", () => scrollTo(pricingRef)], ["Guidelines", () => scrollTo(guidelinesRef)], ["Resources", () => navigate('/resources')], ["Contact Us", openContact]] as const).map(([label, action]) => (
                 <button key={label as string} type="button" onClick={action as () => void} className="nav-link whitespace-nowrap text-sm font-semibold tracking-wide text-slate-900 transition-colors hover:text-[#234C6A]">{label}</button>
               ))}
             </nav>
@@ -874,7 +877,7 @@ export default function TOEConsulting() {
 
         {mobileMenuOpen ? (
           <div className="space-y-3 border-t border-[#BCCCDC] bg-[#F8FAFC] px-6 py-4 lg:hidden">
-            {([["About Us", () => { setMobileMenuOpen(false); scrollTo(aboutRef); }], ["Services", () => { setMobileMenuOpen(false); scrollTo(servicesRef); }], ["Guidelines", () => { setMobileMenuOpen(false); scrollTo(guidelinesRef); }], ["Pricing", () => { setMobileMenuOpen(false); scrollTo(pricingRef); }], ["Resources", () => { setMobileMenuOpen(false); navigate('/resources'); }], ["Contact Us", () => { setMobileMenuOpen(false); openContact(); }]] as const).map(([label, action]) => (
+            {([["About Us", () => { setMobileMenuOpen(false); scrollTo(aboutRef); }], ["Services", () => { setMobileMenuOpen(false); scrollTo(servicesRef); }], ["Pricing", () => { setMobileMenuOpen(false); scrollTo(pricingRef); }], ["Guidelines", () => { setMobileMenuOpen(false); scrollTo(guidelinesRef); }], ["Resources", () => { setMobileMenuOpen(false); navigate('/resources'); }], ["Contact Us", () => { setMobileMenuOpen(false); openContact(); }]] as const).map(([label, action]) => (
               <button key={label as string} type="button" onClick={action as () => void} className="block w-full py-1 text-left font-semibold text-slate-700 transition-colors hover:text-[#234C6A]">{label}</button>
             ))}
             <div className="flex gap-3 pt-2">
@@ -928,7 +931,7 @@ export default function TOEConsulting() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ backgroundColor: '#234C6A' }}></span>
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ backgroundColor: '#234C6A' }}></span>
                 </span>
-                <span className="text-[11px] font-bold tracking-[0.13em] uppercase" style={{ color: '#234C6A' }}>500+ Active Experts · 100+ Countries</span>
+                <span className="text-[11px] font-bold tracking-[0.13em] uppercase" style={{ color: '#234C6A' }}>A growing network of experts</span>
               </div>
 
               <h1 className="font-display font-bold leading-[1.12] mb-6 animate-fade-up text-slate-900" style={{ animationDelay: '0.15s', fontSize: 'clamp(2.15rem, 4.2vw, 3.35rem)' }}>
@@ -960,11 +963,11 @@ export default function TOEConsulting() {
                     <div key={idx} className="w-10 h-10 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold shadow-sm"
                       style={{ background: bg, color: fg }}>{i}</div>
                   ))}
-                  <div className="w-10 h-10 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold text-white shadow-sm" style={{ backgroundColor: '#234C6A' }}>+9K</div>
+                  <div className="w-10 h-10 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold text-white shadow-sm" style={{ backgroundColor: '#234C6A' }}>100+</div>
                 </div>
                 <div>
                   <div className="flex gap-0.5 mb-0.5">{[...Array(5)].map((_, i) => <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />)}</div>
-                  <p className="text-xs text-slate-500">Trusted by <span className="font-bold text-slate-800">10,000+</span> clients worldwide</p>
+                  <p className="text-xs text-slate-500">Trusted by <span className="font-bold text-slate-800">500+</span> clients worldwide</p>
                 </div>
               </div>
 
@@ -977,6 +980,7 @@ export default function TOEConsulting() {
             </div>
 
             {/* ── RIGHT: Visual panel ── */}
+            <div>
             <div className={`relative flex items-center justify-center transition-all duration-1200 delay-150 min-h-[min(70vh,520px)] sm:min-h-[600px] lg:min-h-[820px] ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
 
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -1026,10 +1030,15 @@ export default function TOEConsulting() {
                 );
               })}
             </div>
+            <p className={`mx-auto mt-3 max-w-md px-2 text-center text-[11px] leading-relaxed text-slate-400 transition-opacity duration-1000 delay-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+              {homePage.hero.globeDisclaimer}
+            </p>
+            </div>
           </div>
         </section>
 
         {/* STATS */}
+        {SHOW_STATS && (
         <section ref={statsRef} className="relative py-16 px-6 border-y border-slate-200 scroll-mt-20" style={{ backgroundColor: '#F0F4F8' }}>
           <div className="page-dots-layer page-dots-layer--animated" aria-hidden="true" />
           <div className="relative z-10 max-w-7xl mx-auto">
@@ -1044,6 +1053,7 @@ export default function TOEConsulting() {
             </div>
           </div>
         </section>
+        )}
 
         {/* ABOUT */}
         <section ref={aboutRef} className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>
@@ -1115,8 +1125,11 @@ export default function TOEConsulting() {
           </div>
         </section>
 
+        {/* PRICING / HOW IT WORKS */}
+        <PricingSection sectionRef={pricingRef} onBrowseExperts={() => setShowSignupModal(true)} />
+
         {/* GUIDELINES */}
-        <section ref={guidelinesRef} className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6 scroll-mt-20" style={{ backgroundColor: '#F8FAFC' }}>
+        <section ref={guidelinesRef} className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6 scroll-mt-20 border-t border-slate-200" style={{ backgroundColor: '#F8FAFC' }}>
           <div className="page-dots-layer page-dots-layer--animated" aria-hidden="true" />
           <div className="relative z-10 max-w-4xl mx-auto">
             <div className="text-left mb-8 sm:mb-10">
@@ -1142,6 +1155,9 @@ export default function TOEConsulting() {
                   </div>
                 </div>
               ))}
+            </div>
+            <div className="mt-10 sm:mt-12">
+              <ResourcesBand />
             </div>
           </div>
         </section>
@@ -1217,10 +1233,6 @@ export default function TOEConsulting() {
             </div>
           </div>
         </section>
-
-        {/* PRICING / HOW IT WORKS */}
-        <PricingSection sectionRef={pricingRef} onBrowseExperts={() => setShowSignupModal(true)} />
-
         {/* FOOTER */}
         <SiteFooter onContact={openContact} />
       </>

@@ -1,10 +1,13 @@
 import React from 'react';
 import { Clock } from 'lucide-react';
 import { useAccountUnderReview } from '../../hooks/useAccountUnderReview';
+import { useAccountBlocked } from '../../hooks/useAccountBlocked';
+import { ACCOUNT_BLOCKED_MESSAGE, ACCOUNT_UNDER_REVIEW_MESSAGE } from '../../utils/accountStatus';
 
 export default function AccountReviewBanner({ className }: { className?: string }) {
   const underReview = useAccountUnderReview();
-  if (!underReview) return null;
+  const blocked = useAccountBlocked();
+  if (!underReview && !blocked) return null;
 
   return (
     <div
@@ -13,8 +16,7 @@ export default function AccountReviewBanner({ className }: { className?: string 
     >
       <Clock className="mt-0.5 h-5 w-5 shrink-0 text-brownyellow" aria-hidden />
       <p className="min-w-0 flex-1 text-[14px] font-medium leading-relaxed text-wl-ink">
-        Your profile is under review. You'll have full access to sessions, seminars, and other
-        features once it's approved.
+        {blocked ? ACCOUNT_BLOCKED_MESSAGE : ACCOUNT_UNDER_REVIEW_MESSAGE}
       </p>
     </div>
   );

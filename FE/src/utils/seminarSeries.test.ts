@@ -55,11 +55,11 @@ describe('collapseSeminarSeries', () => {
     const rows = collapseSeminarSeries(
       [
         occ({ _id: 'next', start: '2026-10-12T18:00:00.000Z', end: '2026-10-12T19:00:00.000Z' }),
-        // Straddles NOW.
+        // Straddles the injected clock, not the wall clock.
         occ({
           _id: 'live',
-          start: new Date(Date.now() - 60_000).toISOString(),
-          end: new Date(Date.now() + 60_000).toISOString(),
+          start: new Date(NOW.getTime() - 60_000).toISOString(),
+          end: new Date(NOW.getTime() + 60_000).toISOString(),
         }),
       ],
       NOW,

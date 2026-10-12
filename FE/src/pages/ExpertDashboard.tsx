@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useBackToDashboard } from '../hooks/useBackToDashboard';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useStore } from 'react-redux';
 import {
   MessageSquare,
   Users,
@@ -45,7 +45,7 @@ import {
 import { seriesKey } from '../utils/seminarSeriesOccurrence';
 import { fetchDmUnreadSnapshot, fetchChatUserProfile } from '../api/chatApi';
 import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
-import SeminarDetails from './Dashboard/seminarDetails';
+import SessionDetailsDialog from '../components/dashboard/SessionDetailsDialog';
 import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
 import { useAppSelector } from '../store';
 import { logoutUser, updateMe } from '../actions/authActions';
@@ -85,6 +85,10 @@ import DecisionNoteField from '../components/dashboard/DecisionNoteField';
 import StatCard from '../components/ui/StatCard';
 import AccountReviewBanner from '../components/dashboard/AccountReviewBanner';
 import ExpertSetupCard from '../components/dashboard/expertSetup/ExpertSetupCard';
+import {
+  EXPERT_SETUP_INCOMPLETE_FOR_EXPERT,
+  isExpertSetupComplete,
+} from '../components/dashboard/expertSetup/setupSteps';
 import { awaitsExpertDecision, awaitsWalletPayment, pendingSessionState } from '../utils/bookingLifecycle';
 import Chatbot from '../components/chatbot';
 import UpcomingSessionModal, {
@@ -927,10 +931,18 @@ export default function ExpertDashboard() {
     [dispatch],
   );
 
+  const expertSetupComplete = isExpertSetupComplete(userDetails);
+  const [setupBlockedRowId, setSetupBlockedRowId] = useState<string | null>(null);
+  const store = useStore();
+
   // Dashboard "1:1 Sessions" list: accept, then replace the row with a
   // transient confirmation that clears after 7 seconds.
   const acceptInlineSession = useCallback(
     async (s: any, note = '') => {
+      if (!isExpertSetupComplete((store.getState() as any).auth?.userDetails)) {
+        setSetupBlockedRowId(String(s._id));
+        return;
+      }
       const ok = await handleAcceptSession(s, note);
       if (!ok) return;
       const studentName =
@@ -960,7 +972,7 @@ export default function ExpertDashboard() {
       }, 7000);
       inlineNoticeTimers.current.push(timer);
     },
-    [handleAcceptSession],
+    [handleAcceptSession, store],
   );
 
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
@@ -1526,6 +1538,11 @@ export default function ExpertDashboard() {
                       </div>
                     )}
                   </div>
+                  {!expertSetupComplete && setupBlockedRowId === rowId ? (
+                    <p role="alert" className="mt-2 text-[11px] font-semibold text-rose-600">
+                      {EXPERT_SETUP_INCOMPLETE_FOR_EXPERT}
+                    </p>
+                  ) : null}
                   {showNote ? (
                     <div className="mt-2.5 border-t border-amber-200/70 pt-2">
                       <DecisionNoteField
@@ -1559,10 +1576,15 @@ export default function ExpertDashboard() {
                   key={s._id}
                   className="flex items-start justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2.5"
                 >
-                  <div>
-                    <div className="text-[13px] font-semibold text-slate-900">
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setInlineDetailSession(mapExpertGroupToModalSession(s))}
+                      title="View session details"
+                      className="block max-w-full truncate text-left text-[13px] font-semibold text-slate-900 hover:underline"
+                    >
                       {s.name}
-                    </div>
+                    </button>
                     <div className="text-[11px] text-slate-500">
                       {new Date(s.start).toLocaleString()}
                       {sessionDurationLabel(s) ? ` · ${sessionDurationLabel(s)}` : ''}
@@ -1597,10 +1619,15 @@ export default function ExpertDashboard() {
                   key={g._id}
                   className="flex items-start justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2.5"
                 >
-                  <div>
-                    <div className="text-[13px] font-semibold text-slate-900">
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setInlineDetailSession(mapExpertGroupToModalSession(g))}
+                      title="View seminar details"
+                      className="block max-w-full truncate text-left text-[13px] font-semibold text-slate-900 hover:underline"
+                    >
                       {g.name}
-                    </div>
+                    </button>
                     <div className="text-[11px] text-slate-500">
                       {new Date(g.start).toLocaleString()}
                     </div>
@@ -1698,6 +1725,7 @@ export default function ExpertDashboard() {
                 ? (s, note) => handleAcceptSession({ _id: s.id, name: s.title, with: s.with }, note)
                 : undefined
             }
+            acceptBlockedMessage={expertSetupComplete ? undefined : EXPERT_SETUP_INCOMPLETE_FOR_EXPERT}
             onWithdrawSession={
               expertUpcomingModal.kind === 'oneToOne' && expertUpcomingModal.status === 'pending'
                 ? (s, note) => handleWithdrawSession({ _id: s.id, name: s.title, with: s.with }, note)
@@ -1727,39 +1755,12 @@ export default function ExpertDashboard() {
           />
         ) : null}
         {inlineDetailSession?.detail ? (
-          <div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4"
-            onClick={e => {
-              if (e.target === e.currentTarget) setInlineDetailSession(null);
-            }}
-          >
-            <div
-              className="w-full max-w-[460px] max-h-[88vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    {inlineDetailSession.briefLabel || 'Session details'}
-                  </p>
-                  <h3 className="mt-1 text-base font-semibold text-slate-900 truncate">
-                    {inlineDetailSession.title}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setInlineDetailSession(null)}
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="px-5 py-4">
-                <SeminarDetails {...inlineDetailSession.detail} theme="light" adminLabel="Expert" />
-              </div>
-            </div>
-          </div>
+          <SessionDetailsDialog
+            title={inlineDetailSession.title}
+            briefLabel={inlineDetailSession.briefLabel}
+            detail={inlineDetailSession.detail}
+            onClose={() => setInlineDetailSession(null)}
+          />
         ) : null}
       </div>
       <RequestReviewNotice notice={reviewNotice} onClose={() => setReviewNotice(null)} />

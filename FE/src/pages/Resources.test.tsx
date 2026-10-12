@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import Resources from '../pages/Resources';
 import ResourceGuides from '../pages/ResourceGuides';
@@ -88,6 +88,12 @@ describe('Resources timeline', () => {
     const button = screen.getByRole('link', { name: 'Log in to see all guides' });
     expect(button.getAttribute('href')).toContain('/login');
     expect(button.getAttribute('href')).toContain(encodeURIComponent('/resources/guides'));
+  });
+
+  it('scrolls to the stage named in the URL hash on load', async () => {
+    renderAt('/resources#student-visa');
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Student visa' })).toHaveFocus());
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
   it('links logged-in users straight to the guides page', () => {

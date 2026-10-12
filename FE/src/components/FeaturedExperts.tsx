@@ -207,6 +207,10 @@ export default function FeaturedExperts({ onViewAll }: { onViewAll: () => void }
           })}
         </ul>
 
+        <p className="mx-auto mt-4 max-w-xl text-center text-[11px] leading-relaxed text-slate-400">
+          Experts shown here are for illustration only. Availability may vary when you book.
+        </p>
+
         <div className="mt-10 sm:mt-12 flex justify-center">
           <button
             type="button"
