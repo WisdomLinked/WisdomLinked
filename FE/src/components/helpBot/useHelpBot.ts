@@ -3,6 +3,7 @@ import { askSite } from '../../api/api';
 import { isStaticFaq, STATIC_FAQS } from './faqData';
 import {
   HELP_BOT_STORAGE_KEY,
+  clearHelpBotSession,
   type FeedbackValue,
   type HelpBotMessage,
   type SimilarQuestion,
@@ -139,11 +140,7 @@ export function useHelpBot() {
     setSimilarQuestions([]);
     setStickToBottom(true);
     setShowJumpPill(false);
-    try {
-      sessionStorage.removeItem(HELP_BOT_STORAGE_KEY);
-    } catch {
-      // ignore
-    }
+    clearHelpBotSession();
     requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 

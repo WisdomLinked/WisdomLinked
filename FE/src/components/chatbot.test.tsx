@@ -12,7 +12,7 @@ vi.mock('../api/api', () => ({
 }));
 
 import Chatbot from './chatbot';
-import { HELP_BOT_STORAGE_KEY } from './helpBot/types';
+import { clearHelpBotSession, HELP_BOT_STORAGE_KEY } from './helpBot/types';
 
 const STARTER_FAQS = [
   'How to accept a meeting?',
@@ -165,6 +165,30 @@ describe('HelpBot', () => {
     expectBotAnswer('Grounded one');
     expect(screen.getByText('Similar seminar question')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled();
+  });
+
+  it('does not restore a previous account thread after the session is cleared', () => {
+    sessionStorage.setItem(
+      HELP_BOT_STORAGE_KEY,
+      JSON.stringify({
+        messages: [
+          { id: 'u1', role: 'user', content: 'transportation engineering' },
+          { id: 'a1', role: 'assistant', content: 'Here are civil engineering experts.' },
+        ],
+        similarQuestions: [],
+      }),
+    );
+
+    const first = renderBot();
+    fireEvent.click(screen.getByRole('button', { name: 'Open HelpBot' }));
+    expect(screen.getByText('transportation engineering')).toBeInTheDocument();
+    first.unmount();
+
+    clearHelpBotSession();
+    renderBot();
+    fireEvent.click(screen.getByRole('button', { name: 'Open HelpBot' }));
+    expect(screen.queryByText('transportation engineering')).not.toBeInTheDocument();
+    expect(screen.getByText('Hi there 👋')).toBeInTheDocument();
   });
 
   it('resets to welcome on New chat', async () => {

@@ -6,6 +6,7 @@ import { actionTypes, CurrentUser } from "./types";
 import { clearCsrfToken } from "../api/csrf";
 import { clearClientAccessTokenCookie } from "../utils/authCookie";
 import { clearImpersonationSession } from "../components/ImpersonationBanner";
+import { clearHelpBotSession } from "../components/helpBot/types";
 
 export const autoLogin = () => {
     return async (dispatch: Dispatch) => {
@@ -56,6 +57,7 @@ export const logoutUser = () => {
         clearImpersonationSession();
         await callLogout();
         localStorage.clear();
+        clearHelpBotSession();
         dispatch({
             type: actionTypes.logout,
         });
