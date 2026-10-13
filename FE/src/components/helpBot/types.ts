@@ -23,3 +23,12 @@ export type FeedbackValue = 'up' | 'down';
 
 export const HELP_BOT_STORAGE_KEY = 'wl-helpbot-v1';
 export const BRAND_NAVY = '#234C6A';
+
+/** Drop the tab transcript. Logout must call this; sessionStorage survives same-tab navigation in Chrome and Safari. */
+export function clearHelpBotSession(): void {
+  try {
+    sessionStorage.removeItem(HELP_BOT_STORAGE_KEY);
+  } catch {
+    // ignore quota / private mode
+  }
+}

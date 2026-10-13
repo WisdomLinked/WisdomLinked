@@ -3,6 +3,7 @@ import { actionTypes } from '../actions/types';
 import { callLogout } from '../api/api';
 import { clearCsrfToken, bootstrapCsrfToken } from '../api/csrf';
 import { clearClientAccessTokenCookie } from './authCookie';
+import { clearHelpBotSession } from '../components/helpBot/types';
 
 export type ResetAuthSessionOptions = {
     /** When false, skip POST /auth/logout (e.g. backend already cleared httpOnly cookie). */
@@ -18,6 +19,7 @@ export async function resetAuthSessionForLogin(
     clearClientAccessTokenCookie();
     localStorage.removeItem('isLoginRemembered');
     localStorage.removeItem('currentUser');
+    clearHelpBotSession();
     store.dispatch({ type: actionTypes.logout });
 
     clearCsrfToken();
