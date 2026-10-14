@@ -14,6 +14,7 @@ export type HandleApiFailureOptions = {
     notify?: boolean;
     /** When false, 401/403 do not force logout. Default true. */
     logoutOnAuth?: boolean;
+    quietAccountRestriction?: boolean;
 };
 
 function hasStoredSession(): boolean {
@@ -59,27 +60,29 @@ function isUnderReviewBlock(responseData: unknown): boolean {
     return isUnderReviewSession();
 }
 
-function isUserBlockedResponse(responseData: unknown): boolean {
-    return (
-        !!responseData &&
-        typeof responseData === 'object' &&
-        (responseData as { code?: unknown }).code === 'USER_BLOCKED'
-    );
+function failureCode(responseData: unknown): unknown {
+    return responseData && typeof responseData === 'object'
+        ? (responseData as { code?: unknown }).code
+        : undefined;
 }
 
-function markSessionBlocked(): void {
+function isUserBlockedResponse(responseData: unknown): boolean {
+    return failureCode(responseData) === 'USER_BLOCKED';
+}
+
+function markSessionStatus(status: 'blocked' | 'review'): void {
     const current = (store.getState() as { auth?: { userDetails?: { email?: string; status?: string } } })
         ?.auth?.userDetails;
     if (current?.email) {
-        if (current.status !== 'blocked') {
-            store.dispatch({ type: 'updateUserDetails', payload: { status: 'blocked' } });
+        if (current.status !== status) {
+            store.dispatch({ type: 'updateUserDetails', payload: { status } });
         }
         return;
     }
     const stored = readStoredUser();
-    if (stored?.email && stored.status !== 'blocked') {
+    if (stored?.email && stored.status !== status) {
         try {
-            localStorage.setItem('currentUser', JSON.stringify({ ...stored, status: 'blocked' }));
+            localStorage.setItem('currentUser', JSON.stringify({ ...stored, status }));
         } catch {
         }
     }
@@ -111,7 +114,13 @@ export function handleApiFailure(
     }
 
     if (isUserBlockedResponse(responseData)) {
-        markSessionBlocked();
+        markSessionStatus('blocked');
+        SetLoadingStatus(false);
+        return false;
+    }
+
+    if (options.quietAccountRestriction && failureCode(responseData) === 'UNDER_REVIEW') {
+        markSessionStatus('review');
         SetLoadingStatus(false);
         return false;
     }
@@ -146,7 +155,7 @@ export function handleAuthApiFailure(
 
     SetLoadingStatus(false);
     if (isUserBlockedResponse(responseData)) {
-        markSessionBlocked();
+        markSessionStatus('blocked');
         return { status: 'FAIL', error: resolveUserFacingError(error), code: 'USER_BLOCKED' };
     }
     return { status: 'FAIL', error: resolveUserFacingError(error) };

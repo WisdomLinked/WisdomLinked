@@ -32,6 +32,7 @@ import SeminarInvitations from '../../../components/dashboard/SeminarInvitations
 import { recurrenceLabel } from '../../../utils/recurrenceLabel';
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 import { EXPERT_SETUP_INCOMPLETE_FOR_EXPERT, isExpertSetupComplete } from '../../../components/dashboard/expertSetup/setupSteps';
+import { accountRestrictionMessage } from '../../../utils/accountStatus';
 
 type HubScreen = 'list' | 'create' | 'edit' | 'detail';
 
@@ -297,7 +298,7 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
 
   const load = async () => {
     try {
-      const res: any = await getSeminarSeatRequests();
+      const res: any = await getSeminarSeatRequests({ quietAccountRestriction: true });
       const all = Array.isArray(res?.result) ? res.result : [];
       setRequests(all.filter((r: any) => getRefId(r?.groupChat) === String(seminarId)));
     } catch {
@@ -915,11 +916,14 @@ export default function ExpertSeminarHub() {
 
   const [screen, setScreen] = useState<HubScreen>('list');
   const store = useStore();
-  const [createBlocked, setCreateBlocked] = useState(false);
+  const [createBlockedMessage, setCreateBlockedMessage] = useState<string | null>(null);
   const openCreate = () => {
-    const ready = isExpertSetupComplete((store.getState() as any).auth?.userDetails);
-    setCreateBlocked(!ready);
-    if (ready) setScreen('create');
+    const current = (store.getState() as any).auth?.userDetails;
+    const blockedMessage =
+      accountRestrictionMessage(current?.status) ??
+      (isExpertSetupComplete(current) ? null : EXPERT_SETUP_INCOMPLETE_FOR_EXPERT);
+    setCreateBlockedMessage(blockedMessage);
+    if (!blockedMessage) setScreen('create');
   };
   const [detailSeminar, setDetailSeminar] = useState<any | null>(null);
   const [editPayload, setEditPayload] = useState<ReturnType<typeof mapGroupChatToExpertSeminar> | null>(
@@ -930,7 +934,7 @@ export default function ExpertSeminarHub() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const res: any = await getSeminarSeatRequests();
+      const res: any = await getSeminarSeatRequests({ quietAccountRestriction: true });
       if (!active) return;
       const list: any[] = Array.isArray(res?.result) ? res.result : [];
       const counts: Record<string, number> = {};
@@ -1076,9 +1080,9 @@ export default function ExpertSeminarHub() {
             <Plus className="h-4 w-4" aria-hidden />
             Create seminar
           </button>
-          {createBlocked ? (
-            <p role="alert" className="text-sm font-semibold text-rose-600 sm:text-right">
-              {EXPERT_SETUP_INCOMPLETE_FOR_EXPERT}
+          {createBlockedMessage ? (
+            <p role="alert" className="max-w-sm text-sm font-semibold text-rose-600 sm:text-right md:max-w-md">
+              {createBlockedMessage}
             </p>
           ) : null}
         </div>

@@ -70,6 +70,7 @@ describe('seminar draft availability in the shared tab/chat editor', () => {
     fireEvent.click(draftButton()!);
     await waitFor(() => expect(createGroupChat).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'draft', name: 'My unfinished seminar' }),
+      { quietAccountRestriction: true },
     ));
     await waitFor(() => expect(afterSave).toHaveBeenCalledWith('draft'));
     expect(draftButton()).toBeInTheDocument();

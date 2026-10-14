@@ -17,7 +17,7 @@ vi.mock('../../../actions/authActions', () => ({
   updateMe: () => (dispatch: any) => dispatch({ type: 'auth/set', payload: savedUser }),
 }));
 
-/** A freshly registered expert: rate and durations hold model defaults the expert hasn't chosen. */
+/** A freshly registered expert: rate, durations and notice hold model defaults the expert hasn't chosen. */
 const NEW_EXPERT = {
   _id: 'e1',
   role: 'expert',
@@ -26,7 +26,7 @@ const NEW_EXPERT = {
   bookingNoticeHours: 24,
   timeSlots: [],
   availabilityMode: 'common',
-  pendingSetupSteps: ['rate', 'durations'],
+  pendingSetupSteps: ['rate', 'durations', 'notice'],
 };
 
 function renderCard(user: Record<string, unknown>, onOpenAvailability = vi.fn()) {
@@ -253,12 +253,30 @@ describe('ExpertSetupCard', () => {
     expect(save).toBeDisabled();
     await user.click(within(screen.getByRole('group', { name: 'Buffer time' })).getByRole('button', { name: '15 min' }));
     await user.click(screen.getByRole('button', { name: '48 hours' }));
-    savedUser = { ...NEW_EXPERT, bufferMinutes: 15, bookingNoticeHours: 48 };
+    savedUser = { ...NEW_EXPERT, bufferMinutes: 15, bookingNoticeHours: 48, pendingSetupSteps: ['rate', 'durations'] };
     await user.click(save);
 
     expect(api.doUpdateProfile).toHaveBeenCalledWith({ bufferMinutes: 15 });
     expect(api.doSetExpertBookingNoticeHours).toHaveBeenCalledWith(48);
     expect(await within(row('Booking rules')).findByText('15 min buffer · 48 hours notice')).toBeInTheDocument();
+  });
+
+  it('saves a new expert\'s notice even when they pick the stored default of 24 hours', async () => {
+    const user = userEvent.setup();
+    api.doUpdateProfile.mockResolvedValue(true);
+    api.doSetExpertBookingNoticeHours.mockResolvedValue({ status: 'SUCCESS' });
+    renderCard(NEW_EXPERT);
+
+    await user.click(screen.getByRole('button', { name: 'Set up: Booking rules' }));
+    const notice = screen.getByRole('group', { name: 'Minimum booking notice' });
+    expect(within(notice).queryByRole('button', { pressed: true })).toBeNull();
+    await user.click(within(screen.getByRole('group', { name: 'Buffer time' })).getByRole('button', { name: 'None' }));
+    await user.click(within(notice).getByRole('button', { name: '24 hours' }));
+    savedUser = { ...NEW_EXPERT, bufferMinutes: 0, pendingSetupSteps: ['rate', 'durations'] };
+    await user.click(screen.getByRole('button', { name: 'Save rules' }));
+
+    expect(api.doSetExpertBookingNoticeHours).toHaveBeenCalledWith(24);
+    expect(await within(row('Booking rules')).findByText('No buffer · 24 hours notice')).toBeInTheDocument();
   });
 
   it('sends the time-slot step to the Availability page', async () => {
