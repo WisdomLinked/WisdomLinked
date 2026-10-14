@@ -296,7 +296,7 @@ export default function ExpertProfile({
           price: oneToOneSessionPrice,
           expert: expertDetails?._id ?? mentor.id,
           payment_intent: paymentIntentId,
-        });
+        }, { quietAccountRestriction: true });
         // createGroupChatByUser resolves to `false`/`{status:'FAIL'}` on failure
         // (it never throws) — only advance to success when the session persisted.
         if (!response || response === true || (response as any)?.status === 'FAIL' || !(response as any)?.result) {
@@ -562,7 +562,7 @@ export default function ExpertProfile({
       const res: any = await requestSeminarSeat({
         groupChatId: seminarCheckout.id,
         paymentMode: 'wallet',
-      });
+      }, { quietAccountRestriction: true });
       if (res === false || res?.status === 'FAIL' || res?.error) {
         setSeminarBookingError(res?.error || 'Could not send your seat request.');
         return;

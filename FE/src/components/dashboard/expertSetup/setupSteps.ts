@@ -33,13 +33,19 @@ export const savedDurations = (a: ExpertAvailability) =>
 export const savedBuffer = (a: ExpertAvailability): BufferMinutes | null =>
   normalizeBufferMinutes(a.bufferMinutes);
 
+export type PendingSetupStep = 'rate' | 'durations' | 'notice';
+
+export const isPendingSetupStep = (
+  a: Pick<ExpertAvailability, 'pendingSetupSteps'> | null | undefined,
+  step: PendingSetupStep,
+) => Array.isArray(a?.pendingSetupSteps) && a!.pendingSetupSteps!.includes(step);
+
+
 export const savedNotice = (a: ExpertAvailability): BookingNoticeHours | null => {
+  if (isPendingSetupStep(a, 'notice')) return null;
   const n = Number(a.bookingNoticeHours);
   return (NOTICE_OPTIONS as readonly number[]).includes(n) ? (n as BookingNoticeHours) : null;
 };
-
-const isPending = (a: ExpertAvailability, step: SetupStepId) =>
-  Array.isArray(a.pendingSetupSteps) && a.pendingSetupSteps.includes(step);
 
 export const bufferLabel = (minutes: BufferMinutes) => (minutes === 0 ? 'None' : `${minutes} min`);
 
@@ -64,7 +70,7 @@ export const SETUP_STEPS: SetupStep[] = [
     title: 'Hourly rate',
     description: 'Set what students pay per hour for a 1:1 session.',
     mode: 'inline',
-    isComplete: (a) => !isPending(a, 'rate') && isValidRate(savedRate(a)),
+    isComplete: (a) => !isPendingSetupStep(a, 'rate') && isValidRate(savedRate(a)),
     getSummary: (a) => `$${savedRate(a)} per hour`,
   },
   {
@@ -72,7 +78,7 @@ export const SETUP_STEPS: SetupStep[] = [
     title: 'Session lengths',
     description: 'Choose the session lengths students can book.',
     mode: 'inline',
-    isComplete: (a) => !isPending(a, 'durations') && savedDurations(a).length > 0,
+    isComplete: (a) => !isPendingSetupStep(a, 'durations') && savedDurations(a).length > 0,
     getSummary: (a) => savedDurations(a).map((d) => `${d} min`).join(', '),
   },
   {

@@ -40,6 +40,11 @@ test("booking rules: an expert who never picked a buffer is incomplete", () => {
     assert.equal(isExpertSetupComplete(complete({ bufferMinutes: "30" })), true);
 });
 
+test("booking rules: a notice the expert has not chosen yet is incomplete", () => {
+    assert.equal(isExpertSetupComplete(complete({ pendingSetupSteps: ["notice"] })), false);
+    assert.equal(isExpertSetupComplete(complete({ pendingSetupSteps: ["rate", "durations", "notice"] })), false);
+});
+
 test("booking rules: notice must be 24, 48 or 72 hours", () => {
     assert.equal(isExpertSetupComplete(complete({ bookingNoticeHours: 12 })), false);
     assert.equal(isExpertSetupComplete(complete({ bookingNoticeHours: undefined })), false);

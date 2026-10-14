@@ -471,7 +471,7 @@ export default function ExpertDashboard() {
   const [seatRequests, setSeatRequests] = useState<any[]>([]);
 
   const loadSeatRequests = useCallback(async () => {
-    const res: any = await getSeminarSeatRequests();
+    const res: any = await getSeminarSeatRequests({ quietAccountRestriction: true });
     setSeatRequests(Array.isArray(res?.result) ? res.result : []);
   }, []);
 

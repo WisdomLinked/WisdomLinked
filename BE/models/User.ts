@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 require("./PendingAppointmentToGroup");
+const { NEW_EXPERT_PENDING_SETUP_STEPS } = require("../utils/expertSetup");
 
 const userSchema = new mongoose.Schema(
     {
@@ -108,7 +109,7 @@ const userSchema = new mongoose.Schema(
 
 userSchema.pre('save', function (this: any) {
     if (this.isNew && this.role === 'expert' && !this.pendingSetupSteps?.length) {
-        this.pendingSetupSteps = ['rate', 'durations'];
+        this.pendingSetupSteps = [...NEW_EXPERT_PENDING_SETUP_STEPS];
     }
 });
 

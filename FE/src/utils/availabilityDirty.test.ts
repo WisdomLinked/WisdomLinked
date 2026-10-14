@@ -100,4 +100,37 @@ describe('computeAvailabilityChanges', () => {
     const changes = computeAvailabilityChanges(draft({ hourlyRate: '', timeSlots: [] }), null);
     expect(changes.anyChanged).toBe(false);
   });
+
+  describe('a new expert whose settings are still pending', () => {
+    const fresh = {
+      ...saved,
+      price: [10],
+      appointmentDurations: [30, 60, 90],
+      pendingSetupSteps: ['rate', 'durations', 'notice'],
+    };
+
+    it('reports no change for the empty form a new expert first sees', () => {
+      const changes = computeAvailabilityChanges(draft({ hourlyRate: '', appointmentDurations: [] }), fresh);
+      expect(changes.rateChanged).toBe(false);
+      expect(changes.durationsChanged).toBe(false);
+      expect(changes.anyChanged).toBe(false);
+    });
+
+    it('counts picking the same lengths as the stored default as a real choice', () => {
+      const changes = computeAvailabilityChanges(draft({ hourlyRate: '', appointmentDurations: [30, 60, 90] }), fresh);
+      expect(changes.durationsChanged).toBe(true);
+      expect(changes.anyChanged).toBe(true);
+    });
+
+    it('counts typing the same rate as the stored default as a real choice', () => {
+      const changes = computeAvailabilityChanges(draft({ hourlyRate: '10', appointmentDurations: [] }), fresh);
+      expect(changes.rateChanged).toBe(true);
+    });
+
+    it('stops treating a setting as pending once it has been saved', () => {
+      const saved30 = { ...fresh, appointmentDurations: [30], pendingSetupSteps: ['rate', 'notice'] };
+      expect(computeAvailabilityChanges(draft({ hourlyRate: '', appointmentDurations: [30] }), saved30).durationsChanged).toBe(false);
+      expect(computeAvailabilityChanges(draft({ hourlyRate: '', appointmentDurations: [30, 60] }), saved30).durationsChanged).toBe(true);
+    });
+  });
 });

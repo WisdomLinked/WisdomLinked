@@ -11,6 +11,8 @@ export const EXPERT_SETUP_INCOMPLETE_FOR_STUDENT =
 export const EXPERT_SETUP_INCOMPLETE_FOR_EXPERT =
     "You need to complete your profile setup first.";
 
+export const NEW_EXPERT_PENDING_SETUP_STEPS = ['rate', 'durations', 'notice'];
+
 const isPending = (user: any, step: string) =>
     Array.isArray(user?.pendingSetupSteps) && user.pendingSetupSteps.includes(step);
 
@@ -42,6 +44,7 @@ export function isExpertSetupComplete(user: any): boolean {
     const durationsDone = !isPending(user, 'durations') && normalizeAppointmentDurations(user.appointmentDurations).length > 0;
     const rulesDone =
         BUFFER_OPTIONS.includes(toNumber(user.bufferMinutes) as number) &&
+        !isPending(user, 'notice') &&
         NOTICE_OPTIONS.includes(Number(user.bookingNoticeHours));
     return rateDone && durationsDone && rulesDone && hasWeeklyHours(user);
 }

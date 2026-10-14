@@ -29,28 +29,27 @@ function assertBookingLeadTime(expertDoc, sessionStart, messagePrefix = "Booking
   }
 }
 
+const SCHEDULED_START_IN_PAST = "Pick a start time in the future.";
+
 /**
- * The expert's own notice applies to what they schedule too: a seminar published, or a
- * 1:1 proposed, inside it is one no student is allowed to book. Returns the message to
- * show the expert, or null when the start is far enough out (or not a date at all —
- * that is left to the caller's own validation).
- * @param { { bookingNoticeHours?: unknown } | null | undefined } expertDoc
+ * The minimum booking notice binds students only — an expert may schedule inside their
+ * own notice. What an expert schedules must still start in the future. Returns the
+ * message to show the expert, or null when the start is in the future (or not a date at
+ * all — that is left to the caller's own validation).
  * @param { string | number | Date } sessionStart
- * @param { string } what - e.g. "Seminars", "1:1 sessions"
  * @param { number } [now]
  * @returns { string | null }
  */
-function expertSchedulingLeadTimeError(expertDoc, sessionStart, what, now = Date.now()) {
-  const h = normalizeBookingNoticeHours(expertDoc?.bookingNoticeHours);
+function expertSchedulingPastStartError(sessionStart, now = Date.now()) {
   const startMs = new Date(sessionStart).getTime();
   if (Number.isNaN(startMs)) return null;
-  if (startMs >= now + h * 60 * 60 * 1000) return null;
-  return `${what} must be scheduled at least ${h} hours in advance, as per your minimum booking notice.`;
+  return startMs > now ? null : SCHEDULED_START_IN_PAST;
 }
 
 module.exports = {
   ALLOWED_NOTICE_HOURS,
+  SCHEDULED_START_IN_PAST,
   normalizeBookingNoticeHours,
   assertBookingLeadTime,
-  expertSchedulingLeadTimeError,
+  expertSchedulingPastStartError,
 };

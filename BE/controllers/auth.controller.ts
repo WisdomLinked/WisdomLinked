@@ -26,6 +26,7 @@ const { checkTitleNameInvalid } = require('../services/global')
 const { sendEmailNewUserAccountApproval } = require('../services/notifications')
 import { v4 as uuidv4 } from 'uuid';
 import { syncUserToRocketChat } from '../services/rocketchat.service';
+import { NEW_EXPERT_PENDING_SETUP_STEPS } from '../utils/expertSetup';
 const utils = require('../services/utils')
 const randomize = require('randomatic');
 const Event = require("../models/Event");
@@ -307,7 +308,6 @@ const register = async (req: Request, res: Response) => {
             resume: resumeUrl,
             role,
             timeSlots,
-            price: 10,
             confirmCode,
             timeZone,
             ...(specialNote && { specialNote })
@@ -1181,6 +1181,9 @@ const setOAuthRole = async (req: any, res: Response) => {
         }
 
         user.role = role;
+        if (role === 'expert' && !user.pendingSetupSteps?.length) {
+            user.pendingSetupSteps = [...NEW_EXPERT_PENDING_SETUP_STEPS];
+        }
         await user.save();
 
         const result = await getFullUserData(email);

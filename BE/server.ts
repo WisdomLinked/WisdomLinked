@@ -186,6 +186,10 @@ mongoose
         sweepUnreadMessageEmails();
         setInterval(sweepUnreadMessageEmails, 15 * 60 * 1000);
 
+        const { sweepExpiredRetryPaymentLinks } = require('./services/retryPaymentLinkSweep');
+        sweepExpiredRetryPaymentLinks();
+        setInterval(sweepExpiredRetryPaymentLinks, 15 * 60 * 1000);
+
         const httpServer = require('http').Server(app);
         httpServer.listen(PORT, function () {
             console.log(`App listening on port ${PORT}.`);

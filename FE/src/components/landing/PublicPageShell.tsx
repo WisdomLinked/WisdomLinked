@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, Search, X } from 'lucide-react';
 import SignupModal from '../SignupModal';
 import SiteSearchBox from '../search/SiteSearchBox';
+import { dashboardPathForRole, useSignedInRole } from '../../hooks/useSignedInUser';
+import { useScrollToSearchedHeading } from '../../hooks/useScrollToSearchedHeading';
 
 const sectionLinks = [
   { label: 'About Us', to: '/' },
@@ -26,6 +28,8 @@ export default function PublicPageShell({
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [showSignupModal, setShowSignupModal] = useState(false);
   const onResources = location.pathname.startsWith('/resources');
+  const signedInRole = useSignedInRole();
+  useScrollToSearchedHeading();
 
   const go = (to: string) => {
     setMobileMenuOpen(false);
@@ -116,20 +120,32 @@ export default function PublicPageShell({
 
           <div className="flex shrink-0 items-center justify-end gap-2">
             <div className="hidden items-center gap-3 lg:flex">
-              <button
-                type="button"
-                onClick={() => navigate('/login')}
-                className="h-10 px-5 rounded-full border border-[#BCCCDC] text-slate-900 hover:border-[#9AA6B2] hover:text-[#234C6A] transition-all text-sm font-semibold bg-white/85"
-              >
-                Login
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowSignupModal(true)}
-                className="btn-primary h-10 px-5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]"
-              >
-                Sign Up
-              </button>
+              {signedInRole ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(dashboardPathForRole(signedInRole))}
+                  className="btn-primary h-10 px-5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]"
+                >
+                  Dashboard
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/login')}
+                    className="h-10 px-5 rounded-full border border-[#BCCCDC] text-slate-900 hover:border-[#9AA6B2] hover:text-[#234C6A] transition-all text-sm font-semibold bg-white/85"
+                  >
+                    Login
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowSignupModal(true)}
+                    className="btn-primary h-10 px-5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]"
+                  >
+                    Sign Up
+                  </button>
+                </>
+              )}
             </div>
             <div className="flex items-center gap-2 lg:hidden">
               <button
@@ -198,26 +214,38 @@ export default function PublicPageShell({
               ),
             )}
             <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  navigate('/login');
-                }}
-                className="flex-1 py-2.5 rounded-full border border-slate-300 text-sm font-semibold text-slate-700"
-              >
-                Login
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setShowSignupModal(true);
-                }}
-                className="flex-1 py-2.5 btn-primary rounded-full text-sm font-semibold text-white"
-              >
-                Sign Up
-              </button>
+              {signedInRole ? (
+                <button
+                  type="button"
+                  onClick={() => go(dashboardPathForRole(signedInRole))}
+                  className="flex-1 py-2.5 btn-primary rounded-full text-sm font-semibold text-white"
+                >
+                  Dashboard
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      navigate('/login');
+                    }}
+                    className="flex-1 py-2.5 rounded-full border border-slate-300 text-sm font-semibold text-slate-700"
+                  >
+                    Login
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setShowSignupModal(true);
+                    }}
+                    className="flex-1 py-2.5 btn-primary rounded-full text-sm font-semibold text-white"
+                  >
+                    Sign Up
+                  </button>
+                </>
+              )}
             </div>
           </div>
         ) : null}

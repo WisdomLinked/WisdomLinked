@@ -37,6 +37,11 @@ describe('isExpertSetupComplete', () => {
     expect(isExpertSetupComplete(complete({ bufferMinutes: '30' }))).toBe(true);
   });
 
+  it('booking rules: a notice the expert has not chosen yet is incomplete', () => {
+    expect(isExpertSetupComplete(complete({ pendingSetupSteps: ['notice'] }))).toBe(false);
+    expect(isExpertSetupComplete(complete({ pendingSetupSteps: ['rate', 'durations', 'notice'] }))).toBe(false);
+  });
+
   it('booking rules: notice must be 24, 48 or 72 hours', () => {
     expect(isExpertSetupComplete(complete({ bookingNoticeHours: 12 }))).toBe(false);
     expect(isExpertSetupComplete(complete({ bookingNoticeHours: undefined }))).toBe(false);
