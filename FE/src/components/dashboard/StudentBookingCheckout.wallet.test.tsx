@@ -179,6 +179,28 @@ describe('StudentBookingCheckout payment method tabs', () => {
     expect(createStripePaymentIntent.mock.calls[0][0].paymentMethod).toBe('wallet');
   });
 
+  it('cancels the post-payment finish timer when the checkout closes', async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      const onPaymentSuccess = vi.fn();
+      const { unmount } = renderCheckout({ walletOption: { kind: 'charge', only: true }, onPaymentSuccess });
+
+      fireEvent.click(await screen.findByRole('button', { name: /^pay \$25$/i }));
+      await waitFor(() => expect(onPaymentSuccess).toHaveBeenCalled());
+
+      const finishIndex = setTimeoutSpy.mock.calls.findIndex((call) => call[1] === 450);
+      expect(finishIndex).toBeGreaterThanOrEqual(0);
+      const finishId = setTimeoutSpy.mock.results[finishIndex].value;
+
+      unmount();
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(finishId);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+    }
+  });
+
   it('records the chosen mode for recovery after a wallet redirect', async () => {
     renderCheckout({ walletOption: { kind: 'charge' } });
 
