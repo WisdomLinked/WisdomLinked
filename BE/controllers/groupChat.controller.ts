@@ -175,7 +175,7 @@ const {
     escapeHtml: emailEscape,
 } = require('../services/emailTemplate')
 const { sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
-const { assertBookingLeadTime, expertSchedulingLeadTimeError } = require("../utils/bookingLeadTime");
+const { assertBookingLeadTime, expertSchedulingPastStartError } = require("../utils/bookingLeadTime");
 const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
 import { sanitizeDecisionNote, decisionNoteEmailBlock } from '../utils/decisionNote';
@@ -1019,9 +1019,9 @@ const proposeIndividualAppointment = async (req, res) => {
             return res.status(404).send("Sorry, the student you are trying to invite doesn't exist. Please check the email address");
         }
 
-        const leadTimeError = expertSchedulingLeadTimeError(expertUser, start, '1:1 sessions');
-        if (leadTimeError) {
-            return res.status(400).send(leadTimeError);
+        const pastStartError = expertSchedulingPastStartError(start);
+        if (pastStartError) {
+            return res.status(400).send(pastStartError);
         }
 
         await assertBookingSlotValid(expertUser, start, end, { allowOutsideAvailability: !!overrideAvailability });
@@ -1156,13 +1156,9 @@ const createGroupChat = async (req, res) => {
         const schedulesBookableSession =
             (type === 'seminar' && status === 'active') || type === 'individual';
         if (schedulesBookableSession && start) {
-            const leadTimeError = expertSchedulingLeadTimeError(
-                currentUser,
-                start,
-                type === 'seminar' ? 'Seminars' : '1:1 sessions',
-            );
-            if (leadTimeError) {
-                return res.status(400).send(leadTimeError);
+            const pastStartError = expertSchedulingPastStartError(start);
+            if (pastStartError) {
+                return res.status(400).send(pastStartError);
             }
         }
 
@@ -1662,10 +1658,9 @@ const updateGroupChat = async (req, res) => {
             groupChat.status !== 'active' &&
             publishStart
         ) {
-            const host = await User.findById(normalizeId(groupChat.admin));
-            const leadTimeError = expertSchedulingLeadTimeError(host, publishStart, 'Seminars');
-            if (leadTimeError) {
-                return res.status(400).send(leadTimeError);
+            const pastStartError = expertSchedulingPastStartError(publishStart);
+            if (pastStartError) {
+                return res.status(400).send(pastStartError);
             }
         }
 

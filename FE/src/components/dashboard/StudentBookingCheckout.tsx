@@ -10,7 +10,12 @@ import { createStripePaymentIntent, getStripeMode } from '../../api/api';
 import { persistPendingDetails } from '../../utils/safeLocalStorage';
 import FormAlert from '../FormAlert';
 import { SetLoadingStatus } from '../../actions/appActions';
-import { ACCOUNT_BLOCKED_MESSAGE, ACCOUNT_UNDER_REVIEW_MESSAGE } from '../../utils/accountStatus';
+import {
+  ACCOUNT_BLOCKED_MESSAGE,
+  ACCOUNT_UNDER_REVIEW_MESSAGE,
+  accountRestrictionMessage,
+} from '../../utils/accountStatus';
+import { store } from '../../store';
 
 
 /** A 1:1 session booking (createGroupChatByUser path). */
@@ -366,6 +371,9 @@ export default function StudentBookingCheckout({
   const [tab, setTab] = useState<PaymentMode>(walletOnly ? 'wallet' : 'card');
   const activeTab: PaymentMode = walletOnly ? 'wallet' : walletAvailable ? tab : 'card';
   const [walletSubmitting, setWalletSubmitting] = useState(false);
+  const [walletRestriction, setWalletRestriction] = useState<string | null>(null);
+  const currentAccountRestriction = () =>
+    accountRestrictionMessage((store.getState() as any)?.auth?.userDetails?.status);
 
   const options = useMemo(
     () => ({
@@ -504,12 +512,16 @@ export default function StudentBookingCheckout({
                 type="button"
                 disabled={walletSubmitting}
                 onClick={async () => {
+                  const restriction = currentAccountRestriction();
+                  setWalletRestriction(restriction);
+                  if (restriction) return;
                   setWalletSubmitting(true);
                   try {
                     await walletOption.onSubmit();
                   } finally {
                     setWalletSubmitting(false);
                   }
+                  setWalletRestriction(currentAccountRestriction());
                 }}
                 className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-60"
               >
@@ -517,6 +529,11 @@ export default function StudentBookingCheckout({
                   ? 'Sending request…'
                   : walletOption.submitLabel ?? 'Send request — pay after it is accepted'}
               </button>
+              {walletRestriction ? (
+                <p role="alert" className="mt-2 text-[12px] font-semibold text-rose-600">
+                  {walletRestriction}
+                </p>
+              ) : null}
             </div>
           </div>
         ) : (

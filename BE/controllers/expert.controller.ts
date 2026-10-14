@@ -300,7 +300,7 @@ const setBookingNoticeHours = async (req: any, res: Response) => {
         }
         const user = await User.findByIdAndUpdate(
             filter,
-            { bookingNoticeHours: n },
+            { $set: { bookingNoticeHours: n }, $pull: { pendingSetupSteps: 'notice' } },
             { new: true },
         ).select("bookingNoticeHours timeZone email");
         if (!user) {

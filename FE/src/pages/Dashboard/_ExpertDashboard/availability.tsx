@@ -28,6 +28,7 @@ import {
 } from '../../../utils/appointmentDurations';
 import { computeAvailabilityChanges, normalizeBufferMinutes } from '../../../utils/availabilityDirty';
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
+import { isPendingSetupStep } from '../../../components/dashboard/expertSetup/setupSteps';
 
 /** Allow wrap after en-dashes so labels like 11:00 AM–12:00 PM stay inside the cell. */
 function allowWrapAtDashes(text: string): string {
@@ -180,8 +181,12 @@ const AvailabilityPage: React.FC = () => {
       Array.isArray(slots) && slots.length > 0
         ? halfHourIndicesToHours(slots)
         : [];
-    const price = normalizeExpertPrice(userDetails?.price);
-    const durations = normalizeAppointmentDurations(userDetails?.appointmentDurations);
+    const price = isPendingSetupStep(userDetails, 'rate')
+      ? undefined
+      : normalizeExpertPrice(userDetails?.price);
+    const durations = isPendingSetupStep(userDetails, 'durations')
+      ? []
+      : normalizeAppointmentDurations(userDetails?.appointmentDurations);
     const savedBuffer = normalizeBufferMinutes(userDetails?.bufferMinutes);
 
     const savedMode: AvailabilityMode =
@@ -216,14 +221,16 @@ const AvailabilityPage: React.FC = () => {
     userDetails?.bufferMinutes,
     userDetails?.availabilityMode,
     userDetails?.weeklyTimeSlots,
+    userDetails?.pendingSetupSteps,
   ]);
 
   const activeBookingNotice = useMemo(() => {
+    if (isPendingSetupStep(userDetails, 'notice')) return null;
     const n = Number(userDetails?.bookingNoticeHours);
     return BOOKING_NOTICE_HOURS.includes(n as (typeof BOOKING_NOTICE_HOURS)[number])
       ? n
       : 24;
-  }, [userDetails?.bookingNoticeHours]);
+  }, [userDetails?.bookingNoticeHours, userDetails?.pendingSetupSteps]);
 
   const saveBookingNotice = useCallback(
     async (hours: (typeof BOOKING_NOTICE_HOURS)[number]) => {
@@ -849,11 +856,18 @@ const AvailabilityPage: React.FC = () => {
           </div>
 
           <p className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-[#234C6A]">
-            Each slot is a 1-hour availability window starting at the time shown. You offer{' '}
-            <span className="font-semibold">
-              {form.appointmentDurations.map((d) => `${d} min`).join(', ')}
-            </span>{' '}
-            sessions — students choose their length when booking.
+            Each slot is a 1-hour availability window starting at the time shown.{' '}
+            {form.appointmentDurations.length > 0 ? (
+              <>
+                You offer{' '}
+                <span className="font-semibold">
+                  {form.appointmentDurations.map((d) => `${d} min`).join(', ')}
+                </span>{' '}
+                sessions — students choose their length when booking.
+              </>
+            ) : (
+              'Pick your session lengths above — students choose their length when booking.'
+            )}
             {form.appointmentDurations.includes(30) && (
               <>
                 {' '}

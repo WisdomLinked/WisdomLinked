@@ -7,13 +7,14 @@ import React, {
   } from 'react';
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
   import { Check, ImagePlus } from 'lucide-react';
-  import { useDispatch } from 'react-redux';
+  import { useDispatch, useStore } from 'react-redux';
   import { useNavigate } from 'react-router-dom';
   import { useAppSelector } from '../../../store';
   import { createGroupChat, updateGroupChat, uploadSeminarCover } from '../../../api/api';
   import { SetLoadingStatus } from '../../../actions/appActions';
   import { notify } from '../../../utils/notify';
   import { updateMe } from '../../../actions/authActions';
+  import { accountRestrictionMessage } from '../../../utils/accountStatus';
   import { SERVICE_LABELS } from '../../../constants/serviceOptions';
   import MajorSelect from '../../../components/MajorSelect';
   import DatePickerField from '../../../components/ui/DatePickerField';
@@ -236,6 +237,7 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
     enrolledCount = 0,
   }) => {
     const dispatch = useDispatch();
+    const store = useStore();
     const navigate = useNavigate();
     const {
       auth: { userDetails },
@@ -268,6 +270,7 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
     }));
     const [openDropdown, setOpenDropdown] = useState<DropdownId>(null);
     const [confirmPublishOpen, setConfirmPublishOpen] = useState(false);
+    const [restrictionMessage, setRestrictionMessage] = useState<string | null>(null);
     const [tagInput, setTagInput] = useState<string>('');
     const [errors, setErrors] = useState<SeminarErrors>({});
     const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -686,7 +689,13 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
         const res = savedGroupId
           ? await updateGroupChat({ groupId: savedGroupId, ...payload })
-          : await createGroupChat(payload);
+          : await createGroupChat(payload, { quietAccountRestriction: true });
+
+        if (!res) {
+          setRestrictionMessage(
+            accountRestrictionMessage((store.getState() as any).auth?.userDetails?.status),
+          );
+        }
 
         if (res) {
           if (status === 'active') setPublishedInEditor(true);
@@ -1515,6 +1524,11 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
               )}
               </div>
             </div>
+            {restrictionMessage ? (
+              <p role="alert" className="mt-3 text-right text-sm font-semibold text-rose-600">
+                {restrictionMessage}
+              </p>
+            ) : null}
           </div>
         </div>
 

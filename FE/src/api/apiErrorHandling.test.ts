@@ -194,4 +194,44 @@ describe('apiErrorHandling', () => {
             expect(logoutUser).toHaveBeenCalled();
         });
     });
+
+    describe('under-review refusal (UNDER_REVIEW) with quietAccountRestriction', () => {
+        const reviewError = {
+            response: {
+                status: 401,
+                data: { status: 'FAIL', error: 'Something went wrong. Please try again.', code: 'UNDER_REVIEW' },
+            },
+        };
+
+        it('shows no toast, keeps the session, and marks the user under review', async () => {
+            localStorage.setItem('currentUser', JSON.stringify({ email: 'a@test.com', status: 'active' }));
+            getState.mockReturnValue({ auth: { userDetails: { email: 'a@test.com', status: 'active' } } } as any);
+            const { handleApiFailure } = await import('./apiErrorHandling');
+
+            expect(handleApiFailure(reviewError, { quietAccountRestriction: true })).toBe(false);
+
+            expect(notify.error).not.toHaveBeenCalled();
+            expect(logoutUser).not.toHaveBeenCalled();
+            expect(dispatch).toHaveBeenCalledWith({ type: 'updateUserDetails', payload: { status: 'review' } });
+        });
+
+        it('still shows the toast for callers that did not opt in', async () => {
+            getState.mockReturnValue({ auth: { userDetails: { email: 'a@test.com', status: 'review' } } } as any);
+            const { handleApiFailure } = await import('./apiErrorHandling');
+
+            handleApiFailure(reviewError);
+
+            expect(notify.error).toHaveBeenCalledWith('Something went wrong. Please try again.');
+            expect(dispatch).not.toHaveBeenCalled();
+        });
+
+        it('leaves other failures to the normal toast even when opted in', async () => {
+            const { handleApiFailure } = await import('./apiErrorHandling');
+
+            handleApiFailure({ response: { status: 409, data: 'Selected time conflicts with an existing session' } }, { quietAccountRestriction: true });
+
+            expect(notify.error).toHaveBeenCalledWith('Selected time conflicts with an existing session');
+        });
+    });
 });
+

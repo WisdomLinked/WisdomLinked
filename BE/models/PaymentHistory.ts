@@ -23,6 +23,8 @@ const PaymentHistorySchema = new mongoose.Schema(
         pendingAppointmentToGroup: { type: mongoose.Schema.Types.ObjectId, ref: "PendingAppointmentToGroup" },
         groupChat: { type: mongoose.Schema.Types.ObjectId, ref: "GroupChat" },
         event: { type: mongoose.Schema.Types.ObjectId, ref: "Event" },
+        checkoutSessionId: { type: String },
+        linkExpiresAt: { type: Date },
     },
     { timestamps: true }
 );

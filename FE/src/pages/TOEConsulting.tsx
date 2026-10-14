@@ -12,6 +12,8 @@ import {
   ArrowRight, Sparkles, Menu, X, BookOpen, Globe, ChevronDown, ChevronUp, Search
 } from 'lucide-react';
 import ContactFormModal from '../components/ContactFormModal';
+import { dashboardPathForRole, useSignedInRole } from '../hooks/useSignedInUser';
+import { useScrollToSearchedHeading } from '../hooks/useScrollToSearchedHeading';
 
 /* ─── Interactive 3-D Globe ──────────────────────────────────────────────── */
 function GlobeCanvas() {
@@ -574,6 +576,8 @@ const SHOW_STATS = false;
 
 export default function TOEConsulting() {
   const navigate = useNavigate();
+  const signedInRole = useSignedInRole();
+  useScrollToSearchedHeading();
   const [isVisible, setIsVisible] = useState(false);
   const [activeTestimonial, setActiveTestimonial] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -832,8 +836,14 @@ export default function TOEConsulting() {
 
           <div className="flex shrink-0 items-center justify-end gap-2">
             <div className="hidden items-center gap-3 lg:flex">
-              <button type="button" onClick={() => navigate('/login')} className="h-10 px-5 rounded-full border border-[#BCCCDC] text-slate-900 hover:border-[#9AA6B2] hover:text-[#234C6A] transition-all text-sm font-semibold bg-white/85">Login</button>
-              <button type="button" onClick={() => setShowSignupModal(true)} className="btn-primary h-10 px-5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]">Sign Up</button>
+              {signedInRole ? (
+                <button type="button" onClick={() => navigate(dashboardPathForRole(signedInRole))} className="btn-primary h-10 px-5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]">Dashboard</button>
+              ) : (
+                <>
+                  <button type="button" onClick={() => navigate('/login')} className="h-10 px-5 rounded-full border border-[#BCCCDC] text-slate-900 hover:border-[#9AA6B2] hover:text-[#234C6A] transition-all text-sm font-semibold bg-white/85">Login</button>
+                  <button type="button" onClick={() => setShowSignupModal(true)} className="btn-primary h-10 px-5 rounded-full text-white font-semibold text-sm shadow-md shadow-[#BCCCDC]">Sign Up</button>
+                </>
+              )}
             </div>
             <div className="flex items-center gap-2 lg:hidden">
               <button
@@ -881,8 +891,14 @@ export default function TOEConsulting() {
               <button key={label as string} type="button" onClick={action as () => void} className="block w-full py-1 text-left font-semibold text-slate-700 transition-colors hover:text-[#234C6A]">{label}</button>
             ))}
             <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => { setMobileMenuOpen(false); navigate('/login'); }} className="flex-1 py-2.5 rounded-full border border-slate-300 text-sm font-semibold text-slate-700">Login</button>
-              <button type="button" onClick={() => { setMobileMenuOpen(false); setShowSignupModal(true); }} className="flex-1 py-2.5 btn-primary rounded-full text-sm font-semibold text-white">Sign Up</button>
+              {signedInRole ? (
+                <button type="button" onClick={() => { setMobileMenuOpen(false); navigate(dashboardPathForRole(signedInRole)); }} className="flex-1 py-2.5 btn-primary rounded-full text-sm font-semibold text-white">Dashboard</button>
+              ) : (
+                <>
+                  <button type="button" onClick={() => { setMobileMenuOpen(false); navigate('/login'); }} className="flex-1 py-2.5 rounded-full border border-slate-300 text-sm font-semibold text-slate-700">Login</button>
+                  <button type="button" onClick={() => { setMobileMenuOpen(false); setShowSignupModal(true); }} className="flex-1 py-2.5 btn-primary rounded-full text-sm font-semibold text-white">Sign Up</button>
+                </>
+              )}
             </div>
           </div>
         ) : null}

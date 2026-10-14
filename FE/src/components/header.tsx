@@ -1,8 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import SiteSearchBox from "./search/SiteSearchBox";
+import { dashboardPathForRole, useSignedInRole } from "../hooks/useSignedInUser";
+import { useScrollToSearchedHeading } from "../hooks/useScrollToSearchedHeading";
 
 const Header = () => {
+    const signedInRole = useSignedInRole()
+    useScrollToSearchedHeading()
 
     const [opened, set_opened] = React.useState(false)
 
@@ -47,11 +51,17 @@ const Header = () => {
             <div className={`z-20 lg:hidden fixed top-[80px] left-0 w-full h-[calc(100vh-80px)] bg-black overflow-y-auto ${opened ? '' : 'hidden'}`}>
                 <div className="px-5 py-4 text-base text-white space-y-3">
                     <SiteSearchBox audience="public" tone="dark" />
-                    <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row justify-between">
-                        <Link to='/customerregister' className="flex justify-center sm:w-[calc(50%-6px)] py-3 rounded-xl bg-darkgrey">Customer Register</Link>
-                        <Link to='/expertregister' className="flex justify-center sm:w-[calc(50%-6px)] py-3 rounded-xl bg-darkgrey">Expert Register</Link>
-                    </div>
-                    <Link to='/login' className="flex justify-center py-3 rounded-xl bg-green text-white">Sign In</Link>
+                    {signedInRole ? (
+                        <Link to={dashboardPathForRole(signedInRole)} className="flex justify-center py-3 rounded-xl bg-green text-white">Dashboard</Link>
+                    ) : (
+                        <>
+                            <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row justify-between">
+                                <Link to='/customerregister' className="flex justify-center sm:w-[calc(50%-6px)] py-3 rounded-xl bg-darkgrey">Customer Register</Link>
+                                <Link to='/expertregister' className="flex justify-center sm:w-[calc(50%-6px)] py-3 rounded-xl bg-darkgrey">Expert Register</Link>
+                            </div>
+                            <Link to='/login' className="flex justify-center py-3 rounded-xl bg-green text-white">Sign In</Link>
+                        </>
+                    )}
                     <Link to="/aboutus" className="bg-darkgrey flex justify-center py-3 rounded-xl" onClick={() => set_opened(false)}>
                         <span>About US</span>
                     </Link>
@@ -97,14 +107,20 @@ const Header = () => {
                     <div className="w-52">
                         <SiteSearchBox audience="public" tone="dark" />
                     </div>
-                    <div className="h-[48px] py-3 relative hoverBox cursor-pointer">
-                        Create Account
-                        <div className="absolute w-full top-10 left-0 bg-darkgrey p-3 hidden rounded-sm">
-                            <Link to='/customerregister' className="block text-center">Customer</Link>
-                            <Link to='/expertregister' className="block text-center mt-2">Expert</Link>
-                        </div>
-                    </div>
-                    <Link to='/login' className="px-[39px] py-3 rounded-[14px] bg-green text-white">Sign In</Link>
+                    {signedInRole ? (
+                        <Link to={dashboardPathForRole(signedInRole)} className="px-[39px] py-3 rounded-[14px] bg-green text-white">Dashboard</Link>
+                    ) : (
+                        <>
+                            <div className="h-[48px] py-3 relative hoverBox cursor-pointer">
+                                Create Account
+                                <div className="absolute w-full top-10 left-0 bg-darkgrey p-3 hidden rounded-sm">
+                                    <Link to='/customerregister' className="block text-center">Customer</Link>
+                                    <Link to='/expertregister' className="block text-center mt-2">Expert</Link>
+                                </div>
+                            </div>
+                            <Link to='/login' className="px-[39px] py-3 rounded-[14px] bg-green text-white">Sign In</Link>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

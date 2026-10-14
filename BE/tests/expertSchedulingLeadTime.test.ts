@@ -7,10 +7,13 @@ auth.getFullUserData = async () => ({ _id: 'host' });
 const controller = require('../controllers/groupChat.controller');
 auth.getFullUserData = originalGetFullUserData;
 const GroupChat = require('../models/GroupChat');
+const Event = require('../models/Event');
 const User = require('../models/User');
+const AppState = require('../models/AppState');
+const { SCHEDULED_START_IN_PAST } = require('../utils/bookingLeadTime');
 
 const inHours = (h: number) => new Date(Date.now() + h * 3600_000).toISOString();
-const NOTICE = /must be scheduled at least 48 hours in advance, as per your minimum booking notice/;
+const NOTICE = /hours in advance/;
 const REACHED_WRITE = 'reached-write';
 
 const makeRes = () => ({
@@ -21,7 +24,7 @@ const makeRes = () => ({
 });
 
 const expert = () => ({
-  _id: 'host', email: 'host@example.com', username: 'host', bookingNoticeHours: 48,
+  _id: 'host', email: 'host@example.com', username: 'host', bookingNoticeHours: 72,
   price: [25], bufferMinutes: 0, timeSlots: [18],
   groupChats: [], save: async () => {},
 });
@@ -44,48 +47,67 @@ const createSeminar = async (t: any, body: any) => {
   return { res, writes };
 };
 
-test('publishing a seminar inside the notice is refused with the notice in the message', async t => {
-  const { res, writes } = await createSeminar(t, { status: 'active', start: inHours(10), end: inHours(11) });
+test('an expert can publish a seminar inside their own booking notice', async t => {
+  const { res, writes } = await createSeminar(t, { status: 'active', start: inHours(2), end: inHours(3) });
+  assert.doesNotMatch(String(res.body), NOTICE);
+  assert.deepEqual(writes, ['create']);
+});
+
+test('an expert can publish a recurring seminar whose first session is inside their notice', async t => {
+  const { res, writes } = await createSeminar(t, {
+    status: 'active', start: inHours(2), end: inHours(3),
+    isRecurring: true, recurrenceUnit: 'day', recurrenceInterval: 1, recurrenceCount: 5,
+  });
+  assert.doesNotMatch(String(res.body), NOTICE);
+  assert.deepEqual(writes, ['insertMany']);
+});
+
+test('publishing a seminar that starts in the past is refused before anything is written', async t => {
+  const { res, writes } = await createSeminar(t, { status: 'active', start: inHours(-2), end: inHours(-1) });
   assert.equal(res.statusCode, 400);
-  assert.match(res.body, /^Seminars /);
-  assert.match(res.body, NOTICE);
+  assert.equal(res.body, SCHEDULED_START_IN_PAST);
   assert.deepEqual(writes, []);
 });
 
-test('a recurring seminar whose first session is inside the notice is refused before any occurrence is written', async t => {
+test('a recurring seminar whose first session is in the past is refused before any occurrence is written', async t => {
   const { res, writes } = await createSeminar(t, {
-    status: 'active', start: inHours(10), end: inHours(11),
+    status: 'active', start: inHours(-2), end: inHours(-1),
     isRecurring: true, recurrenceUnit: 'day', recurrenceInterval: 1, recurrenceCount: 5,
   });
   assert.equal(res.statusCode, 400);
-  assert.match(res.body, NOTICE);
+  assert.equal(res.body, SCHEDULED_START_IN_PAST);
   assert.deepEqual(writes, []);
 });
 
-test('a seminar outside the notice still reaches creation', async t => {
-  const { res, writes } = await createSeminar(t, { status: 'active', start: inHours(49), end: inHours(50) });
-  assert.doesNotMatch(String(res.body), NOTICE);
+test('a draft can still be saved with any date', async t => {
+  const { res, writes } = await createSeminar(t, { status: 'draft', start: inHours(-2), end: inHours(-1) });
+  assert.notEqual(res.body, SCHEDULED_START_IN_PAST);
   assert.deepEqual(writes, ['create']);
 });
 
-test('a draft inside the notice can still be saved', async t => {
-  const { res, writes } = await createSeminar(t, { status: 'draft', start: inHours(10), end: inHours(11) });
-  assert.doesNotMatch(String(res.body), NOTICE);
-  assert.deepEqual(writes, ['create']);
-});
-
-test('a 1:1 created through the group route is held to the notice too', async t => {
+test('a 1:1 created through the group route inside the notice reaches creation', async t => {
   const { res, writes } = await createSeminar(t, {
-    type: 'individual', status: 'pending', customerId: 'student', start: inHours(10), end: inHours(11),
+    type: 'individual', status: 'pending', customerId: 'student', start: inHours(2), end: inHours(3),
+  });
+  assert.doesNotMatch(String(res.body), NOTICE);
+  assert.deepEqual(writes, ['create']);
+});
+
+test('a 1:1 created through the group route in the past is refused', async t => {
+  const { res, writes } = await createSeminar(t, {
+    type: 'individual', status: 'pending', customerId: 'student', start: inHours(-2), end: inHours(-1),
   });
   assert.equal(res.statusCode, 400);
-  assert.match(res.body, /^1:1 sessions /);
+  assert.equal(res.body, SCHEDULED_START_IN_PAST);
   assert.deepEqual(writes, []);
 });
 
 const propose = async (t: any, start: string) => {
   t.mock.method(User, 'findById', async () => expert());
   t.mock.method(User, 'findOne', async () => ({ _id: 'student', email: 'student@example.com', groupChats: [], save: async () => {} }));
+  t.mock.method(Event, 'find', () => ({ select: async () => [] }));
+  t.mock.method(GroupChat, 'find', () => ({ select: async () => [] }));
+  t.mock.method(AppState, 'findOne', async () => null);
   const writes = mockWrites(t);
   const res = makeRes();
   await controller.proposeIndividualAppointment({
@@ -98,18 +120,16 @@ const propose = async (t: any, start: string) => {
   return { res, writes };
 };
 
-test('proposing a 1:1 inside the notice is refused with the notice in the message', async t => {
-  const { res, writes } = await propose(t, inHours(10));
-  assert.equal(res.statusCode, 400);
-  assert.match(res.body, /^1:1 sessions /);
-  assert.match(res.body, NOTICE);
-  assert.deepEqual(writes, []);
+test('an expert can propose a 1:1 inside their own booking notice', async t => {
+  const { res, writes } = await propose(t, inHours(2));
+  assert.doesNotMatch(String(res.body), NOTICE);
+  assert.deepEqual(writes, ['create']);
 });
 
-test('proposing a 1:1 in the past is refused the same way', async t => {
+test('proposing a 1:1 in the past is refused', async t => {
   const { res, writes } = await propose(t, inHours(-2));
   assert.equal(res.statusCode, 400);
-  assert.match(res.body, NOTICE);
+  assert.equal(res.body, SCHEDULED_START_IN_PAST);
   assert.deepEqual(writes, []);
 });
 
@@ -135,38 +155,47 @@ async function update(t: any, stored: any, body: any) {
   return { res, writes };
 }
 
-test('publishing a draft that starts inside the notice is refused', async t => {
-  const { res, writes } = await update(t, { status: 'draft', start: inHours(10), end: inHours(11) }, { status: 'active' });
-  assert.equal(res.statusCode, 400);
-  assert.match(res.body, NOTICE);
-  assert.deepEqual(writes, []);
-});
-
-test('publishing a draft while moving it inside the notice is refused', async t => {
-  const { res, writes } = await update(t, { status: 'draft', start: inHours(100), end: inHours(101) }, {
-    status: 'active', start: inHours(10), end: inHours(11),
-  });
-  assert.equal(res.statusCode, 400);
-  assert.deepEqual(writes, []);
-});
-
-test('publishing a draft that starts outside the notice still works', async t => {
-  const { res, writes } = await update(t, { status: 'draft', start: inHours(100), end: inHours(101) }, { status: 'active' });
+test('publishing a draft that starts inside the notice works', async t => {
+  const { res, writes } = await update(t, { status: 'draft', start: inHours(2), end: inHours(3) }, { status: 'active' });
   assert.equal(res.statusCode, 200);
   assert.equal(writes.length, 1);
   assert.equal(writes[0].status, 'active');
 });
 
+test('publishing a draft while moving it inside the notice works', async t => {
+  const { res, writes } = await update(t, { status: 'draft', start: inHours(100), end: inHours(101) }, {
+    status: 'active', start: inHours(2), end: inHours(3),
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(writes.length, 1);
+});
+
+test('publishing a draft whose start has already passed is refused', async t => {
+  const { res, writes } = await update(t, { status: 'draft', start: inHours(-1), end: inHours(1) }, { status: 'active' });
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body, SCHEDULED_START_IN_PAST);
+  assert.deepEqual(writes, []);
+});
+
+test('publishing a draft while moving it into the past is refused', async t => {
+  const { res, writes } = await update(t, { status: 'draft', start: inHours(100), end: inHours(101) }, {
+    status: 'active', start: inHours(-2), end: inHours(-1),
+  });
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body, SCHEDULED_START_IN_PAST);
+  assert.deepEqual(writes, []);
+});
+
 test('saving a draft inside the notice still works', async t => {
   const { res, writes } = await update(t, { status: 'draft', start: inHours(100), end: inHours(101) }, {
-    status: 'draft', start: inHours(10), end: inHours(11),
+    status: 'draft', start: inHours(2), end: inHours(3),
   });
   assert.equal(res.statusCode, 200);
   assert.equal(writes.length, 1);
 });
 
 test('editing an already-live seminar that is now inside the notice still works', async t => {
-  const { res, writes } = await update(t, { status: 'active', start: inHours(10), end: inHours(11) }, {
+  const { res, writes } = await update(t, { status: 'active', start: inHours(2), end: inHours(3) }, {
     status: 'active', description: 'Updated details',
   });
   assert.equal(res.statusCode, 200);

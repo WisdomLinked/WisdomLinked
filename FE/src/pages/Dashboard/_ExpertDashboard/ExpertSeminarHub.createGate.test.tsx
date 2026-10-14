@@ -4,6 +4,8 @@ import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { MemoryRouter } from 'react-router-dom';
 import ExpertSeminarHub from './ExpertSeminarHub';
+import { ACCOUNT_BLOCKED_MESSAGE, ACCOUNT_UNDER_REVIEW_MESSAGE } from '../../../utils/accountStatus';
+import { getSeminarSeatRequests } from '../../../api/api';
 
 vi.mock('./seminar', () => ({ default: () => <div data-testid="seminar-form" /> }));
 vi.mock('../../../api/api', () => ({
@@ -84,3 +86,45 @@ describe('Create seminar is gated on profile setup', () => {
     expect(screen.getByTestId('seminar-form')).toBeInTheDocument();
   });
 });
+
+describe('Create seminar is gated on account status', () => {
+  it('shows the under-review text below the button and keeps the form closed', () => {
+    show(expert({ status: 'review' }));
+    fireEvent.click(createButton());
+    expect(screen.queryByTestId('seminar-form')).not.toBeInTheDocument();
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(ACCOUNT_UNDER_REVIEW_MESSAGE);
+    expect(alert).toHaveClass('text-rose-600');
+    expect(createButton().compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shows the blocked text below the button and keeps the form closed', () => {
+    show(expert({ status: 'blocked' }));
+    fireEvent.click(createButton());
+    expect(screen.queryByTestId('seminar-form')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(ACCOUNT_BLOCKED_MESSAGE);
+  });
+
+  it('names the review, not the unfinished setup, when both apply', () => {
+    show(expert({ status: 'review', bufferMinutes: undefined }));
+    fireEvent.click(createButton());
+    expect(screen.getByRole('alert')).toHaveTextContent(ACCOUNT_UNDER_REVIEW_MESSAGE);
+    expect(screen.queryByText(MESSAGE)).not.toBeInTheDocument();
+  });
+
+  it('reads the status at click time, so an account put under review is stopped without a reload', () => {
+    const store = show(expert({ status: 'active' }));
+    act(() => {
+      store.dispatch({ type: 'test/setUser', payload: expert({ status: 'review' }) });
+    });
+    fireEvent.click(createButton());
+    expect(screen.queryByTestId('seminar-form')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(ACCOUNT_UNDER_REVIEW_MESSAGE);
+  });
+
+  it('loads pending seat requests without a toast for a restricted account', () => {
+    show(expert({ status: 'review' }));
+    expect(getSeminarSeatRequests).toHaveBeenCalledWith({ quietAccountRestriction: true });
+  });
+});
+
