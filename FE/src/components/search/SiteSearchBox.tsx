@@ -16,9 +16,12 @@ import {
   isEmailQuery,
   isSeminarCoverUrl,
   normalizeSiteSearchResponse,
+  siteSearchAudienceForRole,
   type SiteSearchAudience,
   type SiteSearchResponse,
 } from '../../utils/siteSearch';
+import { useSignedInRole } from '../../hooks/useSignedInUser';
+import type { SearchedHeadingState } from '../../hooks/useScrollToSearchedHeading';
 
 function ProfileFilenameImage({
   filename,
@@ -55,15 +58,17 @@ function SeminarCover({ image, alt }: { image?: string; alt: string }) {
 
 function ResultShell({
   href,
+  state,
   children,
 }: {
   href: string | null;
+  state?: SearchedHeadingState;
   children: React.ReactNode;
 }) {
   const className = 'flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-[#F5F3EF]';
   if (!href) return <div className={className}>{children}</div>;
   return (
-    <Link to={href} className={className}>
+    <Link to={href} state={state} className={className}>
       {children}
     </Link>
   );
@@ -81,7 +86,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 }
 
 export default function SiteSearchBox({
-  audience,
+  audience: requestedAudience,
   tone = 'light',
   variant = 'default',
   placeholder = 'Search',
@@ -96,6 +101,9 @@ export default function SiteSearchBox({
   autoFocus?: boolean;
 }) {
   const navigate = useNavigate();
+  const signedInRole = useSignedInRole();
+  const audience: SiteSearchAudience =
+    requestedAudience === 'public' && signedInRole ? siteSearchAudienceForRole(signedInRole) : requestedAudience;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const requestRef = useRef(0);
@@ -370,7 +378,7 @@ export default function SiteSearchBox({
           {cards!.pages.length > 0 ? (
             <Group title="Pages">
               {cards!.pages.map((page) => (
-                <ResultShell key={`${page.route}-${page.title}`} href={page.route}>
+                <ResultShell key={`${page.route}-${page.title}`} href={page.route} state={{ searchHeading: page.title }}>
                   <span className="min-w-0">
                     <span className="block truncate text-[13px] font-semibold text-slate-900">{page.title}</span>
                     {page.snippet ? (

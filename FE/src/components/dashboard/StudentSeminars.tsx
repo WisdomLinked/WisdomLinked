@@ -326,7 +326,7 @@ export default function StudentSeminars({
       const response: any = await requestSeminarSeat({
         groupChatId: selectedSeminar.id,
         paymentMode: 'wallet',
-      });
+      }, { quietAccountRestriction: true });
       if (response === false || response?.status === 'FAIL' || response?.error) {
         setBookingError(response?.error || 'Could not submit your seat request.');
         return;

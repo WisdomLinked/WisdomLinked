@@ -29,6 +29,7 @@ export interface AvailabilitySavedState {
   availabilityMode?: unknown;
   appointmentDurations?: unknown;
   bufferMinutes?: unknown;
+  pendingSetupSteps?: unknown;
 }
 
 export interface AvailabilityChanges {
@@ -53,17 +54,19 @@ export function computeAvailabilityChanges(
   draft: AvailabilityDraft,
   saved: AvailabilitySavedState | null | undefined,
 ): AvailabilityChanges {
-  const savedPrice = normalizeExpertPrice(saved?.price);
+  const pending = Array.isArray(saved?.pendingSetupSteps) ? (saved?.pendingSetupSteps as unknown[]) : [];
+  const ratePending = pending.includes('rate');
+  const durationsPending = pending.includes('durations');
+  const savedPrice = ratePending ? undefined : normalizeExpertPrice(saved?.price);
   const savedSlots = Array.isArray(saved?.timeSlots) ? (saved?.timeSlots as number[]) : [];
   const savedMode = saved?.availabilityMode === 'daily' ? 'daily' : 'common';
 
   const rateChanged = draftRate(draft.hourlyRate) !== savedPrice;
   const slotsChanged = !slotsIndicesEqual(draft.timeSlots, savedSlots);
   const modeChanged = draft.mode !== savedMode;
-  const durationsChanged = !appointmentDurationsEqual(
-    draft.appointmentDurations,
-    saved?.appointmentDurations,
-  );
+  const durationsChanged = durationsPending
+    ? draft.appointmentDurations.length > 0
+    : !appointmentDurationsEqual(draft.appointmentDurations, saved?.appointmentDurations);
   const weeklyChanged =
     draft.mode === 'daily' &&
     !weeklyTimeSlotsEqual(draft.weeklyTimeSlots, saved?.weeklyTimeSlots);

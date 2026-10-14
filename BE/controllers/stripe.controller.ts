@@ -3,6 +3,7 @@ import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
 import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { expectedBookingIntentCents, extractHourlyRate, balanceTransactionId } from '../utils/bookingPrice';
 import { seminarIsFull, firstFullFutureOccurrence, seatRequestUnavailableMessage } from '../utils/seminarCapacity';
+import { checkoutPaymentMetadata, retryLinkExpiry } from '../utils/retryPaymentLink';
 import {
     normalizePaymentMode,
     isWallet,
@@ -513,9 +514,10 @@ const {
     button: stripeButton,
     callout: stripeCallout,
     escapeHtml: stripeEscape,
+    formatWhen: stripeFormatWhen,
 } = require("../services/emailTemplate");
 
-const buildPaymentRequestEmail = ({ customerName, amountCents, description, url }: any) => renderStripeEmail({
+const buildPaymentRequestEmail = ({ customerName, amountCents, description, url, expiresAt, timeZone }: any) => renderStripeEmail({
     heading: 'Payment requested',
     previewText: `${stripeMoneyFromCents(amountCents)} due.`,
     blocks: [
@@ -523,6 +525,7 @@ const buildPaymentRequestEmail = ({ customerName, amountCents, description, url 
         stripeFacts([
             ['Amount', stripeMoneyFromCents(amountCents)],
             ['For', description],
+            ...(expiresAt ? [['Link expires', stripeFormatWhen(expiresAt, timeZone)]] : []),
         ]),
         stripeButton(`Pay ${stripeMoneyFromCents(amountCents)}`, url),
         stripeParagraph('Payment is handled securely by Stripe. You will receive a confirmation email once it has been processed.', { muted: true }),
@@ -650,7 +653,19 @@ const sendPaymentLinkToUser = async (req, res) => {
         const finalAmount = customAmount || paymentHistory.amount;
         const finalDescription = customDescription || paymentHistory.description || 'Service Payment';
 
-        const paymentLink = await stripe.paymentLinks.create({
+        const linkedSession = paymentHistory.groupChat
+            ? await GroupChat.findById(paymentHistory.groupChat).select('start')
+            : paymentHistory.event
+                ? await require("../models/Event").findById(paymentHistory.event).select('start')
+                : null;
+        const expiry = retryLinkExpiry(Date.now(), linkedSession?.start);
+        if ('message' in expiry) {
+            return res.status(200).json({ status: 'FAILED', message: expiry.message });
+        }
+        const linkExpiresAt = new Date(expiry.expiresAtMs);
+
+        const checkoutSession = await stripe.checkout.sessions.create({
+            mode: 'payment',
             line_items: [
                 {
                     price_data: {
@@ -663,17 +678,14 @@ const sendPaymentLinkToUser = async (req, res) => {
                     quantity: 1,
                 },
             ],
+            customer_email: customerEmail,
             allow_promotion_codes: false,
             billing_address_collection: 'required',
             phone_number_collection: {
                 enabled: true,
             },
-            after_completion: {
-                type: 'hosted_confirmation',
-                hosted_confirmation: {
-                    custom_message: 'Thank you for your payment! You will receive a confirmation email and receipt shortly.',
-                },
-            },
+            expires_at: Math.floor(expiry.expiresAtMs / 1000),
+            success_url: `${resolveAppBaseUrl()}/payment-complete`,
             metadata: {
                 originalPaymentHistoryId: paymentHistoryId,
                 paymentType: 'retry',
@@ -688,6 +700,8 @@ const sendPaymentLinkToUser = async (req, res) => {
 
         // Create immediate payment record with pending status
         const immediatePaymentHistory = new PaymentHistory({
+            checkoutSessionId: checkoutSession.id,
+            linkExpiresAt,
             stripeMode: currentStripeMode,
             paymentType: 'retry',
             amount: finalAmount,
@@ -704,11 +718,16 @@ const sendPaymentLinkToUser = async (req, res) => {
         await immediatePaymentHistory.save();
         console.log('Created pending payment record:', immediatePaymentHistory._id);
 
+        const customer = paymentHistory.customer
+            ? await User.findById(paymentHistory.customer).select('timeZone')
+            : null;
         const html = buildPaymentRequestEmail({
             customerName: paymentHistory?.customer?.username,
             amountCents: finalAmount,
             description: finalDescription,
-            url: paymentLink.url,
+            url: checkoutSession.url,
+            expiresAt: linkExpiresAt,
+            timeZone: customer?.timeZone,
         });
 
         const msg = {
@@ -728,7 +747,8 @@ const sendPaymentLinkToUser = async (req, res) => {
         res.status(200).json({
             status: 'SUCCESS',
             message: 'Payment link sent successfully to the customer.',
-            paymentLinkUrl: paymentLink.url
+            paymentLinkUrl: checkoutSession.url,
+            linkExpiresAt,
         });
 
     } catch (err) {
@@ -794,20 +814,23 @@ const handleStripeWebhook = async (req, res) => {
         if (event.type === 'checkout.session.completed') {
             const session = event.data.object;
 
-            if (session.payment_link) {
+            if (session.payment_link || session.metadata?.paymentType === 'retry') {
                 const appState = await AppState.findOne();
                 const currentStripeMode = appState?.stripeMode || 'test';
                 const stripeInstance = require('stripe')(currentStripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
 
-                const paymentLink = await stripeInstance.paymentLinks.retrieve(session.payment_link);
+                const paymentLink = session.payment_link
+                    ? await stripeInstance.paymentLinks.retrieve(session.payment_link)
+                    : null;
+                const metadata = checkoutPaymentMetadata(session, paymentLink?.metadata);
 
-                if (paymentLink.metadata && paymentLink.metadata.originalPaymentHistoryId) {
+                if (metadata.originalPaymentHistoryId) {
                     // Security validations
-                    const authorizedEmail = paymentLink.metadata.authorizedCustomerEmail;
-                    const originalAmount = parseInt(paymentLink.metadata.originalAmount);
+                    const authorizedEmail = metadata.authorizedCustomerEmail;
+                    const originalAmount = parseInt(metadata.originalAmount);
 
                     // Validate payment amount matches expected (original or custom)
-                    const expectedAmount = parseInt(paymentLink.metadata.customAmount) || originalAmount;
+                    const expectedAmount = parseInt(metadata.customAmount) || originalAmount;
                     if (session.amount_total !== expectedAmount) {
                         console.error('Security Alert: Payment amount mismatch!', {
                             expected: expectedAmount,
@@ -833,20 +856,21 @@ const handleStripeWebhook = async (req, res) => {
                         sessionId: session.id,
                         authorizedEmail: authorizedEmail,
                         amount: session.amount_total,
-                        paymentHistoryId: paymentLink.metadata.originalPaymentHistoryId
+                        paymentHistoryId: metadata.originalPaymentHistoryId
                     });
 
-                    const originalPaymentHistory = await PaymentHistory.findById(String(paymentLink.metadata.originalPaymentHistoryId));
+                    const originalPaymentHistory = await PaymentHistory.findById(String(metadata.originalPaymentHistoryId));
 
                     if (originalPaymentHistory) {
-                        // Find the pending payment record we created when the link was sent
-                        const pendingPayment = await PaymentHistory.findOne({
+                        const pendingPayment = (session.id
+                            ? await PaymentHistory.findOne({ paymentType: 'retry', checkoutSessionId: session.id })
+                            : null) || await PaymentHistory.findOne({
                             customer: originalPaymentHistory.customer,
                             expert: originalPaymentHistory.expert,
                             paymentType: 'retry',
                             status: 'pending',
                             amount: session.amount_total,
-                            description: paymentLink.metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`
+                            description: metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`
                         }).sort({ createdAt: -1 });
 
                         if (pendingPayment) {
@@ -858,7 +882,7 @@ const handleStripeWebhook = async (req, res) => {
 
                             // Update payment intent to send receipt
                             try {
-                                const stripe = require('stripe')(paymentLink.metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+                                const stripe = require('stripe')(metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
                                 await stripe.paymentIntents.update(session.payment_intent, {
                                     receipt_email: authorizedEmail,
                                 });
@@ -870,11 +894,11 @@ const handleStripeWebhook = async (req, res) => {
                         } else {
                             // Fallback: create new payment record if pending not found
                             const newPaymentHistory = new PaymentHistory({
-                                stripeMode: paymentLink.metadata.stripeMode || currentStripeMode,
+                                stripeMode: metadata.stripeMode || currentStripeMode,
                                 paymentType: 'retry',
                                 amount: session.amount_total,
                                 currency: session.currency,
-                                description: paymentLink.metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`,
+                                description: metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`,
                                 paymentIntent: session.payment_intent,
                                 status: 'completed',
                                 customer: originalPaymentHistory.customer,
@@ -889,7 +913,7 @@ const handleStripeWebhook = async (req, res) => {
 
                             // Update payment intent to send receipt
                             try {
-                                const stripe = require('stripe')(paymentLink.metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+                                const stripe = require('stripe')(metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
                                 await stripe.paymentIntents.update(session.payment_intent, {
                                     receipt_email: authorizedEmail,
                                 });
@@ -918,17 +942,17 @@ const handleStripeWebhook = async (req, res) => {
                             });
                         }
                     }
-                } else if (paymentLink.metadata.paymentType === 'adhoc') {
+                } else if (metadata.paymentType === 'adhoc') {
                     // Handle ad-hoc payment completion
                     console.log('Processing ad-hoc payment completion');
 
                     // Find the pending ad-hoc payment record
                     const pendingAdHocPayment = await PaymentHistory.findOne({
-                        customer: paymentLink.metadata.customerId,
+                        customer: metadata.customerId,
                         paymentType: 'adhoc',
                         status: 'pending',
                         amount: session.amount_total,
-                        description: paymentLink.metadata.customDescription
+                        description: metadata.customDescription
                     }).sort({ createdAt: -1 });
 
                     if (pendingAdHocPayment) {
@@ -940,11 +964,11 @@ const handleStripeWebhook = async (req, res) => {
 
                         // Update payment intent to send receipt
                         try {
-                            const stripe = require('stripe')(paymentLink.metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+                            const stripe = require('stripe')(metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
                             await stripe.paymentIntents.update(session.payment_intent, {
-                                receipt_email: paymentLink.metadata.authorizedCustomerEmail,
+                                receipt_email: metadata.authorizedCustomerEmail,
                             });
-                            console.log('Updated ad-hoc payment intent with receipt email:', paymentLink.metadata.authorizedCustomerEmail);
+                            console.log('Updated ad-hoc payment intent with receipt email:', metadata.authorizedCustomerEmail);
                         } catch (receiptError) {
                             console.error('Failed to update ad-hoc payment intent with receipt email:', receiptError);
                         }
@@ -953,7 +977,7 @@ const handleStripeWebhook = async (req, res) => {
                         console.log('Ad-hoc payment security validation passed:', {
                             paymentHistoryId: pendingAdHocPayment._id,
                             sessionId: session.id,
-                            authorizedEmail: paymentLink.metadata.authorizedCustomerEmail,
+                            authorizedEmail: metadata.authorizedCustomerEmail,
                             amount: session.amount_total
                         });
                     }

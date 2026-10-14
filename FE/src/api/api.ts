@@ -15,6 +15,7 @@ import {
     checkForAuthorization,
     handleApiFailure,
     handleAuthApiFailure,
+    type HandleApiFailureOptions,
 } from "./apiErrorHandling";
 import { resolveUserFacingError } from "../utils/resolveUserFacingError";
 import { ensureCsrfToken, needsCsrf, isCsrfError } from "./csrf";
@@ -344,13 +345,15 @@ export const getAllCommunityChats = async () => {
     }
 };
 
-export const createGroupChat = async (details: any) => {
+type AccountRestrictionOptions = Pick<HandleApiFailureOptions, 'quietAccountRestriction'>;
+
+export const createGroupChat = async (details: any, options: AccountRestrictionOptions = {}) => {
     try {
         const res = await api.post("group-chat", details);
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleApiFailure(err, options);
     }
 };
 
@@ -414,23 +417,23 @@ export const uploadSeminarCover = async (file: File): Promise<string | null> => 
     }
 };
 
-export const createGroupChatByUser = async (details: any) => {
+export const createGroupChatByUser = async (details: any, options: AccountRestrictionOptions = {}) => {
     try {
         const res = await api.post("group-chat/create-by-user", details);
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleApiFailure(err, options);
     }
 };
 
-export const proposeIndividualAppointment = async (details: any) => {
+export const proposeIndividualAppointment = async (details: any, options: AccountRestrictionOptions = {}) => {
     try {
         const res = await api.post("group-chat/propose-individual-appointment", details);
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleApiFailure(err, options);
     }
 };
 
@@ -518,7 +521,7 @@ export const registerForSeminar = async (data: any) => {
     }
 };
 
-export const requestSeminarSeat = async (data: any) => {
+export const requestSeminarSeat = async (data: any, options: AccountRestrictionOptions = {}) => {
     try {
         const res = await api.post("group-chat/request-seminar-seat", {
             groupChatId: data.groupChatId,
@@ -528,7 +531,7 @@ export const requestSeminarSeat = async (data: any) => {
 
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleApiFailure(err, options);
     }
 };
 
@@ -546,12 +549,12 @@ export const paySeminarSeatRequest = async (data: any) => {
     }
 };
 
-export const getSeminarSeatRequests = async () => {
+export const getSeminarSeatRequests = async (options: AccountRestrictionOptions = {}) => {
     try {
         const res = await api.get("group-chat/seat-requests");
         return res.data;
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleApiFailure(err, options);
     }
 };
 

@@ -10,7 +10,7 @@ import OverlayPortal from "../../../../components/OverayPortal";
 import DatePickerField from "../../../../components/ui/DatePickerField";
 import TimePickerField from "../../../../components/ui/TimePickerField";
 import { SetLoadingStatus } from "../../../../actions/appActions";
-import { useDispatch } from "react-redux";
+import { useDispatch, useStore } from "react-redux";
 import { setChosenChatDetails, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import { useNavigate } from "react-router-dom";
 import { useAppSelector } from "../../../../store";
@@ -22,6 +22,7 @@ import { normalizeExpertPrice } from "../../../../utils/schedulingSlots";
 import { updateMe } from "../../../../actions/authActions";
 import { notify } from '../../../../utils/notify';
 import { EXPERT_SETUP_INCOMPLETE_FOR_EXPERT, isExpertSetupComplete } from '../../../../components/dashboard/expertSetup/setupSteps';
+import { accountRestrictionMessage } from '../../../../utils/accountStatus';
 import ClientsPage from '../clients/ClientsPage';
 import InviteClientDialog from '../clients/InviteClientDialog';
 import { collectRelationships, dedupeById, type ClientRow } from '../clients/clientModel';
@@ -36,6 +37,7 @@ const Customers = ({
 }: any) => {
 
     const dispatch = useDispatch()
+    const store = useStore()
     const navigate = useNavigate()
     const { userDetails } = useAppSelector((state: any) => state.auth)
     const [proposeFor, setProposeFor] = useState<any>(null)
@@ -49,6 +51,9 @@ const Customers = ({
     const [proposeCustomerEmail, setProposeCustomerEmail] = useState<string | null>(null)
     const [outsideConfirm, setOutsideConfirm] = useState(false)
     const [proposeSetupBlocked, setProposeSetupBlocked] = useState(false)
+    const [proposeRestriction, setProposeRestriction] = useState<string | null>(null)
+    const currentAccountRestriction = () =>
+        accountRestrictionMessage((store.getState() as any).auth?.userDetails?.status)
     const [profileFor, setProfileFor] = useState<any>(null)
     const [profilePreview, setProfilePreview] = useState<string | null>(null)
     const [inviteOpen, setInviteOpen] = useState(false)
@@ -183,12 +188,19 @@ const Customers = ({
         setProposeCustomerEmail(null);
         setOutsideConfirm(false);
         setProposeSetupBlocked(false);
+        setProposeRestriction(null);
         void fetchChatUserProfile(String(customer._id)).then((r: any) => {
             if (r?.success && r?.result?.email) setProposeCustomerEmail(String(r.result.email));
         });
     };
 
     const submitPropose = async (override = false) => {
+        const restriction = currentAccountRestriction();
+        if (restriction) {
+            setProposeSetupBlocked(false);
+            setProposeRestriction(restriction);
+            return;
+        }
         if ((userDetails as any)?.role === "expert" && !isExpertSetupComplete(userDetails)) {
             setProposeSetupBlocked(true);
             return;
@@ -244,9 +256,10 @@ const Customers = ({
             price,
             customer: proposeCustomerEmail,
             overrideAvailability: needsOverride,
-        });
+        }, { quietAccountRestriction: true });
         SetLoadingStatus(false);
         setProposeBusy(false);
+        if (!res) setProposeRestriction(currentAccountRestriction());
         if (res && res !== false) {
             if (res.userDetails) {
                 dispatch({ type: "updateUserDetails", payload: res.userDetails });
@@ -438,6 +451,12 @@ const Customers = ({
                                         {proposeBusy ? "Sending…" : "Send proposal"}
                                     </button>
                                 )}
+
+                                {proposeRestriction ? (
+                                    <p role="alert" className="mt-3 text-xs font-semibold text-rose-600">
+                                        {proposeRestriction}
+                                    </p>
+                                ) : null}
                             </div>
                         </div>
                     </OverlayPortal> :

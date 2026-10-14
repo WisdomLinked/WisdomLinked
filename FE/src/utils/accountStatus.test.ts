@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isAccountBlocked, isAccountUnderReview } from './accountStatus';
+import {
+  ACCOUNT_BLOCKED_MESSAGE,
+  ACCOUNT_UNDER_REVIEW_MESSAGE,
+  accountRestrictionMessage,
+  isAccountBlocked,
+  isAccountUnderReview,
+} from './accountStatus';
 
 describe('isAccountUnderReview', () => {
   it('is true only for review status', () => {
@@ -18,5 +24,18 @@ describe('isAccountBlocked', () => {
     expect(isAccountBlocked('active')).toBe(false);
     expect(isAccountBlocked(undefined)).toBe(false);
     expect(isAccountBlocked(null)).toBe(false);
+  });
+});
+
+describe('accountRestrictionMessage', () => {
+  it('names the review and blocked states with the dashboard banner copy', () => {
+    expect(accountRestrictionMessage('review')).toBe(ACCOUNT_UNDER_REVIEW_MESSAGE);
+    expect(accountRestrictionMessage('blocked')).toBe(ACCOUNT_BLOCKED_MESSAGE);
+  });
+
+  it('is null for an account that may schedule and book', () => {
+    expect(accountRestrictionMessage('active')).toBeNull();
+    expect(accountRestrictionMessage(undefined)).toBeNull();
+    expect(accountRestrictionMessage(null)).toBeNull();
   });
 });

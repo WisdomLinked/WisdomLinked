@@ -5,7 +5,7 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import OverlayPortal from "../../../../components/OverayPortal";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
-import { useDispatch } from "react-redux";
+import { useDispatch, useStore } from "react-redux";
 import { removeFriendAction } from "../../../../actions/friendActions";
 import { formatDateYYYY_MM_DD_h_m, getAvatarTitle, isFutureEvent, isTheEventGoingOn } from "../../../../actions/common";
 import GroupParticipantsDialog from "./GroupParticipantsDialog";
@@ -35,6 +35,7 @@ import {SetLoadingStatus, SetTotalTimeSpent} from "../../../../actions/appAction
 import { updateMe } from "../../../../actions/authActions";
 import { notify } from '../../../../utils/notify';
 import { EXPERT_SETUP_INCOMPLETE_FOR_EXPERT, isExpertSetupComplete } from '../../../../components/dashboard/expertSetup/setupSteps';
+import { accountRestrictionMessage } from '../../../../utils/accountStatus';
 import { addNewMessage, resetChatAction, setChosenGroupChatDetails } from "../../../../actions/chatActions";
 import ProfileModal from "./ProfileModal";
 import CommunityProfileModal from "./CommunityProfileModal";
@@ -74,6 +75,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     } = useAppSelector((state) => state);
 
     const dispatch = useDispatch()
+    const store = useStore()
     const [participantsDialogOpen, setParticipantsDialogOpen] = useState(false);
     const [acceptedfutureEvents, set_acceptedfutureEvents] = useState<Array<any>>([])
     const [futureEvents, set_futureEvents] = useState<Array<any>>([])
@@ -105,6 +107,9 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const [proposeCustomerEmail, setProposeCustomerEmail] = useState<string | null>(null);
     const [outsideConfirm, setOutsideConfirm] = useState(false);
     const [proposeSetupBlocked, setProposeSetupBlocked] = useState(false);
+    const [proposeRestriction, setProposeRestriction] = useState<string | null>(null);
+    const currentAccountRestriction = () =>
+        accountRestrictionMessage((store.getState() as any).auth?.userDetails?.status);
 
     const proposeSuggestedPrice = (durationMin: number) => {
         const rate = normalizeExpertPrice((userDetails as any)?.price) ?? 0;
@@ -451,6 +456,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         setProposeCustomerEmail(null);
         setOutsideConfirm(false);
         setProposeSetupBlocked(false);
+        setProposeRestriction(null);
         setProposeOpen(true);
         void fetchChatUserProfile(String(chosenChatDetails.userId)).then((r: any) => {
             if (r?.success && r?.result?.email) setProposeCustomerEmail(String(r.result.email));
@@ -458,6 +464,12 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     };
 
     const submitPropose = async (override = false) => {
+        const restriction = currentAccountRestriction();
+        if (restriction) {
+            setProposeSetupBlocked(false);
+            setProposeRestriction(restriction);
+            return;
+        }
         if (userDetails?.role === "expert" && !isExpertSetupComplete(userDetails)) {
             setProposeSetupBlocked(true);
             return;
@@ -513,9 +525,10 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             price,
             customer: proposeCustomerEmail,
             overrideAvailability: needsOverride,
-        });
+        }, { quietAccountRestriction: true });
         SetLoadingStatus(false);
         setProposeBusy(false);
+        if (!res) setProposeRestriction(currentAccountRestriction());
         if (res && res !== false) {
             if (res.userDetails) {
                 dispatch({ type: "updateUserDetails", payload: res.userDetails });
@@ -1319,6 +1332,12 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                         {proposeBusy ? "Sending…" : "Send proposal"}
                                     </button>
                                 )}
+
+                                {proposeRestriction ? (
+                                    <p role="alert" className={`mt-3 text-xs font-semibold ${theme === "light" ? "text-rose-600" : "text-rose-400"}`}>
+                                        {proposeRestriction}
+                                    </p>
+                                ) : null}
                             </div>
                         </div>
                     </OverlayPortal> :

@@ -40,6 +40,7 @@ const MeetingGuestInvite = React.lazy(() => import('./pages/MeetingGuestInvite')
 const PaymentReceipt = React.lazy(() => import('./pages/PaymentReceipt'));
 const Resources = React.lazy(() => import('./pages/Resources'));
 const ResourceGuides = React.lazy(() => import('./pages/ResourceGuides'));
+const PaymentComplete = React.lazy(() => import('./pages/PaymentComplete'));
 const ResourceGuideRedirect = React.lazy(() => import('./pages/ResourceGuideRedirect'));
 
 // Heavy dashboard chunks — MUI, calendars, messenger, etc. only load after login
@@ -100,6 +101,7 @@ const UnauthenticatedRoutes = () => {
         <Route path="/resources" element={<Resources />} />
         <Route path="/resources/guides" element={<ResourceGuides />} />
         <Route path="/resources/:slug" element={<ResourceGuideRedirect />} />
+        <Route path="/payment-complete" element={<PaymentComplete />} />
         <Route path="/*" element={<TOEConsulting />} />
       </Routes>
     </React.Fragment>
@@ -261,6 +263,7 @@ function App() {
         path.includes('/auth-choose-role') ||
         path.includes('/meeting/invite/') ||
         path.startsWith('/resources') ||
+        path.startsWith('/payment-complete') ||
         (path.includes('/login') && search.includes('error='))
       ) {
         return;
