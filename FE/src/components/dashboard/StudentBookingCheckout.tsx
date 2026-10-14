@@ -121,11 +121,16 @@ const CheckoutForm = ({
   // the one they chose instead of listing every option.
   const [selectedMethod, setSelectedMethod] = useState('');
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const finishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearProgressTimer = () => {
     if (progressTimer.current) {
       clearInterval(progressTimer.current);
       progressTimer.current = null;
+    }
+    if (finishTimer.current) {
+      clearTimeout(finishTimer.current);
+      finishTimer.current = null;
     }
   };
 
@@ -143,7 +148,10 @@ const CheckoutForm = ({
     clearProgressTimer();
     if (success) {
       setProgress(100);
-      setTimeout(() => setProcessing(false), 450);
+      finishTimer.current = setTimeout(() => {
+        finishTimer.current = null;
+        setProcessing(false);
+      }, 450);
     } else {
       setProgress(0);
       setProcessing(false);
