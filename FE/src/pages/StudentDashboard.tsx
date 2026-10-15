@@ -48,7 +48,7 @@ import ExpertProfile from '../components/dashboard/ExpertProfile';
 import StudentBookingCheckout, { completeStudentBookingFromStorage } from '../components/dashboard/StudentBookingCheckout';
 import { getExpertById, doFollowExpert, doUnfollowExpert, acceptIndividualAppointment, cancelIndividualAppointment, getMySeatRequests } from '../api/api';
 import { studentSearchActions } from '../utils/siteSearch';
-import { logoutUser, updateMe } from '../actions/authActions';
+import { LOGOUT_TO_HOMEPAGE, logoutUser, updateMe } from '../actions/authActions';
 import type { ExpertCardProps } from '../components/ExpertCard';
 import { mapExpertToMentorWithImage } from '../utils/mapExpertToMentor';
 import {
@@ -1527,6 +1527,10 @@ export default function StudentDashboard() {
         <Sidebar
           activeItem={activeItem}
           onNavigate={(id) => {
+            if (id === 'logout') {
+              dispatch(logoutUser(LOGOUT_TO_HOMEPAGE) as any);
+              return;
+            }
             if (id === 'chat') {
               setChatSection(CHAT_SECTION_DEFAULT);
               dispatch(resetChatAction() as any);
@@ -1949,7 +1953,7 @@ export default function StudentDashboard() {
         onCancel={() => setShowBackLogoutConfirm(false)}
         onConfirm={() => {
           setShowBackLogoutConfirm(false);
-          dispatch(logoutUser() as any);
+          dispatch(logoutUser(LOGOUT_TO_HOMEPAGE) as any);
         }}
       />
     </div>
