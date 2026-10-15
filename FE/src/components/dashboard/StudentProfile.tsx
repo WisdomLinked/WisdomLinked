@@ -3,9 +3,6 @@ import {
   User,
   Mail,
   Lock,
-  CreditCard,
-  X,
-  Check,
   Loader2,
   StickyNote,
   Save,
@@ -15,10 +12,9 @@ import { useAppSelector } from '../../store';
 import { useDispatch } from 'react-redux';
 import { notify } from '../../utils/notify';
 import { updateMe } from '../../actions/authActions';
-import { doUpdateProfile, profileImageFetch, passwordResetRequest, confirmPasswordResetByCode } from '../../api/api';
-import FormAlert from '../FormAlert';
-import { useFormAlert } from '../../hooks/useFormAlert';
-import { usePaymentHistory, PaymentHistoryTable, PaymentHistorySummary } from './PaymentHistoryTable';
+import { doUpdateProfile, profileImageFetch } from '../../api/api';
+import ChangePasswordModal from './ChangePasswordModal';
+import DeleteAccountButton from './DeleteAccountButton';
 import { resolveProfileImageSrc, safeImageSrc } from '../../utils/profileImage';
 import { saveProfilePhotoFile } from '../../utils/profileImageUpload';
 import { SERVICE_OPTIONS, canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceOptions';
@@ -189,21 +185,6 @@ export default function StudentProfile() {
   }, [interestsDirty, userDetails?.keywords, userDetails?.customKeywords]);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [passwordStep, setPasswordStep] = useState<'request' | 'verify' | 'done'>('request');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpValue, setOtpValue] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const {
-    message: passwordAlert,
-    variant: passwordAlertVariant,
-    setFormError: setPasswordError,
-    clearFormAlert: clearPasswordAlert,
-  } = useFormAlert();
-
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const { payments, loading: paymentsLoading, error: paymentsError } = usePaymentHistory(showPaymentModal);
 
   const togglePreference = (id: string) => {
     setPreferences(prev => ({ ...prev, [id]: !prev[id] }));
@@ -364,77 +345,6 @@ export default function StudentProfile() {
       setNotesDirty(false);
       setSpecialNote(trimmed);
     }
-  };
-
-  const handleRequestOtp = async () => {
-    clearPasswordAlert();
-    setPasswordLoading(true);
-    try {
-      const res = (await passwordResetRequest({ email })) as any;
-      if (res === false) return; // session expired -> handled (logged out) upstream
-      if (res?.status === 'SUCCESS') {
-        setOtpSent(true);
-        setPasswordStep('verify');
-      } else {
-        setPasswordError(res?.error || 'Could not send the code. Please try again.');
-      }
-    } catch (err: any) {
-      setPasswordError(err?.message || 'Could not send the code. Please try again.');
-    } finally {
-      setPasswordLoading(false);
-    }
-  };
-
-  const handleVerifyAndChangePassword = async () => {
-    clearPasswordAlert();
-    if (otpValue.length < 6) {
-      setPasswordError('Please enter the 6-digit code sent to your email.');
-      return;
-    }
-    if (
-      newPassword.length < 8 ||
-      !/[A-Z]/.test(newPassword) ||
-      !/[0-9]/.test(newPassword) ||
-      !/[^A-Za-z0-9]/.test(newPassword)
-    ) {
-      setPasswordError('Password must be 8+ characters and include an uppercase letter, a number, and a symbol.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordError('Passwords do not match.');
-      return;
-    }
-    setPasswordLoading(true);
-    try {
-      const res = (await confirmPasswordResetByCode({
-        email,
-        password: newPassword,
-        code: otpValue,
-      })) as any;
-      if (res === false) return; // session expired -> handled (logged out) upstream
-      if (res?.status === 'SUCCESS') {
-        setPasswordStep('done');
-        setOtpValue('');
-        setNewPassword('');
-        setConfirmPassword('');
-      } else {
-        setPasswordError(res?.error || 'Could not update your password. Please try again.');
-      }
-    } catch (err: any) {
-      setPasswordError(err?.message || 'Could not update your password. Please try again.');
-    } finally {
-      setPasswordLoading(false);
-    }
-  };
-
-  const closePasswordModal = () => {
-    setShowPasswordModal(false);
-    setPasswordStep('request');
-    setOtpSent(false);
-    setOtpValue('');
-    setNewPassword('');
-    setConfirmPassword('');
-    clearPasswordAlert();
   };
 
   const cardClass =
@@ -757,12 +667,12 @@ export default function StudentProfile() {
         />
       </section>
 
-      {/* Actions: Change password, Payment history */}
+      {/* Actions: Change password, Delete account */}
       <section className={cardClass}>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 mb-4">
-          Security & billing
+          Account
         </h2>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           <button
             type="button"
             onClick={() => setShowPasswordModal(true)}
@@ -771,174 +681,11 @@ export default function StudentProfile() {
             <Lock className="h-4 w-4" />
             Change password
           </button>
-          <button
-            type="button"
-            onClick={() => setShowPaymentModal(true)}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-[#234C6A] hover:text-[#234C6A] transition-colors"
-          >
-            <CreditCard className="h-4 w-4" />
-            Payment history
-          </button>
+          <DeleteAccountButton />
         </div>
       </section>
 
-      {/* Change password modal (OTP) */}
-      {showPasswordModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"
-          onClick={e => e.target === e.currentTarget && closePasswordModal()}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h3 className="text-lg font-semibold text-slate-900">Change password</h3>
-              <button
-                type="button"
-                onClick={closePasswordModal}
-                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                aria-label="Close"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              {passwordStep !== 'done' && passwordAlert && (
-                <FormAlert
-                  variant={passwordAlertVariant}
-                  message={passwordAlert}
-                  onDismiss={clearPasswordAlert}
-                />
-              )}
-              {passwordStep === 'request' && (
-                <>
-                  <p className="text-sm text-slate-600">
-                    We&apos;ll send a one-time code to <strong>{email}</strong> to verify it&apos;s you.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleRequestOtp}
-                    disabled={passwordLoading}
-                    className="w-full rounded-xl bg-[#234C6A] text-white py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
-                  >
-                    {passwordLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      'Send OTP to email'
-                    )}
-                  </button>
-                </>
-              )}
-              {passwordStep === 'verify' && (
-                <>
-                  <p className="text-sm text-slate-600">
-                    Enter the 6-digit code sent to your email.
-                  </p>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={otpValue}
-                    onChange={e => setOtpValue(e.target.value.replace(/\D/g, ''))}
-                    placeholder="000000"
-                    className={inputNormal + ' text-center text-lg tracking-widest'}
-                  />
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      New password
-                    </label>
-                    <input
-                      type="password"
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      placeholder="Min. 8 characters"
-                      className={inputNormal}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Confirm password
-                    </label>
-                    <input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={e => setConfirmPassword(e.target.value)}
-                      placeholder="Re-enter password"
-                      className={inputNormal}
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPasswordStep('request')}
-                      className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-                    >
-                      Back
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleVerifyAndChangePassword}
-                      disabled={passwordLoading}
-                      className="flex-1 rounded-xl bg-[#234C6A] text-white py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
-                    >
-                      {passwordLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm'}
-                    </button>
-                  </div>
-                </>
-              )}
-              {passwordStep === 'done' && (
-                <div className="text-center py-4">
-                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-3">
-                    <Check className="h-6 w-6" />
-                  </div>
-                  <p className="text-sm font-medium text-slate-800">Password updated successfully.</p>
-                  <p className="text-xs text-slate-500 mt-1">You can close this window.</p>
-                  <button
-                    type="button"
-                    onClick={closePasswordModal}
-                    className="mt-4 rounded-xl bg-[#234C6A] text-white px-4 py-2 text-sm font-semibold"
-                  >
-                    Done
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Payment history modal */}
-      {showPaymentModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40"
-          onClick={e => e.target === e.currentTarget && setShowPaymentModal(false)}
-        >
-          <div
-            className="w-full max-w-3xl max-h-[90vh] rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 shrink-0">
-              <h3 className="text-lg font-semibold text-slate-900">Payment history</h3>
-              <button
-                type="button"
-                onClick={() => setShowPaymentModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                aria-label="Close"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="overflow-x-auto overflow-y-auto flex-1">
-              <PaymentHistoryTable payments={payments} loading={paymentsLoading} error={paymentsError} stickyHeader />
-            </div>
-            <div className="border-t border-slate-200 px-6 py-3 bg-slate-50 text-sm text-slate-600 shrink-0">
-              <PaymentHistorySummary payments={payments} loading={paymentsLoading} />
-            </div>
-          </div>
-        </div>
-      )}
-
+      {showPasswordModal && <ChangePasswordModal email={email} onClose={() => setShowPasswordModal(false)} />}
       {profileHasUnsavedChanges ? (
         <div className="sticky bottom-4 z-10 mt-6">
           <div className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur-md px-5 py-3.5 shadow-lg flex items-center justify-between gap-3">
