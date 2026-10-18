@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { resolveUserFacingError } from '../utils/resolveUserFacingError';
-import { ensureCsrfToken, needsCsrf, isCsrfError } from './csrf';
+import { ensureCsrfToken, getCsrfToken, needsCsrf, isCsrfError } from './csrf';
 
 export type ChatApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -185,6 +185,25 @@ export const markChatRead = async (roomId: string) => {
     } catch (err: any) {
         console.error('[chatApi.markChatRead]', err.message);
         return null;
+    }
+};
+
+/**
+ * Same report as markChatRead, for when the page is being hidden or closed: a keepalive request the
+ * browser finishes after the page is gone. Fire-and-forget; uses the already-cached CSRF token.
+ */
+export const markChatReadOnExit = (roomId: string): void => {
+    const csrf = getCsrfToken();
+    try {
+        void fetch(`${BASE_URL}chat/mark-read`, {
+            method: 'POST',
+            credentials: 'include',
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
+            body: JSON.stringify({ roomId }),
+        }).catch(() => undefined);
+    } catch {
+        /* unload in progress — nothing more to do */
     }
 };
 

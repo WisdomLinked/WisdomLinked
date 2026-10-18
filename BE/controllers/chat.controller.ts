@@ -22,6 +22,7 @@ import { prepareMessageForRocketChat } from '../utils/chatReplyPlainText';
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { searchableRolesFor } from '../utils/chatSearchRoles';
 import { canUseGroupChat, isChatAdminOf } from '../utils/adminChatAccess';
+import { canAccessSharedRoom, sharedRoomMemberIds } from '../utils/sharedRoomMembership';
 import {
     distinctMemberIds,
     isGroupSeenTrackable,
@@ -873,12 +874,11 @@ export const getReadReceiptsBatch = async (req: any, res: Response) => {
                 if (!rid) rid = String(conv.rcChannelId || '');
             }
         } else if (rid) {
-            const groupChat = await GroupChat.findOne({ rcChannelId: rid })
+            const roomChats = await GroupChat.find({ rcChannelId: rid })
                 .select('admin participants coModerators chatAdmins')
                 .lean();
-            const memberIds = groupChat ? groupUserIds(groupChat) : [];
-            const viewerIsMember = memberIds.includes(String(userId));
-            if (viewerIsMember || isChatAdminOf(groupChat, req.user)) {
+            const memberIds = sharedRoomMemberIds(roomChats);
+            if (canAccessSharedRoom(roomChats, { userId, role: req.user?.role })) {
                 const otherIds = memberIds.filter((id: string) => id !== String(userId));
                 if (isGroupSeenTrackable(otherIds.length)) seenMemberIds = otherIds;
             }
@@ -936,12 +936,12 @@ const userCanAccessRocketRoom = async (
         );
     }
 
-    const [conv, groupChat] = await Promise.all([
+    const [conv, roomChats] = await Promise.all([
         Conversation.findOne({ rcChannelId: rid, participants: uid }).select('_id').lean(),
-        GroupChat.findOne({ rcChannelId: rid }).select('admin participants coModerators chatAdmins').lean(),
+        GroupChat.find({ rcChannelId: rid }).select('admin participants coModerators chatAdmins').lean(),
     ]);
     if (conv) return true;
-    return Boolean(groupChat && (groupUserIds(groupChat).includes(uid) || isChatAdminOf(groupChat, viewer)));
+    return canAccessSharedRoom(roomChats, viewer);
 };
 
 /**
