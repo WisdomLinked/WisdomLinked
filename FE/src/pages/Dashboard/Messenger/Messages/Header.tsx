@@ -18,6 +18,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
 import { deleteGroupAction, leaveGroupAction, refreshSeminarMembers } from "../../../../actions/groupChatActions";
+import { participantsExceptAdmin } from "../../../../utils/enrolledParticipants";
 import GroupsIcon from "@mui/icons-material/Groups";
 import ClearIcon from '@mui/icons-material/Clear';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
@@ -382,9 +383,11 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const isGroupAdmin = !!groupAdminId && String(groupAdminId) === String(userDetails?._id);
     const isCommunityModerator = chosenGroupChatDetails?.type === "community"
         && (isGroupAdmin || groupCoModeratorIds.has(String(userDetails?._id || "")));
-    const seminarEnrolledCount = (chosenGroupChatDetails?.participants || []).filter(
-        (p: any) => String(p?._id ?? p?.id ?? p) !== String(groupAdminId),
-    ).length;
+    const enrolledParticipants = participantsExceptAdmin(
+        chosenGroupChatDetails?.participants,
+        groupAdminId || chosenGroupChatDetails?.admin,
+    );
+    const seminarEnrolledCount = enrolledParticipants.length;
 
     const peerRoleLower = String(chosenChatDetails?.peerRole || "").toLowerCase();
     const viewerIsStudent = String(userDetails?.role || "").toLowerCase() === "customer";
@@ -861,7 +864,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                             }`}
                                             onClick={handleParticipantsOpenDialog}
                                         >
-                                            <span>View Participants ({chosenGroupChatDetails?.participants?.length ?? 0})</span>
+                                            <span>View Participants ({seminarEnrolledCount})</span>
                                             <PeopleAltIcon fontSize="small" className="shrink-0 opacity-70" />
                                         </button>
                                         <button
@@ -1024,7 +1027,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                     <GroupParticipantsDialog
                         isDialogOpen={participantsDialogOpen}
                         closeDialogHandler={handleParticipantsCloseDialog}
-                        groupDetails={chosenGroupChatDetails}
+                        groupDetails={{ ...chosenGroupChatDetails, participants: enrolledParticipants }}
                         currentUserId={userDetails?._id}
                         currentUserRole={userDetails?.role}
                         theme={theme === "light" ? "light" : "dark"}
