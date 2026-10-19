@@ -2,6 +2,9 @@ export const UNREAD_EMAIL_IDLE_MS = 6 * 60 * 60 * 1000;
 
 export const CHAT_SEEN_THROTTLE_MS = 60 * 1000;
 
+/** How long a check that could not reach Rocket.Chat waits before it is tried again. */
+export const UNREAD_EMAIL_RETRY_MS = 60 * 60 * 1000;
+
 export const UNREAD_EMAIL_ROLES = ['customer', 'expert'];
 
 export type UnreadEmailState = {
@@ -9,6 +12,7 @@ export type UnreadEmailState = {
     sentAt?: any;
     checkedAt?: any;
     countdownFrom?: any;
+    failedAt?: any;
 };
 
 export type UnreadEmailDecision =
@@ -25,18 +29,44 @@ const toMs = (value: any): number | null => {
 const WAIT: UnreadEmailDecision = { action: 'wait' };
 const CHECK: UnreadEmailDecision = { action: 'check' };
 
+/**
+ * For `retryMs` after a check that could not reach Rocket.Chat, nothing is checked. After that the
+ * check runs again without waiting for a new message: the unread messages that made it due are still
+ * there. (A failure from before the latest visit, check or email is always older than `retryMs`,
+ * because a check only becomes due `idleMs` after a visit and is never retried sooner.)
+ */
 export const decideUnreadEmail = ({
     state,
     activity,
     now,
     activatedAt,
     idleMs = UNREAD_EMAIL_IDLE_MS,
+    retryMs = UNREAD_EMAIL_RETRY_MS,
 }: {
     state: UnreadEmailState | null | undefined;
     activity: any[];
     now: number;
     activatedAt: number;
     idleMs?: number;
+    retryMs?: number;
+}): UnreadEmailDecision => {
+    const failed = toMs(state?.failedAt);
+    if (failed !== null && now - failed < retryMs) return WAIT;
+    return decideIgnoringFailures({ state, activity, now, activatedAt, idleMs });
+};
+
+const decideIgnoringFailures = ({
+    state,
+    activity,
+    now,
+    activatedAt,
+    idleMs,
+}: {
+    state: UnreadEmailState | null | undefined;
+    activity: any[];
+    now: number;
+    activatedAt: number;
+    idleMs: number;
 }): UnreadEmailDecision => {
     const lastSeen = toMs(state?.chatLastSeenAt);
     const absenceStart = Math.max(lastSeen ?? activatedAt, activatedAt);

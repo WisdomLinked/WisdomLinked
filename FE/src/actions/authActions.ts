@@ -7,6 +7,7 @@ import { clearCsrfToken } from "../api/csrf";
 import { clearClientAccessTokenCookie } from "../utils/authCookie";
 import { clearImpersonationSession } from "../components/ImpersonationBanner";
 import { clearHelpBotSession } from "../components/helpBot/types";
+import { flushOwedChatReads } from "../hooks/useMarkRoomRead";
 
 export const autoLogin = () => {
     return async (dispatch: Dispatch) => {
@@ -52,6 +53,7 @@ export const updateMe = () => {
 
 export const logoutUser = () => {
     return async (dispatch: Dispatch) => {
+        await flushOwedChatReads();
         clearCsrfToken();
         clearClientAccessTokenCookie();
         clearImpersonationSession();

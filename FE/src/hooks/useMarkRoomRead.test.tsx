@@ -1,7 +1,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
-import { useMarkRoomRead } from './useMarkRoomRead';
+import { flushOwedChatReads, useMarkRoomRead } from './useMarkRoomRead';
 import { MARK_READ_DEBOUNCE_MS, MARK_READ_MIN_GAP_MS } from '../utils/markReadSchedule';
 
 type Props = {
@@ -202,5 +202,61 @@ describe('when the page is hidden or closed', () => {
       expect(report.mock.calls).toEqual([['A']]);
     });
 
+  });
+
+  describe('flushOwedChatReads (logout)', () => {
+    it('sends a read that is still waiting and resolves once it is answered', async () => {
+      let answer: (ok: boolean) => void = () => undefined;
+      report = vi.fn(() => new Promise<boolean>(resolve => { answer = resolve; }));
+      render(<Harness roomId="A" owed activity={1} report={report} />);
+      act(() => { vi.advanceTimersByTime(300); });
+
+      let done = false;
+      const flushed = flushOwedChatReads().then(() => { done = true; });
+      expect(report).toHaveBeenCalledTimes(1);
+      expect(report).toHaveBeenCalledWith('A');
+      await settle();
+      expect(done).toBe(false);
+
+      answer(true);
+      await act(async () => { await flushed; });
+      expect(done).toBe(true);
+
+      // The read is not sent a second time when its original delay runs out.
+      act(() => { vi.advanceTimersByTime(MARK_READ_MIN_GAP_MS); });
+      expect(report).toHaveBeenCalledTimes(1);
+    });
+
+    it('resolves at once when nothing is waiting', async () => {
+      render(<Harness roomId="A" owed={false} activity={1} report={report} />);
+      await act(async () => { await flushOwedChatReads(); });
+      expect(report).not.toHaveBeenCalled();
+    });
+
+    it('does not hold logout up for longer than its timeout', async () => {
+      report = vi.fn(() => new Promise<boolean>(() => undefined));
+      render(<Harness roomId="A" owed activity={1} report={report} />);
+      let done = false;
+      const flushed = flushOwedChatReads(2000).then(() => { done = true; });
+      await act(async () => { vi.advanceTimersByTime(1999); });
+      expect(done).toBe(false);
+      await act(async () => { vi.advanceTimersByTime(1); await flushed; });
+      expect(done).toBe(true);
+    });
+
+    it('a failed send does not reject, so logout always continues', async () => {
+      report = vi.fn(async () => { throw new Error('network'); });
+      render(<Harness roomId="A" owed activity={1} report={report} />);
+      await act(async () => { await flushOwedChatReads(); });
+      expect(report).toHaveBeenCalledTimes(1);
+    });
+
+    it('forgets a chat that has been closed', async () => {
+      const { unmount } = render(<Harness roomId="A" owed activity={1} report={report} />);
+      unmount();
+      expect(report).toHaveBeenCalledTimes(1);
+      await act(async () => { await flushOwedChatReads(); });
+      expect(report).toHaveBeenCalledTimes(1);
+    });
   });
 });

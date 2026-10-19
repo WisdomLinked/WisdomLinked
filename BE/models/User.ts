@@ -48,6 +48,7 @@ const userSchema = new mongoose.Schema(
         unreadEmailSentAt: { type: Date, default: null, select: false },
         unreadEmailCheckedAt: { type: Date, default: null, select: false },
         unreadEmailCountdownFrom: { type: Date, default: null, select: false },
+        unreadEmailFailedAt: { type: Date, default: null, select: false },
         isActive: { type: Boolean, default: true },
         isAdHocCustomer: { type: Boolean, default: false },
         token: { type: String, select: false },
