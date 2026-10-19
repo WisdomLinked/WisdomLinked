@@ -914,12 +914,12 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
             }
             {
                 seminarDetailsModalShow ?
-                    <div className={`absolute top-0 left-0 w-full h-full z-[1000] p-4 sm:p-8 flex items-center justify-center ${theme === "light" ? "bg-black/30 backdrop-blur-sm" : "bg-white bg-opacity-10 backdrop-blur-sm"}`}>
+                    <div className={`absolute top-0 left-0 w-full h-full z-[1000] p-4 sm:p-8 flex items-center justify-center ${theme === "light" ? "bg-black/30" : "bg-white bg-opacity-10"}`}>
                         <div
-                            className="absolute top-0 left-0 w-full h-full cursor-pointer"
+                            className="absolute top-0 left-0 z-0 h-full w-full cursor-pointer"
                             onClick={() => set_seminarDetailsModalShow(false)}
                         />
-                        <div className={`w-full max-w-[620px] max-h-full flex flex-col rounded-2xl p-6 relative shadow-xl border ${theme === "light" ? "bg-white text-slate-900 border-slate-200" : "bg-black text-white border-slate-700"}`}>
+                        <div className={`relative z-10 w-full max-w-[620px] max-h-full flex flex-col rounded-2xl p-6 shadow-xl border ${theme === "light" ? "bg-white text-slate-900 border-slate-200" : "bg-black text-white border-slate-700"}`}>
                             <div className={`h-1.5 w-full absolute left-0 top-0 rounded-t-2xl ${theme === "light" ? "bg-gradient-to-r from-[#234C6A] via-[#456882] to-[#234C6A]" : "bg-gradient-to-r from-slate-600 via-slate-500 to-slate-600"}`} />
                             <div className={`shrink-0 text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>
                                 {chosenGroupChatDetails?.type === "community" ? "Chat Details" : "Seminar Details"}

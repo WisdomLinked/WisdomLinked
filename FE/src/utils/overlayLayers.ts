@@ -6,6 +6,13 @@
 /** Chat drawers and in-panel overlays inside the messenger. */
 export const OVERLAY_Z_PANEL = 1000;
 
+/**
+ * The chat header menu (the three dots). It has to sit above the page chrome,
+ * and under any dialog it opens — otherwise the participant list renders
+ * behind the menu and the next click dismisses it.
+ */
+export const OVERLAY_Z_MENU = 1200;
+
 /** Dialogs opened from a panel (participants, confirmations). */
 export const OVERLAY_Z_DIALOG = 1300;
 

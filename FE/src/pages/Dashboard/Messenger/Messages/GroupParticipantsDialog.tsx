@@ -17,6 +17,7 @@ import { buildFallbackChatProfile, mergeChatProfile } from "../../../../utils/ch
 import { useResolvedProfileImages } from "../../../../hooks/useResolvedProfileImages";
 import { safeImageSrc } from "../../../../utils/profileImage";
 import ProfileModal from "./ProfileModal";
+import { OVERLAY_Z_DIALOG } from "../../../../utils/overlayLayers";
 
 interface Props {
     isDialogOpen: boolean;
@@ -164,7 +165,7 @@ const GroupParticipantsDialog = ({
                 maxWidth="sm"
                 fullWidth
                 PaperProps={{ className: paperClass }}
-                sx={{ zIndex: 1300 }}
+                sx={{ zIndex: OVERLAY_Z_DIALOG }}
             >
                 <div className={`border-b px-5 pt-5 pb-3 ${isLight ? "border-slate-100" : "border-slate-700"}`}>
                     <div className="flex items-start justify-between gap-3">
