@@ -15,7 +15,7 @@ const {
 const MAX_CONSECUTIVE_RC_FAILURES = 3;
 
 const STATE_FIELDS =
-    '+chatLastSeenAt +unreadEmailSentAt +unreadEmailCheckedAt +unreadEmailCountdownFrom';
+    '+chatLastSeenAt +unreadEmailSentAt +unreadEmailCheckedAt +unreadEmailCountdownFrom +unreadEmailFailedAt';
 
 const recordChatSeen = async (userId: any, now: number = Date.now()): Promise<void> => {
     if (!userId) return;
@@ -85,7 +85,8 @@ const loadUserRooms = async (user: any): Promise<{ countable: Set<string>; activ
 };
 
 const defaultDeps = {
-    countUnread: (reader: any) => require('./rocketchat.service').getChatUnreadCountsAsUser(reader),
+    countUnread: (reader: any, onlyRids: Set<string>) =>
+        require('./rocketchat.service').getChatUnreadCountsAsUser(reader, onlyRids),
     sendEmail: (args: any) => require('./notifications').sendUnreadMessagesEmail(args),
 };
 
@@ -93,7 +94,10 @@ let sweeping = false;
 
 const sweepUnreadMessageEmails = async (
     now: number = Date.now(),
-    deps: { countUnread: (reader: any) => Promise<Record<string, number> | null>; sendEmail: (args: any) => Promise<any> } = defaultDeps,
+    deps: {
+        countUnread: (reader: any, onlyRids: Set<string>) => Promise<Record<string, number> | null>;
+        sendEmail: (args: any) => Promise<any>;
+    } = defaultDeps,
 ): Promise<number> => {
     if (sweeping) return 0;
     sweeping = true;
@@ -125,6 +129,7 @@ const sweepUnreadMessageEmails = async (
                         sentAt: user.unreadEmailSentAt,
                         checkedAt: user.unreadEmailCheckedAt,
                         countdownFrom: user.unreadEmailCountdownFrom,
+                        failedAt: user.unreadEmailFailedAt,
                     },
                     activity,
                     now,
@@ -142,16 +147,19 @@ const sweepUnreadMessageEmails = async (
                     continue;
                 }
 
-                const counts = await deps.countUnread({
-                    email: user.email,
-                    username: user.username,
-                    name: user.username,
-                });
+                const counts = await deps.countUnread(
+                    {
+                        email: user.email,
+                        username: user.username,
+                        name: user.username,
+                    },
+                    countable,
+                );
                 const checkedAt = new Date(now);
                 if (counts === null || counts === undefined) {
                     await User.updateOne(
                         { _id: user._id },
-                        { $set: { unreadEmailCheckedAt: checkedAt } },
+                        { $set: { unreadEmailFailedAt: checkedAt } },
                         { timestamps: false },
                     );
                     rcFailures += 1;

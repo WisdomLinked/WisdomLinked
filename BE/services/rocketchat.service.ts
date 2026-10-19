@@ -865,15 +865,20 @@ const resolveRoomDisplayNames = async (
 };
 
 const ALERT_ONLY_UNREAD_PROBE_LIMIT = 5;
+/** Strict reads (the unread email) only probe rooms the caller counts, so they can afford more probes. */
+const STRICT_ALERT_ONLY_UNREAD_PROBE_LIMIT = 25;
 
+/** Resolves false when any probe failed (that room is then assumed to hold 1 unread). */
 const applyAlertOnlyUnreadCounts = async (
     alerted: { rid: string; type: string }[],
     headers: Record<string, string>,
     unreadByRid: Record<string, number>,
-): Promise<void> => {
-    if (!alerted.length) return;
+    probeLimit: number = ALERT_ONLY_UNREAD_PROBE_LIMIT,
+): Promise<boolean> => {
+    if (!alerted.length) return true;
+    let allProbed = true;
     const probed = await Promise.all(
-        alerted.slice(0, ALERT_ONLY_UNREAD_PROBE_LIMIT).map(async ({ rid, type }) => {
+        alerted.slice(0, probeLimit).map(async ({ rid, type }) => {
             const endpoint = type === 'p' ? 'groups.counters' : 'channels.counters';
             try {
                 const res = await axios.get(`${RC_URL}/api/v1/${endpoint}`, {
@@ -883,6 +888,7 @@ const applyAlertOnlyUnreadCounts = async (
                 return { rid, unreads: Number(res.data?.unreads || 0) };
             } catch (e: any) {
                 console.warn('[applyAlertOnlyUnreadCounts]', endpoint, e.response?.status || e.message);
+                allProbed = false;
                 return { rid, unreads: 1 };
             }
         }),
@@ -890,9 +896,10 @@ const applyAlertOnlyUnreadCounts = async (
     probed.forEach(({ rid, unreads }) => {
         if (unreads > 0) unreadByRid[rid] = unreads;
     });
-    alerted.slice(ALERT_ONLY_UNREAD_PROBE_LIMIT).forEach(({ rid }) => {
+    alerted.slice(probeLimit).forEach(({ rid }) => {
         unreadByRid[rid] = 1;
     });
+    return allProbed;
 };
 
 type UnreadSubscriptions = {
@@ -902,17 +909,24 @@ type UnreadSubscriptions = {
     rooms: { rid: string; rawName: string; type: string }[];
 };
 
-const readUnreadSubscriptionsAsUser = async (reader: RCParticipantSession): Promise<UnreadSubscriptions> => {
+/**
+ * `strict` is for callers that act on the number (the unread email): a counter probe that failed
+ * makes the whole read unknown (`ok: false`) instead of guessing 1 unread for that room.
+ * `onlyRids` limits the read to the rooms the caller counts.
+ */
+export type UnreadReadOptions = {
+    onlyRids?: ReadonlySet<string> | null;
+    strict?: boolean;
+};
+
+export const readUnreadSubscriptionsWithHeaders = async (
+    headers: Record<string, string>,
+    options: UnreadReadOptions = {},
+): Promise<UnreadSubscriptions> => {
     const unreadByRid: Record<string, number> = {};
     const nameByRid: Record<string, string> = {};
     const rooms: { rid: string; rawName: string; type: string }[] = [];
-    const tok = await generateUserToken(reader);
-    if (!tok) return { ok: false, unreadByRid, nameByRid, rooms };
-    const headers = {
-        'X-Auth-Token': tok.authToken,
-        'X-User-Id': tok.userId,
-        'Content-Type': 'application/json',
-    };
+    const onlyRids = options.onlyRids || null;
     const alertedWithoutCount: { rid: string; type: string }[] = [];
     let ok = true;
     try {
@@ -923,6 +937,7 @@ const readUnreadSubscriptionsAsUser = async (reader: RCParticipantSession): Prom
             if (!ROOM_TYPES_WITH_UNREAD.has(type)) return;
             const rid = String(s?.rid || '');
             if (!rid) return;
+            if (onlyRids && !onlyRids.has(rid)) return;
             const unread = Number(s?.unread || 0);
             if (unread > 0) unreadByRid[rid] = unread;
             else if (type !== 'd' && s?.alert === true) alertedWithoutCount.push({ rid, type });
@@ -938,9 +953,31 @@ const readUnreadSubscriptionsAsUser = async (reader: RCParticipantSession): Prom
         }
     }
 
-    await applyAlertOnlyUnreadCounts(alertedWithoutCount, headers, unreadByRid);
+    const allProbed = await applyAlertOnlyUnreadCounts(
+        alertedWithoutCount,
+        headers,
+        unreadByRid,
+        options.strict ? STRICT_ALERT_ONLY_UNREAD_PROBE_LIMIT : ALERT_ONLY_UNREAD_PROBE_LIMIT,
+    );
+    if (options.strict && !allProbed) ok = false;
 
     return { ok, unreadByRid, nameByRid, rooms };
+};
+
+const readUnreadSubscriptionsAsUser = async (
+    reader: RCParticipantSession,
+    options: UnreadReadOptions = {},
+): Promise<UnreadSubscriptions> => {
+    const tok = await generateUserToken(reader);
+    if (!tok) return { ok: false, unreadByRid: {}, nameByRid: {}, rooms: [] };
+    return readUnreadSubscriptionsWithHeaders(
+        {
+            'X-Auth-Token': tok.authToken,
+            'X-User-Id': tok.userId,
+            'Content-Type': 'application/json',
+        },
+        options,
+    );
 };
 
 export const getChatUnreadSnapshotAsUser = async (
@@ -979,11 +1016,29 @@ export const getDmUnreadByRoomAsUser = async (
     return unreadByRid;
 };
 
-export const getChatUnreadCountsAsUser = async (
-    reader: RCParticipantSession
+/** Unread counts for the rooms in `onlyRids` (all rooms when omitted), or null when they cannot be known. */
+export const readUnreadCountsWithHeaders = async (
+    headers: Record<string, string>,
+    onlyRids?: ReadonlySet<string> | null,
 ): Promise<Record<string, number> | null> => {
-    const { ok, unreadByRid } = await readUnreadSubscriptionsAsUser(reader);
+    const { ok, unreadByRid } = await readUnreadSubscriptionsWithHeaders(headers, { onlyRids, strict: true });
     return ok ? unreadByRid : null;
+};
+
+export const getChatUnreadCountsAsUser = async (
+    reader: RCParticipantSession,
+    onlyRids?: ReadonlySet<string> | null,
+): Promise<Record<string, number> | null> => {
+    const tok = await generateUserToken(reader);
+    if (!tok) return null;
+    return readUnreadCountsWithHeaders(
+        {
+            'X-Auth-Token': tok.authToken,
+            'X-User-Id': tok.userId,
+            'Content-Type': 'application/json',
+        },
+        onlyRids,
+    );
 };
 
 /** Snapshot of Rocket.Chat usernames with an active chat connection (admin-scoped). */
