@@ -7,7 +7,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { useDispatch } from 'react-redux';
-import { logoutUser } from '../../actions/authActions';
+import { LOGOUT_TO_HOMEPAGE, logoutUser } from '../../actions/authActions';
 import { syncHeaderHeight } from '../../hooks/useSyncHeaderHeight';
 import { useAppSelector } from '../../store';
 import SiteSearchBox from '../search/SiteSearchBox';
@@ -221,7 +221,7 @@ export default function TopBar({
                   type="button"
                   className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
                   onClick={() => {
-                    dispatch(logoutUser() as any);
+                    dispatch(logoutUser(LOGOUT_TO_HOMEPAGE) as any);
                     setOpenMenu(false);
                   }}
                 >

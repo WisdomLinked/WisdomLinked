@@ -48,7 +48,7 @@ import ProfileModal from './Dashboard/Messenger/Messages/ProfileModal';
 import SessionDetailsDialog from '../components/dashboard/SessionDetailsDialog';
 import { buildFallbackChatProfile, mergeChatProfile } from '../utils/chatProfileModal';
 import { useAppSelector } from '../store';
-import { logoutUser, updateMe } from '../actions/authActions';
+import { LOGOUT_TO_HOMEPAGE, logoutUser, updateMe } from '../actions/authActions';
 import { notify } from '../utils/notify';
 import { patchDmUnreadRid, resetChatAction, setChosenGroupChatDetails, setDmUnreadByRidBulk } from '../actions/chatActions';
 import { connectToRC, onSubscriptionChanged, subscribeToRoom } from '../services/rcRealtime';
@@ -1657,7 +1657,7 @@ export default function ExpertDashboard() {
           activeItem={activeItem}
           onNavigate={(id) => {
             if (id === 'logout') {
-              dispatch(logoutUser() as any);
+              dispatch(logoutUser(LOGOUT_TO_HOMEPAGE) as any);
               return;
             }
             // Opening Chat itself picks no section — the page prompts for one, so
@@ -1771,7 +1771,7 @@ export default function ExpertDashboard() {
         onCancel={() => setShowBackLogoutConfirm(false)}
         onConfirm={() => {
           setShowBackLogoutConfirm(false);
-          dispatch(logoutUser() as any);
+          dispatch(logoutUser(LOGOUT_TO_HOMEPAGE) as any);
         }}
       />
     </div>
