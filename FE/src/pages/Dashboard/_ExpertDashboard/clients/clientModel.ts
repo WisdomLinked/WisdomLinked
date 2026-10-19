@@ -101,9 +101,14 @@ function emptyRelationship(user: any): Relationship {
 export function collectRelationships(userDetails: any, now: number): Map<string, Relationship> {
   const me = idOf(userDetails);
   const out = new Map<string, Relationship>();
+  const isNonStudent = (user: any): boolean => {
+    const role = String(user?.role || '').toLowerCase();
+    return Boolean(role && role !== 'customer');
+  };
+
   const touch = (user: any): Relationship | null => {
     const id = idOf(user);
-    if (!id || id === me) return null;
+    if (!id || id === me || isNonStudent(user)) return null;
     let rel = out.get(id);
     if (!rel) {
       rel = emptyRelationship(typeof user === 'object' ? user : { _id: id });
@@ -149,8 +154,7 @@ export function collectRelationships(userDetails: any, now: number): Map<string,
   for (const conv of userDetails?.directConversations ?? []) {
     const parts: any[] = Array.isArray(conv?.participants) ? conv.participants : [];
     const other = parts.find((p) => idOf(p) && idOf(p) !== me);
-    const role = String(other?.role || '').toLowerCase();
-    if (!other || (role && role !== 'customer')) continue;
+    if (!other) continue;
     const rel = touch(other);
     if (!rel) continue;
     if (conv.rcChannelId) rel.rcChannelId = String(conv.rcChannelId);

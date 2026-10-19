@@ -9,6 +9,7 @@ import {
   UNREAD_EMAIL_IDLE_MS,
   CHAT_SEEN_THROTTLE_MS,
   UNREAD_EMAIL_ROLES,
+  UNREAD_EMAIL_RETRY_MS,
 } from "../utils/unreadMessageEmail";
 
 const MIN = 60 * 1000;
@@ -24,6 +25,7 @@ const decide = (state: any, activity: any[] = [], now = NOW, activatedAt = OLD) 
 test("constants match the agreed rules", () => {
   assert.equal(UNREAD_EMAIL_IDLE_MS, 6 * HOUR);
   assert.equal(CHAT_SEEN_THROTTLE_MS, MIN);
+  assert.equal(UNREAD_EMAIL_RETRY_MS, HOUR);
   assert.deepEqual(UNREAD_EMAIL_ROLES, ["customer", "expert"]);
 });
 
@@ -212,4 +214,59 @@ test("students and experts get it; admins, blocked users and opted-out users do 
   );
   assert.equal(isUnreadEmailRecipient({ role: "customer", status: "active" }), false);
   assert.equal(isUnreadEmailRecipient(null), false);
+});
+
+// ── A check that could not reach Rocket.Chat ────────────────────────────────
+
+const awayAndOwed = { chatLastSeenAt: new Date(NOW - 10 * HOUR) };
+const someMessage = [new Date(NOW - 9 * HOUR)];
+
+test("a failed check waits an hour, then checks again with no new message", () => {
+  const state = { ...awayAndOwed, failedAt: new Date(NOW - 59 * MIN) };
+  assert.deepEqual(decide(state, someMessage), { action: "wait" });
+  assert.deepEqual(decide({ ...awayAndOwed, failedAt: new Date(NOW - HOUR) }, someMessage), { action: "check" });
+});
+
+test("a failed countdown check is retried after an hour too", () => {
+  const sent = new Date(NOW - 9 * HOUR);
+  const state = {
+    ...awayAndOwed,
+    sentAt: sent,
+    checkedAt: sent,
+    countdownFrom: new Date(NOW - 7 * HOUR),
+    failedAt: new Date(NOW - 30 * MIN),
+  };
+  assert.deepEqual(decide(state, [new Date(NOW - 7 * HOUR)]), { action: "wait" });
+  assert.deepEqual(decide({ ...state, failedAt: new Date(NOW - 61 * MIN) }, [new Date(NOW - 7 * HOUR)]), {
+    action: "check",
+  });
+});
+
+test("a failure older than the latest check or email is spent", () => {
+  const failedAt = new Date(NOW - 5 * HOUR);
+  // A later successful check found nothing: wait for a newer message, as usual.
+  assert.deepEqual(decide({ ...awayAndOwed, failedAt, checkedAt: new Date(NOW - 4 * HOUR) }, someMessage), {
+    action: "wait",
+  });
+  assert.deepEqual(
+    decide({ ...awayAndOwed, failedAt, checkedAt: new Date(NOW - 4 * HOUR) }, [new Date(NOW - 3 * HOUR)]),
+    { action: "check" },
+  );
+});
+
+test("a failure from an earlier absence is ignored", () => {
+  const state = { chatLastSeenAt: new Date(NOW - 7 * HOUR), failedAt: new Date(NOW - 8 * HOUR) };
+  assert.deepEqual(decide(state, someMessage), { action: "check" });
+});
+
+test("a failure never turns a wait or a countdown into a check", () => {
+  assert.deepEqual(decide({ chatLastSeenAt: new Date(NOW - HOUR), failedAt: new Date(NOW - 2 * HOUR) }, someMessage), {
+    action: "wait",
+  });
+  const sent = new Date(NOW - 3 * HOUR);
+  const fresh = new Date(NOW - 2 * HOUR);
+  assert.deepEqual(
+    decide({ ...awayAndOwed, sentAt: sent, checkedAt: sent, failedAt: new Date(NOW - 10 * HOUR) }, [fresh]),
+    { action: "startCountdown", fromMs: fresh.getTime() },
+  );
 });

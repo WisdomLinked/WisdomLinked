@@ -25,7 +25,7 @@ const setUpExpert = (overrides: Record<string, unknown> = {}) => ({
 
 const propose = async (t: any, expert: any) => {
   t.mock.method(User, 'findById', async () => expert);
-  t.mock.method(User, 'findOne', async () => ({ _id: 'student', email: 'student@example.com', groupChats: [], save: async () => {} }));
+  t.mock.method(User, 'findOne', async () => ({ _id: 'student', email: 'student@example.com', role: 'customer', groupChats: [], save: async () => {} }));
   const created = t.mock.method(GroupChat, 'create', async () => { throw new Error('reached-create'); });
   const res = makeRes();
   await groupController.proposeIndividualAppointment({
@@ -49,6 +49,24 @@ test('a fully set-up expert gets past the setup check when proposing', async t =
   const { res } = await propose(t, setUpExpert());
   assert.notEqual(res.statusCode, 409);
   assert.doesNotMatch(String(res.body), /complete.*profile setup/);
+});
+
+test('an expert cannot propose a session to an admin', async t => {
+  const expert = setUpExpert();
+  t.mock.method(User, 'findById', async () => expert);
+  t.mock.method(User, 'findOne', async () => ({ _id: 'adm', email: 'admin@example.com', role: 'admin', groupChats: [], save: async () => {} }));
+  const created = t.mock.method(GroupChat, 'create', async () => { throw new Error('reached-create'); });
+  const res = makeRes();
+  await groupController.proposeIndividualAppointment({
+    user: { userId: 'host' },
+    body: {
+      name: 'Proposal to an admin', start: inDays(5), end: inDays(5.05),
+      duration: 60, price: 0, customer: 'admin@example.com', overrideAvailability: true,
+    },
+  }, res);
+  assert.equal(res.statusCode, 400);
+  assert.match(String(res.body), /only propose a session to a student/);
+  assert.equal(created.mock.callCount(), 0);
 });
 
 const acceptEvent = async (t: any, user: any) => {
