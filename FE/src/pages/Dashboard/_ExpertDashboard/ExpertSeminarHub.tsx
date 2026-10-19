@@ -503,7 +503,8 @@ function SeminarDetailPane({
   // Enrolled students = participants minus the host. A seminar with anyone
   // enrolled can't be self-deleted; the host is told to contact an admin.
   const adminId = getRefId(admin);
-  const enrolledCount = participants.filter((p) => getRefId(p) !== adminId).length;
+  const enrolledParticipants = participants.filter((p) => getRefId(p) !== adminId);
+  const enrolledCount = enrolledParticipants.length;
   const hasEnrolledStudents = enrolledCount > 0;
   const maxAttendees = typeof seminar?.maxAttendees === 'number' ? seminar.maxAttendees : null;
   const start = seminar?.start ? new Date(seminar.start) : null;
@@ -733,7 +734,7 @@ function SeminarDetailPane({
                     : enrolledCount}
                   )
                 </p>
-                {participants.length > 1 ? (
+                {enrolledCount > 0 ? (
                   <button
                     type="button"
                     className="text-xs font-semibold text-[#234C6A] hover:underline"
@@ -743,9 +744,9 @@ function SeminarDetailPane({
                   </button>
                 ) : null}
               </div>
-              {participants.length > 1 ? (
+              {enrolledCount > 0 ? (
                 <div className="mt-2 flex -space-x-2">
-                  {participants.slice(1, 6).map((p: any, idx: number) => (
+                  {enrolledParticipants.slice(0, 5).map((p: any, idx: number) => (
                     <div key={p._id || idx} className="ring-2 ring-white rounded-full">
                       <Avatar username={p.username} isOnline={false} image={avatarImage(p)} />
                     </div>
@@ -761,7 +762,7 @@ function SeminarDetailPane({
               closeDialogHandler={() => setShowParticipants(false)}
               groupDetails={{
                 groupName: seminar?.name,
-                participants,
+                participants: enrolledParticipants,
                 admin: admin || participants[0],
                 type: seminar?.type,
               }}
