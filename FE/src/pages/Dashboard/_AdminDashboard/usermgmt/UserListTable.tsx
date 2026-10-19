@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import Avatar from '../../../../components/Avatar';
+import { resolveResumePublicUrl } from '../../../../utils/resumeUrl';
 import UserActionsMenu from './UserActionsMenu';
 import { userStatusOption, type UserStatus } from './userStatus';
 
@@ -47,7 +48,7 @@ function UserStatusText({ user }: { user: AdminUserRow }) {
 }
 
 function UserDetailGrid({ user }: { user: AdminUserRow }) {
-  const resumeHref = user.resume ? `${process.env.REACT_APP_SERVER_URL}/${user.resume}` : '';
+  const resumeHref = resolveResumePublicUrl(user.resume);
   const fields = [
     { label: 'Title', value: dash(user.title) },
     { label: 'Country', value: dash(user.country?.name) },
