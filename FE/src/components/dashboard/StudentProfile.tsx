@@ -7,12 +7,13 @@ import {
   StickyNote,
   Save,
   GraduationCap,
+  FileText,
 } from 'lucide-react';
 import { useAppSelector } from '../../store';
 import { useDispatch } from 'react-redux';
 import { notify } from '../../utils/notify';
 import { updateMe } from '../../actions/authActions';
-import { doUpdateProfile, profileImageFetch } from '../../api/api';
+import { callApi, doUpdateProfile, profileImageFetch } from '../../api/api';
 import ChangePasswordModal from './ChangePasswordModal';
 import DeleteAccountButton from './DeleteAccountButton';
 import { resolveProfileImageSrc, safeImageSrc } from '../../utils/profileImage';
@@ -21,6 +22,11 @@ import { SERVICE_OPTIONS, canonicalLabelsFromMixedServiceEntries } from '../../c
 import MajorSelect from '../MajorSelect';
 import OptionSelect from '../ui/OptionSelect';
 import { DASHBOARD_PAGE_TITLE } from './pageTitle';
+import FileBrowser from '../fileBrowser';
+import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
+import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
+import ShowFieldError from '../ShowFieldError';
+import FieldLabel from '../ui/FieldLabel';
 
 const PREFERENCE_OPTIONS = SERVICE_OPTIONS.map((o) => ({ id: o.value, label: o.label }));
 
@@ -85,7 +91,12 @@ function academicFromUser(userDetails: any) {
 }
 
 
-export default function StudentProfile() {
+export default function StudentProfile({
+  focusSectionId = null,
+}: {
+  /** When set (e.g. from the dashboard completion card), scroll that section into view. */
+  focusSectionId?: string | null;
+}) {
   const dispatch = useDispatch();
   const userDetails = useAppSelector((state: any) => state?.auth?.userDetails ?? null);
 
@@ -185,6 +196,26 @@ export default function StudentProfile() {
   }, [interestsDirty, userDetails?.keywords, userDetails?.customKeywords]);
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [resume, setResume] = useState(() =>
+    typeof userDetails?.resume === 'string' ? userDetails.resume : '',
+  );
+  const [resumeFile, setResumeFile] = useState<File | false | ''>('');
+  const [resumeFileError, setResumeFileError] = useState('');
+  const [resumeUploading, setResumeUploading] = useState(false);
+  const [showResumePreview, setShowResumePreview] = useState(false);
+
+  useEffect(() => {
+    if (typeof userDetails?.resume === 'string') setResume(userDetails.resume);
+  }, [userDetails?.resume]);
+
+  useEffect(() => {
+    if (!focusSectionId) return;
+    const id = focusSectionId.startsWith('#') ? focusSectionId.slice(1) : focusSectionId;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusSectionId]);
 
   const togglePreference = (id: string) => {
     setPreferences(prev => ({ ...prev, [id]: !prev[id] }));
@@ -347,8 +378,36 @@ export default function StudentProfile() {
     }
   };
 
+  const handleUploadResume = async () => {
+    if (!(resumeFile instanceof File) || !userDetails?.email) return;
+    setResumeUploading(true);
+    try {
+      const response = (await callApi(
+        'POST',
+        'auth/updateResume',
+        { email: userDetails.email },
+        resumeFile,
+      )) as { status?: string; newResume?: string; error?: string };
+      if (response?.status === 'SUCCESS' && response.newResume) {
+        setResume(response.newResume);
+        setResumeFile('');
+        setResumeFileError('');
+        await (dispatch as (action: unknown) => Promise<unknown>)(updateMe());
+        notify.success('Resume uploaded');
+      } else {
+        notify.error(response?.error || 'Could not upload resume');
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not upload resume';
+      notify.error(message);
+    } finally {
+      setResumeUploading(false);
+    }
+  };
+
   const cardClass =
     'rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.06)]';
+  const sectionAnchorClass = 'scroll-mt-24';
 
   return (
     <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF] px-4 py-8 sm:px-6">
@@ -456,7 +515,7 @@ export default function StudentProfile() {
       </section>
 
       {/* Academic background (optional, recommended) */}
-      <section className={cardClass + ' mb-6'}>
+      <section id="profile-academic" className={`${cardClass} ${sectionAnchorClass} mb-6`}>
         <div className="mb-4 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 flex items-center gap-2">
             <GraduationCap className="h-4 w-4 text-[#234C6A]" aria-hidden />
@@ -599,72 +658,133 @@ export default function StudentProfile() {
         </div>
       </section>
 
-      {/* Preferences */}
-      <section className={cardClass + ' mb-6'}>
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900">
-            Preferences
-          </h2>
-          {preferencesDirty && (
-            <button
-              type="button"
-              onClick={handleSavePreferences}
-              disabled={preferencesSaving}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
-            >
-              {preferencesSaving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
-              {preferencesSaving ? 'Saving…' : 'Save'}
-            </button>
-          )}
-        </div>
-        <p className="text-xs text-slate-600 mb-3">
-          What are you looking for? (Study Abroad, Work Abroad, Research Guidance, etc.)
-        </p>
-        <div className="flex flex-wrap gap-3">
-          {PREFERENCE_OPTIONS.map(opt => (
-            <label
-              key={opt.id}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors has-[:checked]:border-[#234C6A] has-[:checked]:bg-[#E8EEF4] has-[:checked]:text-[#234C6A]"
-            >
-              <input
-                type="checkbox"
-                checked={!!preferences[opt.id]}
-                onChange={() => togglePreference(opt.id)}
-                className="rounded border-slate-300 text-[#234C6A] focus:ring-[#234C6A]"
-              />
-              <span className="text-sm font-medium text-slate-700">{opt.label}</span>
-            </label>
-          ))}
-        </div>
-      </section>
+      <div id="profile-preferences" className={`${sectionAnchorClass} mb-6 space-y-6`}>
+        {/* Preferences */}
+        <section className={cardClass}>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900">
+              Preferences
+            </h2>
+            {preferencesDirty && (
+              <button
+                type="button"
+                onClick={handleSavePreferences}
+                disabled={preferencesSaving}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+              >
+                {preferencesSaving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+                {preferencesSaving ? 'Saving…' : 'Save'}
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-slate-600 mb-3">
+            What are you looking for? (Study Abroad, Work Abroad, Research Guidance, etc.)
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {PREFERENCE_OPTIONS.map(opt => (
+              <label
+                key={opt.id}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors has-[:checked]:border-[#234C6A] has-[:checked]:bg-[#E8EEF4] has-[:checked]:text-[#234C6A]"
+              >
+                <input
+                  type="checkbox"
+                  checked={!!preferences[opt.id]}
+                  onChange={() => togglePreference(opt.id)}
+                  className="rounded border-slate-300 text-[#234C6A] focus:ring-[#234C6A]"
+                />
+                <span className="text-sm font-medium text-slate-700">{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        </section>
 
-      {/* Interests */}
-      <section className={cardClass + ' mb-6'}>
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900">
-            Interests
+        {/* Interests */}
+        <section className={cardClass}>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900">
+              Interests
+            </h2>
+            {interestsDirty && (
+              <button
+                type="button"
+                onClick={handleSaveInterests}
+                disabled={interestsSaving}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+              >
+                {interestsSaving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+                {interestsSaving ? 'Saving…' : 'Save'}
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-slate-600 mb-3">
+            Select your fields of interest (e.g. Civil Engineering, Computer Science, other).
+          </p>
+          <MajorSelect
+            label=""
+            placeholder="Select your interests"
+            value={interests}
+            onChange={next => { setInterests(next); setInterestsDirty(true); }}
+          />
+        </section>
+      </div>
+
+      {/* Resume */}
+      <section id="profile-resume" className={`${cardClass} ${sectionAnchorClass} mb-6`}>
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+            <FileText className="h-4 w-4 text-[#234C6A]" aria-hidden />
+            Resume
           </h2>
-          {interestsDirty && (
+        </div>
+        <p className="text-xs text-slate-600 mb-4">
+          Optional but recommended — share a PDF or Word resume so experts can prepare for your sessions.
+        </p>
+        {hasResumeForPreview(resume) ? (
+          <div className="mb-4 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+            <div>
+              <p className="text-xs font-semibold text-emerald-800">Resume on file</p>
+              <p className="text-[11px] text-emerald-600">Visible to experts you book with</p>
+            </div>
             <button
               type="button"
-              onClick={handleSaveInterests}
-              disabled={interestsSaving}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+              onClick={() => setShowResumePreview(true)}
+              className="text-xs font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-900"
             >
-              {interestsSaving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
-              {interestsSaving ? 'Saving…' : 'Save'}
+              View
             </button>
-          )}
+          </div>
+        ) : null}
+        {showResumePreview && hasResumeForPreview(resume) ? (
+          <FilePreviewModal
+            fileUrl={resolveResumePublicUrl(resume)}
+            fileName="Resume"
+            documentType="Resume"
+            onClose={() => setShowResumePreview(false)}
+          />
+        ) : null}
+        <div>
+          <FieldLabel>{hasResumeForPreview(resume) ? 'Replace resume' : 'Upload resume'}</FieldLabel>
+          {!hasResumeForPreview(resume) ? (
+            <p className="mb-2 text-xs text-slate-500">No resume uploaded yet. Upload a PDF or Word file up to 2MB.</p>
+          ) : null}
+          <FileBrowser
+            file={resumeFile}
+            set_file={setResumeFile}
+            set_fileError={setResumeFileError}
+          />
+          <ShowFieldError show={Boolean(resumeFileError)} label={resumeFileError} />
+          {resumeFile ? (
+            <button
+              type="button"
+              onClick={() => void handleUploadResume()}
+              disabled={resumeUploading}
+              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[#234C6A] px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60"
+            >
+              {resumeUploading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+              {resumeUploading ? 'Uploading…' : 'Upload resume'}
+            </button>
+          ) : null}
         </div>
-        <p className="text-xs text-slate-600 mb-3">
-          Select your fields of interest (e.g. Civil Engineering, Computer Science, other).
-        </p>
-        <MajorSelect
-          label=""
-          placeholder="Select your interests"
-          value={interests}
-          onChange={next => { setInterests(next); setInterestsDirty(true); }}
-        />
       </section>
 
       {/* Actions: Change password, Delete account */}
