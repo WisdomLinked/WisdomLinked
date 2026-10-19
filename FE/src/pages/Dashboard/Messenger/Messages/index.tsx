@@ -16,8 +16,8 @@ import SeminarDetails from "../../seminarDetails";
 import { deleteGroupAction } from "../../../../actions/groupChatActions";
 import ExpertSeminar from "../../_ExpertDashboard/seminar";
 // Chat API + realtime
-import { getOrCreateDM, fetchDirectHistory, fetchGroupHistory, fetchGroupMemberByRcSlug, markChatRead, getRCToken, deleteChatMessage, fetchReadReceiptsBatch, fetchDmUnreadSnapshot } from "../../../../api/chatApi";
-import { markReadDelayMs } from "../../../../utils/markReadSchedule";
+import { getOrCreateDM, fetchDirectHistory, fetchGroupHistory, fetchGroupMemberByRcSlug, markChatRead, markChatReadOnExit, getRCToken, deleteChatMessage, fetchReadReceiptsBatch, fetchDmUnreadSnapshot } from "../../../../api/chatApi";
+import { useMarkRoomRead } from "../../../../hooks/useMarkRoomRead";
 import { notifyChatMessage, stripChatHtml } from "../../../../utils/chatBrowserNotifications";
 import { seriesKey } from "../../../../utils/seminarSeriesOccurrence";
 import {
@@ -116,7 +116,6 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
     const prevMessagesLengthRef = useRef(0);
     const wasPrependingRef = useRef(false);
     const pendingThreadBottomRef = useRef(false);
-    const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadingOlderRef = useRef(false);
     const { chat, auth: { userDetails },  friends: { friends } } = useAppSelector((state) => state);
     const { chosenChatDetails, messages, chosenGroupChatDetails, gotAllChats, isNewMessage, conversationId, rcChannelId } = chat;
@@ -227,7 +226,6 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
     const [myRcUserId, setMyRcUserId] = useState<string | null>(null);
     const [peerReadByMessageId, setPeerReadByMessageId] = useState<Record<string, boolean>>({});
     const [peerLastSeenMs, setPeerLastSeenMs] = useState<number | null>(null);
-    const lastMarkReadAtRef = useRef<number>(0);
     const receiptFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastReceiptFetchAtRef = useRef<number>(0);
     const profileImageCacheRef = useRef(new Map<string, string>());
@@ -446,33 +444,29 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
         };
     }, [rcChannelId, userDetails, friends, dispatch]);
 
-    // Mark RC room read with throttling (avoid RC rate-limit spam).
-    useEffect(() => {
-        if (!rcChannelId) return;
+    const readOwed = useMemo(() => {
         const last = displayMessages[displayMessages.length - 1];
-        if (!last) return;
-        const incomingLast = !isOutgoingAuthor(last, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts);
-        if (!incomingLast) return;
-        const delay = markReadDelayMs(Date.now() - lastMarkReadAtRef.current);
-        if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
-        markReadTimerRef.current = setTimeout(() => {
-            void (async () => {
-                const res = await markChatRead(rcChannelId);
-                if (res?.success) {
-                    dispatch(clearDmUnreadRid(String(rcChannelId)));
-                    lastMarkReadAtRef.current = Date.now();
-                }
-            })();
-        }, delay);
-        return () => {
-            if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
-        };
-    }, [rcChannelId, displayMessages, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts]);
+        return Boolean(last) && !isOutgoingAuthor(last, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts);
+    }, [displayMessages, userDetails, myRcUserId, dmOtherWlUserId, groupAuthorOpts]);
+
+    const reportRoomRead = useCallback(
+        async (rid: string) => {
+            const res = await markChatRead(rid);
+            if (!res?.success) return false;
+            dispatch(clearDmUnreadRid(rid));
+            return true;
+        },
+        [dispatch],
+    );
+
+    useMarkRoomRead(rcChannelId, readOwed, displayMessages, reportRoomRead, markChatReadOnExit);
 
     // Event/dependency-driven receipt refresh (no polling interval).
     useEffect(() => {
         if (!rcChannelId) {
-            setPeerReadByMessageId({});
+            // Keep the same object when already empty: this effect depends on peerReadByMessageId,
+            // so a fresh {} on every run re-triggers it endlessly until a room id arrives.
+            setPeerReadByMessageId((prev) => (Object.keys(prev).length ? {} : prev));
             setPeerLastSeenMs(null);
             return;
         }

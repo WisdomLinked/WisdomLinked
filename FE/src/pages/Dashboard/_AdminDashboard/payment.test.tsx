@@ -294,6 +294,27 @@ describe('Admin Payment Management', () => {
     confirm.mockRestore();
   });
 
+  it('labels the toggle Payment mode and styles Live exactly like Test', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPayment();
+    await screen.findByText(/Showing 5 of 6 histories/);
+    expect(screen.getByText('Payment mode')).toBeInTheDocument();
+    const test = screen.getByRole('button', { name: 'Test' });
+    const live = screen.getByRole('button', { name: 'Live' });
+    const activeTestClass = test.className;
+    const inactiveLiveClass = live.className;
+    expect(test).toHaveClass('bg-wl-brand', 'text-white');
+    expect(live).toHaveClass('text-wl-muted');
+    fireEvent.click(live);
+    await waitFor(() => {
+      expect(live).toHaveAttribute('aria-pressed', 'true');
+    });
+    expect(test).toHaveAttribute('aria-pressed', 'false');
+    expect(live.className).toBe(activeTestClass);
+    expect(test.className).toBe(inactiveLiveClass);
+    confirm.mockRestore();
+  });
+
   it('enables Settings Save after a change and shows success on save', async () => {
     renderPayment();
     await screen.findByText(/Showing 5 of 6 histories/);
