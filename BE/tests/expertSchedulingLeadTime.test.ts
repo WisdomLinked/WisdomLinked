@@ -104,7 +104,7 @@ test('a 1:1 created through the group route in the past is refused', async t => 
 
 const propose = async (t: any, start: string) => {
   t.mock.method(User, 'findById', async () => expert());
-  t.mock.method(User, 'findOne', async () => ({ _id: 'student', email: 'student@example.com', groupChats: [], save: async () => {} }));
+  t.mock.method(User, 'findOne', async () => ({ _id: 'student', email: 'student@example.com', role: 'customer', groupChats: [], save: async () => {} }));
   t.mock.method(Event, 'find', () => ({ select: async () => [] }));
   t.mock.method(GroupChat, 'find', () => ({ select: async () => [] }));
   t.mock.method(AppState, 'findOne', async () => null);
