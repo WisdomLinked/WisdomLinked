@@ -23,6 +23,13 @@ describe("resumeUrl", () => {
     expect(resolveResumePublicUrl("http://localhost/x.doc")).toBe("http://localhost/x.doc");
   });
 
+  it("resolveResumePublicUrl drops a leading slash in front of an absolute URL", () => {
+    process.env.REACT_APP_SERVER_URL = "https://api.example.com";
+    expect(resolveResumePublicUrl("/https://cdn.example.com/resumes/a.pdf")).toBe(
+      "https://cdn.example.com/resumes/a.pdf",
+    );
+  });
+
   it("resolveResumePublicUrl prefixes relative paths with REACT_APP_SERVER_URL", () => {
     process.env.REACT_APP_SERVER_URL = "https://api.example.com";
     expect(resolveResumePublicUrl("uploads/resume.pdf")).toBe("https://api.example.com/uploads/resume.pdf");
