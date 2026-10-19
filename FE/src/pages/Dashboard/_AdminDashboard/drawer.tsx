@@ -104,7 +104,7 @@ export default function AdminDrawer(props: Props) {
                         }`}
                     >
                         <span className="material-icons"><SmartToy fontSize="medium"/></span>
-                        <span className="text-[10px]">Chat Bot QA</span>
+                        <span className="text-[10px]">HelpBot Q&A</span>
                     </Link>
                 </div>
                 <div className={`w-[300px] h-full bg-darkgrey overflow-y-auto px-[15px] pt-4 pb-[5px] ${location === 'adminchat' ? '' : 'hidden'}`}>
