@@ -33,6 +33,7 @@ import StatsGrid from '../components/dashboard/StatsGrid';
 import AccountReviewBanner from '../components/dashboard/AccountReviewBanner';
 import CarouselSection from '../components/dashboard/CarouselSection';
 import StudentProfile from '../components/dashboard/StudentProfile';
+import StudentProfileCompletionCard from '../components/dashboard/profileCompletion/StudentProfileCompletionCard';
 import StudentSettings from '../components/dashboard/StudentSettings';
 import DecisionNotices from '../components/dashboard/DecisionNotices';
 import StudentCalendar, { type Meeting as CalendarMeeting } from '../components/dashboard/StudentCalendar';
@@ -524,6 +525,12 @@ export default function StudentDashboard() {
     setChatSection(sectionForChatTarget(target));
   }, []);
   const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
+  const [profileFocusSectionId, setProfileFocusSectionId] = useState<string | null>(null);
+  const openProfileSection = useCallback((href: string) => {
+    const id = href.startsWith('#') ? href.slice(1) : href;
+    setProfileFocusSectionId(id);
+    setActiveItem('profile');
+  }, []);
   const [showBackLogoutConfirm, setShowBackLogoutConfirm] = useState(false);
   const confirmLogoutOnBack = useCallback(() => setShowBackLogoutConfirm(true), []);
   useBackToDashboard(activeItem, goToDashboardTab, 'dashboard', confirmLogoutOnBack);
@@ -1574,7 +1581,10 @@ export default function StudentDashboard() {
             }
             userName={studentName}
             avatarUrl={avatarUrl}
-            onProfileClick={() => setActiveItem('profile')}
+            onProfileClick={() => {
+              setProfileFocusSectionId(null);
+              setActiveItem('profile');
+            }}
             onSettingsClick={() => setActiveItem('settings')}
             notifications={chatNotifications}
             notificationsEnabled
@@ -1623,7 +1633,7 @@ export default function StudentDashboard() {
               <StudentChat section={chatSection} />
             </div>
           ) : activeItem === 'profile' ? (
-            <StudentProfile />
+            <StudentProfile focusSectionId={profileFocusSectionId} />
           ) : activeItem === 'settings' ? (
             <StudentSettings />
           ) : activeItem === 'expert-profile' ? (
@@ -1705,6 +1715,10 @@ export default function StudentDashboard() {
                 </p>
               </header>
 
+              <div className="mb-5">
+                <StudentProfileCompletionCard onOpenSection={openProfileSection} />
+              </div>
+
               <div className="grid items-stretch gap-5 lg:grid-cols-[1fr_380px]">
                 <section className="min-w-0">
                   <StatsGrid cards={cards} fill />
@@ -1737,7 +1751,10 @@ export default function StudentDashboard() {
                   setOpenSeminarId(null);
                   setActiveItem('seminars');
                 }}
-                onCompleteProfile={() => setActiveItem('profile')}
+                onCompleteProfile={() => {
+                  setProfileFocusSectionId(null);
+                  setActiveItem('profile');
+                }}
               />
             </div>
           )}
