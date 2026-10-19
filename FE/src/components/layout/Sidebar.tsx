@@ -13,7 +13,6 @@ import {
   CreditCard,
   ChevronDown,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import NavBadge from './NavBadge';
 import { usePendingContactRequestsCount } from '../../hooks/usePendingContactRequestsCount';
 
@@ -62,7 +61,6 @@ export default function Sidebar({
   const [openMobile, setOpenMobile] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [expandedNavId, setExpandedNavId] = useState<string | null>(null);
-  const navigate = useNavigate();
   const { count: pendingContactCount } = usePendingContactRequestsCount();
 
   const mainNavItems = navItems.filter(item => item.id !== 'profile');
@@ -311,7 +309,6 @@ export default function Sidebar({
                   onNavigate('logout');
                   setShowLogoutConfirm(false);
                   setOpenMobile(false);
-                  navigate('/');
                 }}
               >
                 Yes, log out

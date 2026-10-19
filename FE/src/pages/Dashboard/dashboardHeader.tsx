@@ -6,7 +6,7 @@ import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useDispatch } from "react-redux";
-import { logoutUser } from "../../actions/authActions";
+import { LOGOUT_TO_HOMEPAGE, logoutUser } from "../../actions/authActions";
 import {profileImageFetch} from "../../api/api";
 
 const DashboardHeader = ({ userDetails }: any) => {
@@ -31,7 +31,7 @@ const DashboardHeader = ({ userDetails }: any) => {
     }, [userDetails.image]);
 
     const logOut = () => {
-        dispatch(logoutUser());
+        dispatch(logoutUser(LOGOUT_TO_HOMEPAGE));
     }
 
     return (

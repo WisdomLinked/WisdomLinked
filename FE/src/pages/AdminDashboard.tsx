@@ -39,7 +39,7 @@ import {
 import AdminSettings from '../components/dashboard/AdminSettings';
 import { profileImageFetch } from '../api/api';
 import { useAppSelector } from '../store';
-import { logoutUser } from '../actions/authActions';
+import { LOGOUT_TO_HOMEPAGE, logoutUser } from '../actions/authActions';
 
 import AdminChat from './AdminChat';
 import {
@@ -539,7 +539,7 @@ export default function AdminDashboard() {
 
   const handleSidebarNavigate = (id: string) => {
     if (id === 'logout') {
-      dispatch(logoutUser());
+      dispatch(logoutUser(LOGOUT_TO_HOMEPAGE));
       return;
     }
     if (id === 'profile') {
