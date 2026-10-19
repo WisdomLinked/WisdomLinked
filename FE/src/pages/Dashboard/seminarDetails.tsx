@@ -63,7 +63,7 @@ const SeminarDetails = ({
     onDeleteCommunityChat,
     theme = "dark",
     hideParticipants = false,
-    adminLabel = "Admin",
+    adminLabel = "Host",
 }: SeminarDetailsProps) => {
     const recurrenceLabel = describeRecurrence({
         isRecurring,
@@ -274,7 +274,7 @@ const SeminarDetails = ({
                         {adminLabel}
                     </div>
                     <div className="flex space-x-3 items-center">
-                        <Avatar username={admin?.username || "Admin"} isOnline={false} image={avatarImage(admin)} />
+                        <Avatar username={admin?.username || "Host"} isOnline={false} image={avatarImage(admin)} />
                         <div className="min-w-0">
                             <div className="text-sm font-semibold truncate">{admin?.username || "Unknown"}</div>
                             <div className={`text-[13px] truncate ${isLight ? "text-slate-500" : "text-slate-400"}`}>{admin?.email || "N/A"}</div>
