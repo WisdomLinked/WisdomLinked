@@ -1,3 +1,5 @@
+import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOptions';
+
 /** Weights sum to 100 so `percent` is a direct weighted sum of section fill ratios. */
 export const STUDENT_PROFILE_SECTION_WEIGHTS = {
   academic: 40,
@@ -52,6 +54,7 @@ const ACADEMIC_FIELDS = [
 
 function coerceText(value: unknown): string {
   if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value).trim();
   if (value && typeof value === 'object') {
     const doc = value as { label?: unknown; value?: unknown; name?: unknown };
     return String(doc.label ?? doc.value ?? doc.name ?? '').trim();
@@ -64,21 +67,20 @@ function isFilled(value: unknown): boolean {
   return coerceText(value).length > 0;
 }
 
-function serviceCount(services: unknown): number {
-  if (!Array.isArray(services)) return 0;
-  return services.filter((entry) => isFilled(entry)).length;
+/** Same canonical service matching the student profile page uses for checkboxes. */
+function hasCanonicalService(services: unknown): boolean {
+  return canonicalLabelsFromMixedServiceEntries(Array.isArray(services) ? services : []).length > 0;
 }
 
-function interestCount(keywords: unknown, customKeywords: unknown): number {
+function hasInterest(keywords: unknown, customKeywords: unknown): boolean {
   const lists = [keywords, customKeywords];
-  let count = 0;
   for (const list of lists) {
     if (!Array.isArray(list)) continue;
     for (const entry of list) {
-      if (isFilled(entry)) count += 1;
+      if (isFilled(entry)) return true;
     }
   }
-  return count;
+  return false;
 }
 
 export function getStudentProfileCompletion(
@@ -90,9 +92,9 @@ export function getStudentProfileCompletion(
   const academicTotal = ACADEMIC_FIELDS.length;
   const academicRatio = academicTotal ? academicFilled / academicTotal : 0;
 
-  const hasService = serviceCount(source.services) > 0;
-  const hasInterest = interestCount(source.keywords, source.customKeywords) > 0;
-  const preferencesFilled = Number(hasService) + Number(hasInterest);
+  const serviceDone = hasCanonicalService(source.services);
+  const interestDone = hasInterest(source.keywords, source.customKeywords);
+  const preferencesFilled = Number(serviceDone) + Number(interestDone);
   const preferencesTotal = 2;
   const preferencesRatio = preferencesFilled / preferencesTotal;
 

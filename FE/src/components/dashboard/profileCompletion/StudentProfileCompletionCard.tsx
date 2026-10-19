@@ -91,7 +91,7 @@ export default function StudentProfileCompletionCard({ onOpenSection }: Props) {
   const sections: ProfileCompletionSectionView[] = completion.sections.map((section) => {
     const copy = SECTION_COPY[section.id];
     const partial =
-      section.id === 'academic' && section.filled > 0 && !section.isComplete
+      section.filled > 0 && !section.isComplete
         ? `${section.filled} of ${section.total}`
         : undefined;
     return {

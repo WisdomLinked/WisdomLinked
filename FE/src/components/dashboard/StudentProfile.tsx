@@ -93,9 +93,12 @@ function academicFromUser(userDetails: any) {
 
 export default function StudentProfile({
   focusSectionId = null,
+  focusNonce = 0,
 }: {
   /** When set (e.g. from the dashboard completion card), scroll that section into view. */
   focusSectionId?: string | null;
+  /** Bumps when the same section is requested again so scroll re-runs. */
+  focusNonce?: number;
 }) {
   const dispatch = useDispatch();
   const userDetails = useAppSelector((state: any) => state?.auth?.userDetails ?? null);
@@ -211,11 +214,32 @@ export default function StudentProfile({
   useEffect(() => {
     if (!focusSectionId) return;
     const id = focusSectionId.startsWith('#') ? focusSectionId.slice(1) : focusSectionId;
-    const frame = window.requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [focusSectionId]);
+
+    let cancelled = false;
+    let attempts = 0;
+    let timer: number | undefined;
+
+    const scrollToSection = () => {
+      if (cancelled) return;
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      // Profile mounts after the dashboard tab switch; retry briefly until the anchor exists.
+      if (attempts < 12) {
+        attempts += 1;
+        timer = window.setTimeout(scrollToSection, 50);
+      }
+    };
+
+    const frame = window.requestAnimationFrame(scrollToSection);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [focusSectionId, focusNonce]);
 
   const togglePreference = (id: string) => {
     setPreferences(prev => ({ ...prev, [id]: !prev[id] }));
