@@ -302,7 +302,7 @@ const Payment = () => {
         <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <h2 className={DASHBOARD_PAGE_TITLE}>Payment Management</h2>
           <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-wl-muted">Stripe mode</span>
+            <span className="text-sm font-medium text-wl-muted">Payment mode</span>
             <div className="overflow-hidden rounded-full border border-wl-line bg-wl-card shadow-sm">
               <button
                 type="button"
@@ -317,9 +317,7 @@ const Payment = () => {
               <button
                 type="button"
                 className={`h-8 w-16 text-sm font-medium ${
-                  stripeMode === 'live'
-                    ? 'bg-red-600 text-white'
-                    : 'text-red-700 hover:bg-red-500/10'
+                  stripeMode === 'live' ? 'bg-wl-brand text-white' : 'text-wl-muted hover:bg-wl-pageAlt'
                 }`}
                 aria-pressed={stripeMode === 'live'}
                 onClick={() => updateStripeMode('live')}
@@ -364,8 +362,6 @@ const Payment = () => {
           report={integrityReport}
           loading={integrityLoading}
           onRefresh={loadIntegrityReport}
-          activeStatus={filters.status}
-          onSelectStatus={status => patchFilters({ status })}
         />
 
         <section className="overflow-hidden rounded-2xl border border-wl-line bg-wl-card shadow-sm">

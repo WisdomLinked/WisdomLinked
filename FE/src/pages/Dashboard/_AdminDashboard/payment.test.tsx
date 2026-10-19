@@ -139,14 +139,6 @@ const integritySummary = {
   free: 5,
 };
 
-const recordCounts = { completed: 1, refunded: 1, pending: 1, withheld: 1 };
-
-const TILE_ORDER = ['paid', 'refunded', 'in_flight', 'withheld', 'unpaid'];
-
-function tile(key: string) {
-  return screen.getByTestId(`integrity-tile-${key}`);
-}
-
 function chooseSelect(label: string, optionLabel: string, selector?: string) {
   const trigger = selector
     ? (screen.getByLabelText(label, { selector }) as HTMLElement)
@@ -181,8 +173,8 @@ describe('Admin Payment Management', () => {
     });
     vi.mocked(doGetPaymentIntegrityReport).mockResolvedValue({
       summary: integritySummary,
-      recordCounts,
       bookingsScanned: 16,
+      lookbackDays: 120,
       rows: [],
       stuckPendingPayments: [],
     });
@@ -191,11 +183,10 @@ describe('Admin Payment Management', () => {
     vi.mocked(setSeminarApprovalDeadline).mockResolvedValue({ status: 'SUCCESS' });
   });
 
-  it('loads histories and integrity counts from the dataset', async () => {
+  it('loads histories and says when every paid seat matches', async () => {
     renderPayment();
     expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
-    expect(within(tile('unpaid')).getByText('1')).toBeInTheDocument();
-    expect(within(tile('paid')).getByText('10')).toBeInTheDocument();
+    expect(screen.getByText(/Nothing to fix/)).toBeInTheDocument();
     expect(screen.getByTestId('payment-history-table').className).not.toMatch(/overflow-x-auto/);
     expect(screen.getByTestId('payment-history-cards')).toHaveClass('md:hidden');
     expect(screen.getByTestId('payment-history-table')).toHaveClass('hidden');
@@ -294,6 +285,27 @@ describe('Admin Payment Management', () => {
     confirm.mockRestore();
   });
 
+  it('labels the toggle Payment mode and styles Live exactly like Test', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPayment();
+    await screen.findByText(/Showing 5 of 6 histories/);
+    expect(screen.getByText('Payment mode')).toBeInTheDocument();
+    const test = screen.getByRole('button', { name: 'Test' });
+    const live = screen.getByRole('button', { name: 'Live' });
+    const activeTestClass = test.className;
+    const inactiveLiveClass = live.className;
+    expect(test).toHaveClass('bg-wl-brand', 'text-white');
+    expect(live).toHaveClass('text-wl-muted');
+    fireEvent.click(live);
+    await waitFor(() => {
+      expect(live).toHaveAttribute('aria-pressed', 'true');
+    });
+    expect(test).toHaveAttribute('aria-pressed', 'false');
+    expect(live.className).toBe(activeTestClass);
+    expect(test.className).toBe(inactiveLiveClass);
+    confirm.mockRestore();
+  });
+
   it('enables Settings Save after a change and shows success on save', async () => {
     renderPayment();
     await screen.findByText(/Showing 5 of 6 histories/);
@@ -311,79 +323,32 @@ describe('Admin Payment Management', () => {
     });
   });
 
-  it('refreshes integrity and keeps summary equal to the report', async () => {
+  it('refreshes the seat list', async () => {
     renderPayment();
     await screen.findByText(/Showing 5 of 6 histories/);
-    expect(within(tile('unpaid')).getByText('1')).toBeInTheDocument();
+    expect(screen.getByText(/Nothing to fix/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => {
       expect(doGetPaymentIntegrityReport).toHaveBeenCalledTimes(2);
     });
   });
 
-  it('shows the integrity tiles in Status filter order, without Free', async () => {
-    renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
-    const tiles = screen.getAllByTestId(/^integrity-tile-/).map(el => el.getAttribute('data-testid'));
-    expect(tiles).toEqual(TILE_ORDER.map(key => `integrity-tile-${key}`));
-    expect(screen.queryByText('free')).not.toBeInTheDocument();
-  });
-
-  it('shows students and records on every tile, with no records number for Unpaid', async () => {
-    renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
-    for (const key of TILE_ORDER) {
-      expect(within(tile(key)).getByText('Students')).toBeInTheDocument();
-      expect(within(tile(key)).getByText('Records')).toBeInTheDocument();
-    }
-    expect(within(tile('paid')).getByText('10')).toBeInTheDocument();
-    expect(within(tile('withheld')).getByText('4')).toBeInTheDocument();
-    expect(within(tile('unpaid')).getByText('—')).toBeInTheDocument();
-    expect(within(tile('unpaid')).queryByRole('button')).not.toBeInTheDocument();
-  });
-
-  it.each([
-    ['paid', 'completed'],
-    ['refunded', 'refunded'],
-    ['in_flight', 'pending'],
-    ['withheld', 'withheld'],
-  ])('clicking the %s records number filters history to status %s', async (key, status) => {
-    renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
-    const button = within(tile(key)).getByRole('button');
-    expect(button).toHaveAttribute('aria-pressed', 'false');
-    fireEvent.click(button);
-    await waitFor(() => {
-      expect(doFilterPaymentHistories).toHaveBeenLastCalledWith(
-        expect.objectContaining({ status, currentPage: 0 }),
-      );
-    });
-    expect(await screen.findByText(/Showing 1 of 1 histories/)).toBeInTheDocument();
-    expect(within(tile(key)).getByRole('button')).toHaveAttribute('aria-pressed', 'true');
-  });
-
-  it('keeps other active filters when a records number is clicked', async () => {
-    renderPayment('/user/admindashboard/payment?mode=live');
-    await screen.findByText(/Showing 2 of 2 histories/);
-    fireEvent.click(within(tile('withheld')).getByRole('button'));
-    await waitFor(() => {
-      expect(doFilterPaymentHistories).toHaveBeenLastCalledWith(
-        expect.objectContaining({ status: 'withheld', stripeMode: 'live' }),
-      );
-    });
-  });
-
-  it('shows records as unavailable when the report has no record counts', async () => {
+  it('explains a refunded seat in a sentence', async () => {
     vi.mocked(doGetPaymentIntegrityReport).mockResolvedValue({
       summary: integritySummary,
-      bookingsScanned: 16,
-      rows: [],
+      bookingsScanned: 5,
+      lookbackDays: 120,
+      rows: [{
+        verdict: 'refunded',
+        groupChatId: 'g1',
+        name: 'Khussal Pradhan & Bruce Wang',
+        customer: 'c1',
+        customerEmail: 'khussal@tamu.edu',
+      }],
       stuckPendingPayments: [],
     });
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
-    expect(within(tile('paid')).queryByRole('button')).not.toBeInTheDocument();
-    expect(within(tile('paid')).getByText('—')).toBeInTheDocument();
+    expect(await screen.findByText(/khussal@tamu.edu is still on “Khussal Pradhan & Bruce Wang” after that payment was refunded/)).toBeInTheDocument();
   });
 
   it('shows the filtered empty state', async () => {
