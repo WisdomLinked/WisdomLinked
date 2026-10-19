@@ -380,6 +380,10 @@ export default function StudentProfile({
 
   const handleUploadResume = async () => {
     if (!(resumeFile instanceof File) || !userDetails?.email) return;
+    if (resumeFileError) {
+      notify.error(resumeFileError);
+      return;
+    }
     setResumeUploading(true);
     try {
       const response = (await callApi(
