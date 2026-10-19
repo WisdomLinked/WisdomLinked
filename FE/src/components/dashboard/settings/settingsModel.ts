@@ -79,6 +79,25 @@ export function toProfileUpdate(settings: SettingsState) {
   return { timeZone: settings.timeZone, notificationPreferences };
 }
 
+export type ProfileUpdate = { timeZone?: string; notificationPreferences?: Record<string, boolean> };
+
+export function changedProfileUpdate(before: SettingsState, after: SettingsState): ProfileUpdate | null {
+  const was = toProfileUpdate(before);
+  const now = toProfileUpdate(after);
+  const update: ProfileUpdate = {};
+  if (now.timeZone !== was.timeZone) update.timeZone = now.timeZone;
+  const prefs: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(now.notificationPreferences)) {
+    if (was.notificationPreferences[key] !== value) prefs[key] = value;
+  }
+  if (Object.keys(prefs).length) update.notificationPreferences = prefs;
+  return Object.keys(update).length ? update : null;
+}
+
+export function sameSettings(a: SettingsState, b: SettingsState): boolean {
+  return changedProfileUpdate(a, b) === null;
+}
+
 export function emailSummary(settings: SettingsState): string {
   if (!settings.emailEnabled) return 'All emails off';
   const available = EMAIL_OPTIONS.filter(option => !option.comingSoon);
