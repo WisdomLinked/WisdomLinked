@@ -42,15 +42,15 @@ describe("participant emails in the members list", () => {
     expect(screen.getByText("Araavind Subramoniam")).toBeInTheDocument();
   });
 
-  it("keeps the admin badge, which identifies the owner without an email", () => {
+  it("keeps the host badge, which identifies the owner without an email", () => {
     renderDialog("community");
 
-    expect(screen.getByText("Admin")).toBeInTheDocument();
+    expect(screen.getByText("Host")).toBeInTheDocument();
   });
 
-  it("does not show an admin badge on a 1:1, where it has no meaning", () => {
+  it("does not show a host badge on a 1:1, where it has no meaning", () => {
     renderDialog("individual");
 
-    expect(screen.queryByText("Admin")).not.toBeInTheDocument();
+    expect(screen.queryByText("Host")).not.toBeInTheDocument();
   });
 });
