@@ -36,10 +36,13 @@ const userDetails = {
     // Another expert's session must be ignored.
     { type: 'individual', status: 'active', admin: 'other', participants: [dee], start: iso(NOW + DAY), end: iso(NOW + DAY + HOUR) },
     { type: 'seminar', status: 'active', admin: 'exp1', participants: [dee], start: iso(NOW + DAY), end: iso(NOW + DAY + HOUR) },
+    // A platform admin on a 1:1 is not a client.
+    { type: 'individual', status: 'active', admin: 'exp1', participants: [{ _id: 'adm', username: 'Admin', role: 'admin' }], start: iso(NOW + 2 * DAY), end: iso(NOW + 2 * DAY + HOUR) },
   ],
   events: [
     // Cai: a legacy accepted event in the past -> idle.
     { expert: 'exp1', customer: cai, status: 'accepted', start: iso(NOW - 20 * DAY), end: iso(NOW - 20 * DAY + HOUR) },
+    { expert: 'exp1', customer: { _id: 'adm2', username: 'Admin', role: 'admin' }, status: 'pending', start: iso(NOW + 4 * DAY), end: iso(NOW + 4 * DAY + HOUR) },
   ],
   directConversations: [
     { rcChannelId: 'rid-dee', participants: [me, dee], lastMessageAt: iso(NOW - HOUR) },
@@ -88,6 +91,7 @@ describe('clientModel', () => {
 
   it('builds "my clients" from my sessions, events and student chats only', () => {
     expect(rows.map((r) => r.id).sort()).toEqual(['s1', 's2', 's3', 's4']);
+    expect(rows.some((r) => r.name === 'Admin')).toBe(false);
   });
 
   it('derives status, counts and dates', () => {
