@@ -362,8 +362,6 @@ const Payment = () => {
           report={integrityReport}
           loading={integrityLoading}
           onRefresh={loadIntegrityReport}
-          activeStatus={filters.status}
-          onSelectStatus={status => patchFilters({ status })}
         />
 
         <section className="overflow-hidden rounded-2xl border border-wl-line bg-wl-card shadow-sm">
