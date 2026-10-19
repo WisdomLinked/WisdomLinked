@@ -102,13 +102,16 @@ const withData = ({ users = [], conversations = [], groups = [], activatedAt = n
 /** Fake Rocket.Chat and email. `unread` maps an email to that user's unread-by-room. */
 const fakes = (unread: Record<string, any> = {}) => {
   const asked: string[] = [];
+  const roomsAsked: string[][] = [];
   const mails: any[] = [];
   return {
     asked,
+    roomsAsked,
     mails,
     deps: {
-      countUnread: async (reader: any) => {
+      countUnread: async (reader: any, onlyRids: Set<string>) => {
         asked.push(reader.email);
+        roomsAsked.push(Array.from(onlyRids || []).sort());
         if (!(reader.email in unread)) return {};
         const value = unread[reader.email];
         return typeof value === "function" ? value() : value;
@@ -302,8 +305,9 @@ test("Rocket.Chat unknown is not 'nothing unread', and repeated failures stop th
     assert.equal(MAX_CONSECUTIVE_RC_FAILURES, 3);
     assert.deepEqual(f.asked, ["u1@example.com", "u2@example.com", "u3@example.com"]);
     assert.equal(data.user("u4").unreadEmailCheckedAt, undefined);
-    // The users that could not be checked are backed off rather than retried every tick.
-    assert.equal(ms(data.user("u1").unreadEmailCheckedAt), T0);
+    // A failed attempt is recorded as a failure, not as a check that found nothing.
+    assert.equal(ms(data.user("u1").unreadEmailFailedAt), T0);
+    assert.equal(data.user("u1").unreadEmailCheckedAt, undefined);
   } finally {
     data.restore();
   }
@@ -551,5 +555,82 @@ test("the email states the unread count and links to the right dashboard", async
     assert.match(captured[1].html, /user\/expertdashboard/);
   } finally {
     (globalThis as any).sendNotificationEmail = originalGlobal;
+  }
+});
+
+test("Rocket.Chat down at the check: retried an hour later without needing a new message", async () => {
+  let rcUp = false;
+  const data = withData({ users: [student()], ...ROOMS, activatedAt: ACTIVATED });
+  const f = fakes({ "s1@example.com": () => (rcUp ? { "dm-rid": 4 } : null) });
+  try {
+    assert.equal(await sweepUnreadMessageEmails(T0, f.deps), 0);
+    assert.equal(ms(data.user("s1").unreadEmailFailedAt), T0);
+
+    // Still inside the retry window: not asked again, nothing sent.
+    rcUp = true;
+    assert.equal(await sweepUnreadMessageEmails(T0 + 45 * MIN, f.deps), 0);
+    assert.deepEqual(f.asked, ["s1@example.com"]);
+
+    // An hour on, the same unread messages are checked again and the email goes out.
+    assert.equal(await sweepUnreadMessageEmails(T0 + 60 * MIN, f.deps), 1);
+    assert.deepEqual(f.asked, ["s1@example.com", "s1@example.com"]);
+    assert.equal(f.mails[0].unreadCount, 4);
+    assert.equal(ms(data.user("s1").unreadEmailSentAt), T0 + 60 * MIN);
+  } finally {
+    data.restore();
+  }
+});
+
+test("Rocket.Chat keeps failing: tried once an hour, never every tick", async () => {
+  const data = withData({ users: [student()], ...ROOMS, activatedAt: ACTIVATED });
+  const f = fakes({ "s1@example.com": null });
+  try {
+    for (let t = T0; t <= T0 + 3 * HOUR; t += 15 * MIN) await sweepUnreadMessageEmails(t, f.deps);
+    // T0, T0+1h, T0+2h, T0+3h
+    assert.equal(f.asked.length, 4);
+    assert.equal(f.mails.length, 0);
+  } finally {
+    data.restore();
+  }
+});
+
+test("a failure from before the user last opened chat does not delay the next absence", async () => {
+  const data = withData({
+    users: [
+      student({
+        chatLastSeenAt: new Date(T0 - 7 * HOUR),
+        unreadEmailFailedAt: new Date(T0 - 8 * HOUR),
+      }),
+    ],
+    ...ROOMS,
+    activatedAt: ACTIVATED,
+  });
+  const f = fakes({ "s1@example.com": { "dm-rid": 2 } });
+  try {
+    assert.equal(await sweepUnreadMessageEmails(T0, f.deps), 1);
+  } finally {
+    data.restore();
+  }
+});
+
+test("Rocket.Chat is only asked about the rooms the email counts", async () => {
+  const data = withData({
+    users: [student({ groupChats: ["g1", "g2", "g3"] })],
+    conversations: ROOMS.conversations,
+    groups: [
+      ...ROOMS.groups,
+      // pending 1:1: not countable
+      { _id: "g2", rcChannelId: "pending-rid", type: "individual", status: "pending", lastMessageAt: new Date(T0 - HOUR) },
+      // confirmed 1:1: countable
+      { _id: "g3", rcChannelId: "appt-rid", type: "individual", status: "active", lastMessageAt: new Date(T0 - HOUR) },
+    ],
+    activatedAt: ACTIVATED,
+  });
+  const f = fakes({ "s1@example.com": { "dm-rid": 1 } });
+  try {
+    await sweepUnreadMessageEmails(T0, f.deps);
+    assert.deepEqual(f.roomsAsked, [["appt-rid", "dm-rid", "sem-rid"]]);
+  } finally {
+    data.restore();
   }
 });

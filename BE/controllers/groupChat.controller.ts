@@ -1018,6 +1018,9 @@ const proposeIndividualAppointment = async (req, res) => {
         if (!customerUser) {
             return res.status(404).send("Sorry, the student you are trying to invite doesn't exist. Please check the email address");
         }
+        if (String(customerUser.role || '').toLowerCase() !== 'customer') {
+            return res.status(400).send("You can only propose a session to a student.");
+        }
 
         const pastStartError = expertSchedulingPastStartError(start);
         if (pastStartError) {
