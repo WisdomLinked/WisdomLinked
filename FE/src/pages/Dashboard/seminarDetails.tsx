@@ -9,6 +9,7 @@ import { resolveProfileImageSrc } from "../../utils/profileImage";
 import { profileImageFetch } from "../../api/api";
 import { sessionDurationLabel } from "../../utils/sessionDuration";
 import { recurrenceLabel as describeRecurrence, type RecurrenceFields } from "../../utils/recurrenceLabel";
+import { participantsExceptAdmin } from "../../utils/enrolledParticipants";
 
 interface SeminarDetailsProps {
     title: string;
@@ -62,7 +63,7 @@ const SeminarDetails = ({
     onDeleteCommunityChat,
     theme = "dark",
     hideParticipants = false,
-    adminLabel = "Admin",
+    adminLabel = "Host",
 }: SeminarDetailsProps) => {
     const recurrenceLabel = describeRecurrence({
         isRecurring,
@@ -84,7 +85,8 @@ const SeminarDetails = ({
     const { auth: { userDetails } } = useAppSelector((state) => state);
     const isCommunityChat = type === "community";
     const isLight = theme === "light";
-    const participantCount = Math.max((participants?.length || 0) - 1, 0);
+    const enrolledParticipants = participantsExceptAdmin(participants, admin);
+    const participantCount = enrolledParticipants.length;
 
     const [resolvedImages, setResolvedImages] = useState<Map<string, string>>(new Map());
     const imageCacheRef = useRef(new Map<string, string>());
@@ -272,7 +274,7 @@ const SeminarDetails = ({
                         {adminLabel}
                     </div>
                     <div className="flex space-x-3 items-center">
-                        <Avatar username={admin?.username || "Admin"} isOnline={false} image={avatarImage(admin)} />
+                        <Avatar username={admin?.username || "Host"} isOnline={false} image={avatarImage(admin)} />
                         <div className="min-w-0">
                             <div className="text-sm font-semibold truncate">{admin?.username || "Unknown"}</div>
                             <div className={`text-[13px] truncate ${isLight ? "text-slate-500" : "text-slate-400"}`}>{admin?.email || "N/A"}</div>
@@ -286,10 +288,10 @@ const SeminarDetails = ({
                         <Users className="h-3.5 w-3.5" />
                         Participants ({participantCount})
                     </div>
-                    {(participants?.length || 0) > 1 ? (
+                    {participantCount > 0 ? (
                         <div className="flex items-center justify-between gap-3">
                             <div className="flex -space-x-3">
-                                {participants.slice(1, 5).map((participant: any, index: number) => (
+                                {enrolledParticipants.slice(0, 4).map((participant: any, index: number) => (
                                     <div
                                         key={participant._id || index}
                                         className={`rounded-full ${isLight ? "bg-white" : "bg-black"}`}
@@ -332,8 +334,8 @@ const SeminarDetails = ({
                 closeDialogHandler={() => set_showParticipants(false)}
                 groupDetails={{
                     groupName: title,
-                    participants: participants,
-                    admin: admin ?? participants[0],
+                    participants: enrolledParticipants,
+                    admin: admin ?? participants?.[0],
                     type,
                 }}
                 currentUserId={userDetails._id}

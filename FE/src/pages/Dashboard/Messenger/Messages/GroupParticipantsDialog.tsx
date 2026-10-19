@@ -239,7 +239,7 @@ const GroupParticipantsDialog = ({
                                                 {isAdmin && !isIndividual ? (
                                                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${isLight ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-amber-900/40 text-amber-200 border border-amber-700"}`}>
                                                         <Crown className="h-3 w-3" />
-                                                        Admin
+                                                        Host
                                                     </span>
                                                 ) : null}
                                                 {!isAdmin && isCoModerator ? (

@@ -2,9 +2,7 @@ import { Request, Response } from 'express';
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { resolveFeedbackMeetingKind, toLookupIds, isLookupId } from '../utils/feedbackMeetingKind';
 import {
-    classifyBookingPayment,
-    foldChargeRows,
-    isActionable,
+    checkSeat,
     summarizeVerdicts,
     recordCountsByStatus,
     RECORD_COUNT_STATUSES,
@@ -1283,14 +1281,27 @@ const getPaymentIntegrityReport = async (req, res) => {
             status: { $in: ['active', 'pending'] },
             createdAt: { $gte: since },
         })
-            .select('_id name type price status start admin participants')
+            .select('_id name type price status start admin participants seriesId paymentDeadline')
             .limit(INTEGRITY_MAX_BOOKINGS)
             .lean();
 
-        const bookingIds = bookings.map((b: any) => b._id);
-        const chargeRows = bookingIds.length
+        const seriesIds = [...new Set(bookings.map((b: any) => String(b.seriesId || '')).filter(Boolean))];
+        const seriesSiblings = seriesIds.length
+            ? await GroupChat.find({ seriesId: { $in: seriesIds }, type: 'seminar' }).select('_id seriesId').lean()
+            : [];
+        const idsInSeries = new Map<string, string[]>();
+        for (const sibling of seriesSiblings) {
+            const key = String(sibling.seriesId);
+            const list = idsInSeries.get(key) || [];
+            list.push(String(sibling._id));
+            idsInSeries.set(key, list);
+        }
+
+        const chargeBookingIds = new Set<string>(bookings.map((b: any) => String(b._id)));
+        for (const sibling of seriesSiblings) chargeBookingIds.add(String(sibling._id));
+        const chargeRows = chargeBookingIds.size
             ? await PaymentHistory.find({
-                groupChat: { $in: bookingIds },
+                groupChat: { $in: [...chargeBookingIds] },
                 paymentType: 'charge',
             }).select('groupChat customer status amount paymentIntent').lean()
             : [];
@@ -1313,27 +1324,39 @@ const getPaymentIntegrityReport = async (req, res) => {
                 .map((p: any) => String(p))
                 .filter((p: string) => p && p !== adminId);
 
+            const seriesKey = String(booking.seriesId || '');
+            const seriesGroupIds = seriesKey
+                ? (idsInSeries.get(seriesKey) || [String(booking._id)])
+                : [String(booking._id)];
+
             for (const studentId of students) {
-                const state = {
-                    priceCents: Math.round(Number(booking.price ?? 0) * 100),
-                    ...foldChargeRows(rowsByPair.get(`${String(booking._id)}|${studentId}`) || []),
-                };
-                const verdict = classifyBookingPayment(state);
-                verdicts.push(verdict);
-                if (onlyActionable && !isActionable(verdict)) continue;
+                const ownCharges = rowsByPair.get(`${String(booking._id)}|${studentId}`) || [];
+                const seriesHasCompletedCharge = seriesGroupIds.some((id) =>
+                    (rowsByPair.get(`${id}|${studentId}`) || []).some((row: any) => row?.status === 'completed'),
+                );
+                const priceCents = Math.round(Number(booking.price ?? 0) * 100);
+                const check = checkSeat({
+                    type: booking.type,
+                    status: booking.status,
+                    paymentDeadline: booking.paymentDeadline,
+                    priceCents,
+                    ownCharges,
+                    seriesHasCompletedCharge,
+                });
+                if (check.verdict !== 'waiting') verdicts.push(check.verdict);
+                if (onlyActionable && !check.list) continue;
+                if (!onlyActionable && check.verdict === 'waiting') continue;
                 rows.push({
-                    verdict,
+                    verdict: check.verdict,
                     groupChatId: String(booking._id),
                     name: booking.name,
                     type: booking.type,
                     status: booking.status,
                     start: booking.start,
-                    priceCents: state.priceCents,
+                    priceCents,
                     customer: studentId,
                     expert: adminId,
-                    paymentIntents: (rowsByPair.get(`${String(booking._id)}|${studentId}`) || [])
-                        .map((r: any) => r.paymentIntent)
-                        .filter(Boolean),
+                    paymentIntents: ownCharges.map((r: any) => r.paymentIntent).filter(Boolean),
                 });
             }
         }

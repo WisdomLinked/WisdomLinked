@@ -31,6 +31,9 @@ import { notify } from '../../../utils/notify';
 import { updateMe } from "../../../actions/authActions";
 import { SERVICE_OPTIONS, matchesServiceOption } from "../../../constants/serviceOptions";
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
+import ChangePasswordModal from '../../../components/dashboard/ChangePasswordModal';
+import DeleteAccountButton from '../../../components/dashboard/DeleteAccountButton';
+import { Lock } from 'lucide-react';
 
 /** react-select options for the three canonical services (value === label for clean round-trips). */
 const SERVICE_SELECT_OPTIONS = SERVICE_OPTIONS.map((o) => ({ value: o.label, label: o.label }));
@@ -142,6 +145,7 @@ const ExpertProfile = ({
     const [fileError, set_fileError] = useState('');
     const [currFileName, set_currFileName] = useState('');
     const [showPreview, setShowPreview] = useState(false);
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
 
     const SPECIAL_NOTE_MAX = 2000;
     const [specialNote, set_specialNote] = useState('');
@@ -737,6 +741,31 @@ const ExpertProfile = ({
                             />
                         </div>
                     </div>
+
+                    {/* ── Card 5: Account (own profile only) ── */}
+                    {!isFromAdminPanel && (
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                            <SectionHeader
+                                icon={<Lock className="h-4 w-4" aria-hidden />}
+                                title="Account"
+                                subtitle="Password and account settings"
+                            />
+                            <div className="flex flex-wrap items-start gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPasswordModal(true)}
+                                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-[#234C6A] hover:text-[#234C6A] transition-colors"
+                                >
+                                    <Lock className="h-4 w-4" aria-hidden />
+                                    Change password
+                                </button>
+                                <DeleteAccountButton />
+                            </div>
+                            {showPasswordModal && (
+                                <ChangePasswordModal email={userDetails.email} onClose={() => setShowPasswordModal(false)} />
+                            )}
+                        </div>
+                    )}
 
                     {/* ── Sticky action bar ── */}
                     <div className="sticky bottom-4 z-10">

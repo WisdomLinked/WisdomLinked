@@ -4,6 +4,7 @@ import { deleteChatMessage, filterOnlineUserIdsByAllowedSet, markChatRead } from
 
 const Conversation = require("../models/Conversation");
 const GroupChat = require("../models/GroupChat");
+const User = require("../models/User");
 
 const createRes = () => {
   const res: any = {
@@ -41,11 +42,11 @@ test("drops invalid ids and empty user objects safely", () => {
 
 test("markChatRead rejects arbitrary Rocket.Chat rooms", async () => {
   const originalConversationFindOne = Conversation.findOne;
-  const originalGroupFindOne = GroupChat.findOne;
+  const originalGroupFind = GroupChat.find;
 
   try {
     Conversation.findOne = () => ({ select: () => ({ lean: async () => null }) });
-    GroupChat.findOne = () => ({ select: () => ({ lean: async () => null }) });
+    GroupChat.find = () => ({ select: () => ({ lean: async () => [] }) });
 
     const req: any = { user: { userId: "u1" }, body: { roomId: "foreign-room" } };
     const res = createRes();
@@ -56,17 +57,52 @@ test("markChatRead rejects arbitrary Rocket.Chat rooms", async () => {
     assert.equal(res.body?.error, "You do not have access to this chat room");
   } finally {
     Conversation.findOne = originalConversationFindOne;
-    GroupChat.findOne = originalGroupFindOne;
+    GroupChat.find = originalGroupFind;
+  }
+});
+
+test("markChatRead lets a student who joined a recurring seminar mid-series through", async () => {
+  const originalConversationFindOne = Conversation.findOne;
+  const originalGroupFind = GroupChat.find;
+  const originalUserFindById = User.findById;
+  const originalUserUpdateOne = User.updateOne;
+
+  try {
+    Conversation.findOne = () => ({ select: () => ({ lean: async () => null }) });
+    // Every session shares the series room; the student is only in the later ones.
+    GroupChat.find = () => ({
+      select: () => ({
+        lean: async () => [
+          { admin: "expert", participants: ["expert", "early"], coModerators: [] },
+          { admin: "expert", participants: ["expert", "early", "late"], coModerators: [] },
+        ],
+      }),
+    });
+    User.updateOne = async () => ({});
+    User.findById = async () => null;
+
+    const req: any = { user: { userId: "late", role: "customer" }, body: { roomId: "series-room" } };
+    const res = createRes();
+
+    await markChatRead(req, res);
+
+    assert.notEqual(res.statusCode, 403);
+    assert.equal(res.body?.error, "User not found");
+  } finally {
+    Conversation.findOne = originalConversationFindOne;
+    GroupChat.find = originalGroupFind;
+    User.findById = originalUserFindById;
+    User.updateOne = originalUserUpdateOne;
   }
 });
 
 test("delete-for-everyone rejects arbitrary Rocket.Chat rooms", async () => {
   const originalConversationFindOne = Conversation.findOne;
-  const originalGroupFindOne = GroupChat.findOne;
+  const originalGroupFind = GroupChat.find;
 
   try {
     Conversation.findOne = () => ({ select: () => ({ lean: async () => null }) });
-    GroupChat.findOne = () => ({ select: () => ({ lean: async () => null }) });
+    GroupChat.find = () => ({ select: () => ({ lean: async () => [] }) });
 
     const req: any = {
       user: { userId: "u1" },
@@ -80,6 +116,6 @@ test("delete-for-everyone rejects arbitrary Rocket.Chat rooms", async () => {
     assert.equal(res.body?.error, "You do not have access to this chat room");
   } finally {
     Conversation.findOne = originalConversationFindOne;
-    GroupChat.findOne = originalGroupFindOne;
+    GroupChat.find = originalGroupFind;
   }
 });

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  checkSeat,
   classifyBookingPayment,
   foldChargeRows,
   isActionable,
@@ -151,6 +152,52 @@ test("recordCountsByStatus reports zero for a status with no rows", () => {
     withheld: 0,
   });
   assert.deepEqual(recordCountsByStatus([]), { completed: 0, refunded: 0, pending: 0, withheld: 0 });
+});
+
+test("a proposed 1:1 waiting for payment is not a problem", () => {
+  const check = checkSeat({
+    type: "individual",
+    status: "pending",
+    paymentDeadline: "2026-10-20T00:00:00.000Z",
+    priceCents: 5000,
+    ownCharges: [],
+  });
+  assert.equal(check.verdict, "waiting");
+  assert.equal(check.list, false);
+});
+
+test("a later series date is paid when the charge is on another date", () => {
+  const check = checkSeat({
+    type: "seminar",
+    status: "active",
+    priceCents: 2500,
+    ownCharges: [],
+    seriesHasCompletedCharge: true,
+  });
+  assert.equal(check.verdict, "paid");
+  assert.equal(check.list, false);
+});
+
+test("a refunded charge with the person still enrolled stays on the list", () => {
+  const check = checkSeat({
+    type: "individual",
+    status: "active",
+    priceCents: 8000,
+    ownCharges: [{ status: "refunded" }],
+  });
+  assert.equal(check.verdict, "refunded");
+  assert.equal(check.list, true);
+});
+
+test("an enrolled paid seat with no charge and no payment window stays on the list", () => {
+  const check = checkSeat({
+    type: "seminar",
+    status: "active",
+    priceCents: 4000,
+    ownCharges: [],
+  });
+  assert.equal(check.verdict, "unpaid");
+  assert.equal(check.list, true);
 });
 
 test("recordCountsByStatus ignores statuses without a tile and junk groups", () => {
