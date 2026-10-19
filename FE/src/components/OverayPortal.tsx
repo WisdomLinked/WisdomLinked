@@ -1,11 +1,13 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
 
-const OverlayPortal = ({children, closeModal}: any) => {
+const OverlayPortal = ({children, closeModal, zIndex = 100000}: any) => {
     return (
         createPortal(
-            <div className='fixed top-0 left-0 w-full h-full z-[100000] animation_fadeIn'>
-                <div className='w-full h-full' onClick={closeModal}/>
+            <div className='fixed inset-0 animation_fadeIn' style={{ zIndex }}>
+                {/* Behind the menu. A full-size sibling painted on top swallows the
+                    click that opened the menu and closes it immediately. */}
+                <div className='absolute inset-0 z-0' onClick={closeModal}/>
                 {children}
             </div>,
             document.getElementsByTagName('body')[0]

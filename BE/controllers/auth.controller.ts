@@ -1196,11 +1196,28 @@ const setOAuthRole = async (req: any, res: Response) => {
     }
 };
 
+/** Multipart fields arrive as plain text. Older clients also JSON-stringify them. */
+const readMultipartString = (val: unknown): string => {
+    if (val == null) return '';
+    const raw = String(val).trim();
+    if (!raw) return '';
+    try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed === 'string') return parsed.trim();
+    } catch {
+        // A bare email is not JSON. JSON.parse("name@school.edu") throws.
+    }
+    return raw;
+};
+
 const updateResume = async (req: Request, res: Response) => {
     try {
-        const email = !req.body.email ? null : JSON.parse(req.body.email)
+        const email = readMultipartString(req.body.email).toLowerCase();
+        if (!email) {
+            return res.status(400).json({ status: 'FAIL', error: 'Email is required.' });
+        }
         // check if user exists
-        const user = await User.findOne({ email: email.toLowerCase() });
+        const user = await User.findOne({ email });
         if (!user) {
             return res.status(200).json({ status: 'FAIL', error: AUTH_USER_NOT_FOUND });
         }
