@@ -43,6 +43,26 @@ describe('UserListTable', () => {
     expect(screen.getAllByText('555-0100').length).toBeGreaterThan(0);
   });
 
+  it('opens a stored Spaces resume without prefixing the API host', async () => {
+    const actor = userEvent.setup();
+    const spacesUrl = 'https://wisdomlinked-store.nyc3.digitaloceanspaces.com/resumes/1791253557640_Resume_v9.pdf';
+    render(
+      <UserListTable
+        users={[{ ...user, resume: spacesUrl }]}
+        emptyMessage="None"
+        onStatusChange={vi.fn()}
+        onManage={vi.fn()}
+        onImpersonate={vi.fn()}
+        onAudit={vi.fn()}
+      />,
+    );
+
+    await actor.click(screen.getAllByRole('button', { name: 'Show details' })[0]);
+    const links = screen.getAllByRole('link', { name: 'resume' });
+    expect(links.length).toBeGreaterThan(0);
+    links.forEach(link => expect(link).toHaveAttribute('href', spacesUrl));
+  });
+
   it('shows status as plain text, with no dropdown, in both the mobile card and the desktop row', () => {
     render(
       <UserListTable
