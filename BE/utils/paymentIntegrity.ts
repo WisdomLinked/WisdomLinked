@@ -38,6 +38,45 @@ export function isActionable(verdict: BookingPaymentVerdict): boolean {
     return ACTIONABLE_VERDICTS.includes(verdict);
 }
 
+export type SeatCheckInput = {
+    type?: string;
+    status?: string;
+    /** Set while a proposed 1:1 is waiting for the student to pay. */
+    paymentDeadline?: string | Date | null;
+    priceCents: number;
+    ownCharges?: Array<{ status?: string }>;
+    /** A completed charge for this person exists on this session or another date in the same series. */
+    seriesHasCompletedCharge?: boolean;
+};
+
+export type SeatCheck = {
+    /** `waiting` is a proposed 1:1 that has not been paid yet. It is not a problem. */
+    verdict: BookingPaymentVerdict | 'waiting';
+    list: boolean;
+};
+
+/** Decide whether an enrolled person on a paid session belongs on the admin problem list. */
+export function checkSeat(input: SeatCheckInput): SeatCheck {
+    const folded = foldChargeRows(input.ownCharges || []);
+    if (input.seriesHasCompletedCharge) folded.hasCompletedCharge = true;
+
+    const noChargeYet = !folded.hasCompletedCharge
+        && !folded.hasPendingCharge
+        && !folded.hasWithheldCharge
+        && !folded.hasRefundedCharge;
+    const waitingForPayment = input.type === 'individual'
+        && input.status === 'pending'
+        && !!input.paymentDeadline
+        && noChargeYet;
+    if (waitingForPayment) return { verdict: 'waiting', list: false };
+
+    const verdict = classifyBookingPayment({
+        priceCents: input.priceCents,
+        ...folded,
+    });
+    return { verdict, list: isActionable(verdict) };
+}
+
 export type IntegritySummary = Record<BookingPaymentVerdict, number>;
 
 export function summarizeVerdicts(verdicts: BookingPaymentVerdict[]): IntegritySummary {
