@@ -19,6 +19,7 @@ import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
 import { deleteGroupAction, leaveGroupAction, refreshSeminarMembers } from "../../../../actions/groupChatActions";
 import { participantsExceptAdmin } from "../../../../utils/enrolledParticipants";
+import { OVERLAY_Z_MENU } from "../../../../utils/overlayLayers";
 import GroupsIcon from "@mui/icons-material/Groups";
 import ClearIcon from '@mui/icons-material/Clear';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
@@ -184,7 +185,10 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     };
 
     const handleParticipantsOpenDialog = () => {
-        setParticipantsDialogOpen(true);
+        // Close the three-dot menu first. Opening the list in the same click
+        // leaves it under that full-screen layer, which then dismisses it.
+        set_buttonsModalShow(false);
+        window.setTimeout(() => setParticipantsDialogOpen(true), 0);
     };
 
     const handleParticipantsCloseDialog = () => {
@@ -812,9 +816,9 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             ) : null}
             {
                 buttonsModalShow ?
-                    <OverlayPortal closeModal={() => set_buttonsModalShow(false)}>
+                    <OverlayPortal zIndex={OVERLAY_Z_MENU} closeModal={() => set_buttonsModalShow(false)}>
                         <div
-                            className={`absolute top-[130px] right-5 min-w-[260px] max-w-[min(100vw-2rem,320px)] rounded-2xl border p-1 shadow-lg ${
+                            className={`absolute top-[130px] right-5 z-10 min-w-[260px] max-w-[min(100vw-2rem,320px)] rounded-2xl border p-1 shadow-lg ${
                                 theme === "light"
                                     ? "border-slate-200 bg-white text-slate-900"
                                     : "border-slate-700 bg-[#141414] text-white"

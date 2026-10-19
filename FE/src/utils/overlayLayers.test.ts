@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   OVERLAY_Z_DIALOG,
   OVERLAY_Z_DOCUMENT_PREVIEW,
+  OVERLAY_Z_MENU,
   OVERLAY_Z_PANEL,
   OVERLAY_Z_PROFILE_CARD,
 } from './overlayLayers';
@@ -14,7 +15,8 @@ describe('overlay stacking order', () => {
   });
 
   it('keeps the whole ladder in order', () => {
-    expect(OVERLAY_Z_PANEL).toBeLessThan(OVERLAY_Z_DIALOG);
+    expect(OVERLAY_Z_PANEL).toBeLessThan(OVERLAY_Z_MENU);
+    expect(OVERLAY_Z_MENU).toBeLessThan(OVERLAY_Z_DIALOG);
     expect(OVERLAY_Z_DIALOG).toBeLessThan(OVERLAY_Z_PROFILE_CARD);
     expect(OVERLAY_Z_PROFILE_CARD).toBeLessThan(OVERLAY_Z_DOCUMENT_PREVIEW);
   });
