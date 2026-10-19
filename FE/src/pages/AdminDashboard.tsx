@@ -76,7 +76,7 @@ const adminNavItems = [
   { id: 'majors', label: 'Majors', icon: GraduationCap },
   { id: 'featuredExperts', label: 'Featured experts', icon: Award },
   { id: 'auditLog', label: 'Audit log', icon: ScrollText },
-  { id: 'chatBotQA', label: 'Chatbot Q&A', icon: Bot },
+  { id: 'chatBotQA', label: 'HelpBot Q&A', icon: Bot },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -172,12 +172,12 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
             />
             <StatCard
               alignStart
-              label="Chatbot Q&A"
+              label="HelpBot Q&A"
               value={fmt(stats.unansweredChatbotQuestions)}
               subline="User questions without an answer yet"
               icon={Bot}
               color="warning"
-              tooltip="Curate chatbot knowledge"
+              tooltip="Curate HelpBot answers"
               onClick={() => go('chatBotQA', '?unanswered=1')}
             />
           </div>
@@ -429,7 +429,7 @@ export default function AdminDashboard() {
     if (shouldShowChatbot(d, s.unansweredChatbotQuestions)) {
       items.push({
         id: 'admin-chatbot-qa',
-        title: 'Chatbot Q&A',
+        title: 'HelpBot Q&A',
         meta:
           s.unansweredChatbotQuestions === 1
             ? '1 question still needs an answer.'
@@ -518,7 +518,7 @@ export default function AdminDashboard() {
                   : section === 'registerUser'
                     ? 'Register user'
                     : section === 'chatBotQA'
-                      ? 'Chatbot Q&A'
+                      ? 'HelpBot Q&A'
                       : section === 'majors'
                           ? 'Majors'
                           : section === 'featuredExperts'
