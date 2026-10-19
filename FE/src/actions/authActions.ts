@@ -51,7 +51,9 @@ export const updateMe = () => {
     }
 }
 
-export const logoutUser = () => {
+export const LOGOUT_TO_HOMEPAGE = "/";
+
+export const logoutUser = (redirectTo: string = "/login") => {
     return async (dispatch: Dispatch) => {
         await flushOwedChatReads();
         clearCsrfToken();
@@ -68,6 +70,6 @@ export const logoutUser = () => {
         dispatch({
             type: actionTypes.resetChat
         })
-        window.location.href = "/login";
+        window.location.href = redirectTo;
     }
 }
