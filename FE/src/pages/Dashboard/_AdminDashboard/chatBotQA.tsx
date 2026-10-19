@@ -116,7 +116,7 @@ const ChatBotQA = () => {
     return (
         <div className="w-full h-full pt-10 overflow-y-auto text-wl-ink px-[18px]">
             <div className="w-full max-w-[1500px] mx-auto text-wl-ink">
-                <div className="text-center text-3xl font-semibold text-wl-brand mb-8">Chat Bot Q&A Management</div>
+                <div className="text-center text-3xl font-semibold text-wl-brand mb-8">HelpBot Q&A Management</div>
                 
                 <div className="w-full bg-wl-card rounded-2xl border border-wl-line shadow-[0_10px_30px_rgba(35,76,106,0.08)] overflow-hidden">
                     <div className="w-full flex flex-col lg:flex-row lg:justify-between lg:items-center p-6 gap-4 border-b border-wl-line bg-wl-pageAlt/40">
