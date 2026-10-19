@@ -1,7 +1,8 @@
 /** Build a browser-usable URL for an expert resume (relative path or absolute). */
 export function resolveResumePublicUrl(resume: unknown): string {
-  const s = typeof resume === "string" ? resume.trim() : "";
-  if (!s) return "";
+  const raw = typeof resume === "string" ? resume.trim() : "";
+  if (!raw) return "";
+  const s = raw.replace(/^\/+(?=https?:\/\/)/i, "");
   if (/^https?:\/\//i.test(s)) return s;
   const base =
     typeof process !== "undefined" ? String(process.env.REACT_APP_SERVER_URL || "").replace(/\/$/, "") : "";
