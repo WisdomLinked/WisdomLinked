@@ -8,6 +8,7 @@ import { notify } from '../../../utils/notify';
 import { detectUserTimeZone } from '../../../utils/schedulingTimezone';
 import type { BookingNoticeHours, BufferMinutes } from '../../../types/scheduling';
 import type { AppointmentDurationMinutes } from '../../../utils/appointmentDurations';
+import { PROFILE_COMPLETION_CARD_CLASS } from '../profileCompletion/profileCompletionStyles';
 import SetupProgressBar from './SetupProgressBar';
 import SetupStepRow from './SetupStepRow';
 import { BookingRulesStepControl, DurationStepControl, FOCUS_RING, RateStepControl } from './StepControls';
@@ -103,7 +104,7 @@ export default function ExpertSetupCard({ onOpenAvailability }: { onOpenAvailabi
   return (
     <section
       aria-labelledby="expert-setup-heading"
-      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+      className={PROFILE_COMPLETION_CARD_CLASS}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
