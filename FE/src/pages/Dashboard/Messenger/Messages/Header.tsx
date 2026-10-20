@@ -402,27 +402,12 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         && chosenGroupChatDetails?.type !== 'individual'
         && isGroupAdmin;
 
-    // Ticks every 30s so the call window opens/closes without needing a refresh.
+    // Ticks every 30s so a seminar shows as ended without needing a refresh.
     const [nowTick, setNowTick] = useState(Date.now());
     useEffect(() => {
         const id = setInterval(() => setNowTick(Date.now()), 30000);
         return () => clearInterval(id);
     }, []);
-
-    // The student's call to an expert is gated: it only opens within ~2 minutes of a
-    // scheduled (accepted) 1:1 starting, and stays open until it ends. Experts can
-    // call anytime. `events` holds the accepted/pending 1:1s between these two users.
-    const CALL_LEAD_MS = 2 * 60 * 1000;
-    const callWindowOpen = useMemo(() => {
-        const now = nowTick;
-        return (events || []).some((ev: any) => {
-            if (String(ev?.status || "").toLowerCase() !== "accepted") return false;
-            const start = new Date(ev.start).getTime();
-            const end = new Date(ev.end).getTime();
-            if (Number.isNaN(start) || Number.isNaN(end)) return false;
-            return now >= start - CALL_LEAD_MS && now < end;
-        });
-    }, [events, nowTick]);
 
     const seminarHasEnded = useMemo(() => {
         if (chosenGroupChatDetails?.type !== "seminar") return false;
@@ -432,14 +417,11 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         return !Number.isNaN(ts) && ts < nowTick;
     }, [chosenGroupChatDetails?.type, chosenGroupChatDetails?.end, chosenGroupChatDetails?.start, nowTick]);
 
-    const isStudentToExpertDm = viewerIsStudent && peerRoleLower === "expert";
-    /** A student may only start/join the call once the meeting window is open; experts are unrestricted. */
-    const studentCannotStartDmVideoToExpert = isStudentToExpertDm && !callWindowOpen;
-    const dmVideoTitle = studentCannotStartDmVideoToExpert
-        ? "You can join the call about 2 minutes before your scheduled meeting starts."
-        : !conversationId
-          ? "Chat is still loading — try again in a moment"
-          : "Start call";
+    /** Students never start a call from a direct message; they join one from its card in the thread. */
+    const canStartDmCall = !viewerIsStudent;
+    const dmVideoTitle = !conversationId
+        ? "Chat is still loading — try again in a moment"
+        : "Start call";
 
     // Hover shortcut on the peer's name → appointment flow. A student jumps to the
     // expert's booking page to request a 1:1; an expert opens the appointments view
@@ -633,7 +615,8 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                         onVideoClick={() => void handleDmStartVideoOrVoice()}
                                         onNewAppointment={canMakeAppointment ? handleNewAppointment : undefined}
                                         newAppointmentLabel={viewerIsStudent ? "Make a new appointment" : "Propose a new session"}
-                                        videoDisabled={!conversationId || studentCannotStartDmVideoToExpert}
+                                        showVideo={canStartDmCall}
+                                        videoDisabled={!conversationId}
                                         videoTitle={dmVideoTitle}
                                         onMoreClick={() => set_buttonsModalShow(true)}
                                     />
@@ -682,34 +665,37 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                 <div className="w-[120px] flex items-center justify-end">
                 {chosenChatDetails && enabledEvent && (
                     <div className="flex items-center justify-center">
-                        <IconButton
-                            style={{ color: theme === "light" ? "#0f172a" : "white" }}
-                            className="disabled:opacity-50"
-                            title={dmVideoTitle}
-                            disabled={!conversationId || studentCannotStartDmVideoToExpert}
-                            onClick={async () => {
-                                const pendingWindow = window.open("", "_blank");
-                                if (enabledEvent) {
-                                    SetTotalTimeSpent(Date.now());
-                                }
-                                if (!conversationId) {
-                                    if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                    notify.error('Chat is still loading — try again in a moment');
-                                    return;
-                                }
-                                const res = await startMeeting({ conversationId });
-                                if (res?.jitsiUrl) {
-                                    trackMeetingJoin(res.meetingThreadId, res.jitsiUrl, pendingWindow);
-                                    appendMeetingStartMessage(res, dispatch);
-                                    openMeetingUrl(res.jitsiUrl, pendingWindow);
-                                } else {
-                                    if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
-                                    notify.error(res?.error || 'Could not start the call');
-                                }
-                            }}
-                        >
-                            <Video className="h-5 w-5" strokeWidth={2} />
-                        </IconButton>
+                        {canStartDmCall ? (
+                            <IconButton
+                                style={{ color: theme === "light" ? "#0f172a" : "white" }}
+                                className="disabled:opacity-50"
+                                aria-label="Start video call"
+                                title={dmVideoTitle}
+                                disabled={!conversationId}
+                                onClick={async () => {
+                                    const pendingWindow = window.open("", "_blank");
+                                    if (enabledEvent) {
+                                        SetTotalTimeSpent(Date.now());
+                                    }
+                                    if (!conversationId) {
+                                        if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
+                                        notify.error('Chat is still loading — try again in a moment');
+                                        return;
+                                    }
+                                    const res = await startMeeting({ conversationId });
+                                    if (res?.jitsiUrl) {
+                                        trackMeetingJoin(res.meetingThreadId, res.jitsiUrl, pendingWindow);
+                                        appendMeetingStartMessage(res, dispatch);
+                                        openMeetingUrl(res.jitsiUrl, pendingWindow);
+                                    } else {
+                                        if (pendingWindow && !pendingWindow.closed) pendingWindow.close();
+                                        notify.error(res?.error || 'Could not start the call');
+                                    }
+                                }}
+                            >
+                                <Video className="h-5 w-5" strokeWidth={2} />
+                            </IconButton>
+                        ) : null}
                         <button
                             className={theme === "light" ? "text-slate-900 hover:bg-slate-100 rounded-lg p-1" : "text-white"}
                             onClick={() => set_buttonsModalShow(true)}

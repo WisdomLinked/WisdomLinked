@@ -20,6 +20,7 @@ type ChatHeaderInnerProps = ChatHeaderProps & {
     className?: string;
     onNameAreaClick?: () => void;
     onVideoClick?: () => void;
+    showVideo?: boolean;
     videoDisabled?: boolean;
     videoTitle?: string;
     onMoreClick?: () => void;
@@ -62,6 +63,7 @@ const ChatHeader: React.FC<ChatHeaderInnerProps> = ({
     className = '',
     onNameAreaClick,
     onVideoClick,
+    showVideo = true,
     videoDisabled,
     videoTitle,
     onMoreClick,
@@ -145,16 +147,18 @@ const ChatHeader: React.FC<ChatHeaderInnerProps> = ({
                 ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-1">
-                <button
-                    type="button"
-                    aria-label="Start video call"
-                    title={videoTitle}
-                    disabled={videoDisabled}
-                    onClick={onVideoClick}
-                    className={`${actionIconBtnClass} disabled:pointer-events-none disabled:opacity-50`}
-                >
-                    <Video size={18} />
-                </button>
+                {showVideo ? (
+                    <button
+                        type="button"
+                        aria-label="Start video call"
+                        title={videoTitle}
+                        disabled={videoDisabled}
+                        onClick={onVideoClick}
+                        className={`${actionIconBtnClass} disabled:pointer-events-none disabled:opacity-50`}
+                    >
+                        <Video size={18} />
+                    </button>
+                ) : null}
                 <button
                     type="button"
                     aria-label="More options"
