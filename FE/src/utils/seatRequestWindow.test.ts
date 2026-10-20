@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SEAT_REQUEST_HOLD_MS,
+  canJoinWaitlist,
   seatRequestActionLabel,
   seatRequestWindow,
   seatRequestWindowMessage,
@@ -11,17 +12,11 @@ const NOW = new Date('2026-07-28T12:00:00Z').getTime();
 const DAY = 24 * 60 * 60 * 1000;
 
 describe('seatRequestWindow', () => {
-  it('is open inside the 7-day hold window', () => {
+  it('is open for any future seminar (including beyond 7 days)', () => {
     expect(seatRequestWindow(NOW + 3 * DAY, NOW).state).toBe('open');
     expect(seatRequestWindow(NOW + SEAT_REQUEST_HOLD_MS, NOW).state).toBe('open');
+    expect(seatRequestWindow(NOW + 30 * DAY, NOW).state).toBe('open');
     expect(seatRequestWindow(NOW + 60_000, NOW).state).toBe('open');
-  });
-
-  it('is too early beyond the hold window, and reports when it opens', () => {
-    const start = NOW + 30 * DAY;
-    const w = seatRequestWindow(start, NOW);
-    expect(w.state).toBe('too_early');
-    expect(w.opensAtMs).toBe(start - SEAT_REQUEST_HOLD_MS);
   });
 
   it('is closed once the seminar has started', () => {
@@ -29,7 +24,7 @@ describe('seatRequestWindow', () => {
     expect(seatRequestWindow(NOW, NOW).state).toBe('closed');
   });
 
-  it('treats missing or sentinel start dates as undated', () => {
+  it('treats missing or sentinel start dates as undated (still joinable)', () => {
     expect(seatRequestWindow(null, NOW).state).toBe('undated');
     expect(seatRequestWindow(undefined, NOW).state).toBe('undated');
     expect(seatRequestWindow(0, NOW).state).toBe('undated');
@@ -38,45 +33,48 @@ describe('seatRequestWindow', () => {
 });
 
 describe('seatRequestWindowMessage', () => {
-  it('tells a too-early student the date to come back after', () => {
+  it('tells students they can join anytime with no payment until offered', () => {
     const msg = seatRequestWindowMessage(seatRequestWindow(NOW + 30 * DAY, NOW), { price: 40 });
-    expect(msg).toMatch(/^After /);
-    expect(msg).toContain('check for seat availability again');
+    expect(msg).toContain('Join the waitlist');
+    expect(msg).toContain('No payment until you join');
+    expect(msg).not.toContain('7 days');
+    expect(msg).not.toContain('host to approve');
   });
 
-  it('tells an in-window student to pay to join the waiting list', () => {
-    expect(seatRequestWindowMessage(seatRequestWindow(NOW + DAY, NOW), { price: 40 })).toContain(
-      'Pay to get on the waiting list for the host to approve',
-    );
+  it('uses the same copy for free and paid seminars', () => {
+    const paid = seatRequestWindowMessage(seatRequestWindow(NOW + DAY, NOW), { price: 40 });
+    const free = seatRequestWindowMessage(seatRequestWindow(NOW + DAY, NOW), { price: 0 });
+    expect(paid).toBe(free);
+    expect(free).not.toContain('Pay');
   });
 
-  it('drops the payment wording for free seminars', () => {
-    const msg = seatRequestWindowMessage(seatRequestWindow(NOW + DAY, NOW), { price: 0 });
-    expect(msg).not.toContain('Pay');
-    expect(msg).toContain('waiting list');
-  });
-
-  it('explains started and undated seminars', () => {
+  it('explains started seminars', () => {
     expect(seatRequestWindowMessage(seatRequestWindow(NOW - DAY, NOW))).toContain('already started');
-    expect(seatRequestWindowMessage(seatRequestWindow(null, NOW))).toContain('start date');
   });
 });
 
 describe('seatRequestWindowShortLabel', () => {
-  it('names the opening date while it is too early', () => {
-    expect(seatRequestWindowShortLabel(seatRequestWindow(NOW + 30 * DAY, NOW))).toMatch(
-      /^Waiting list opens /,
-    );
+  it('says join waitlist while open', () => {
+    expect(seatRequestWindowShortLabel(seatRequestWindow(NOW + 30 * DAY, NOW))).toBe('Join waitlist');
+    expect(seatRequestWindowShortLabel(seatRequestWindow(NOW + DAY, NOW))).toBe('Join waitlist');
   });
 
-  it('says the list is open inside the window', () => {
-    expect(seatRequestWindowShortLabel(seatRequestWindow(NOW + DAY, NOW))).toBe('Waiting list open');
+  it('says closed after start', () => {
+    expect(seatRequestWindowShortLabel(seatRequestWindow(NOW - DAY, NOW))).toBe('Waiting list closed');
   });
 });
 
 describe('seatRequestActionLabel', () => {
-  it('mentions payment only when the seminar costs money', () => {
-    expect(seatRequestActionLabel(40)).toBe('Pay to join the waiting list');
-    expect(seatRequestActionLabel(0)).toBe('Join the waiting list');
+  it('never mentions payment on join', () => {
+    expect(seatRequestActionLabel(40)).toBe('Join waitlist');
+    expect(seatRequestActionLabel(0)).toBe('Join waitlist');
+  });
+});
+
+describe('canJoinWaitlist', () => {
+  it('allows join whenever the seminar has not started', () => {
+    expect(canJoinWaitlist(seatRequestWindow(NOW + 30 * DAY, NOW))).toBe(true);
+    expect(canJoinWaitlist(seatRequestWindow(null, NOW))).toBe(true);
+    expect(canJoinWaitlist(seatRequestWindow(NOW - 1, NOW))).toBe(false);
   });
 });

@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     seminarIsFull,
+    occupiedSeminarSeats,
+    claimableSeatCap,
     hasCapacityLimit,
     firstFullFutureOccurrence,
     resolveSeatApprovalBlock,
@@ -10,6 +12,7 @@ import {
     seatRequestWindowState,
     seatRequestWindowOpensAt,
     seatRequestUnavailableMessage,
+    isLegacyHeldSeatRequest,
     SEAT_REQUEST_HOLD_MS,
 } from '../utils/seminarCapacity';
 
@@ -21,6 +24,16 @@ test('seminarIsFull ignores the host and honors capacity', () => {
     assert.equal(seminarIsFull(gc), false); // 1 enrolled student, cap 2
     gc.participants = ['host', 's1', 's2'];
     assert.equal(seminarIsFull(gc), true); // 2 enrolled students, cap 2
+});
+
+test('seminarIsFull counts soft-held awaiting_payment seats as occupied', () => {
+    const gc = { admin: 'host', maxAttendees: 2, participants: ['host', 's1'] };
+    assert.equal(seminarIsFull(gc, 0), false);
+    assert.equal(seminarIsFull(gc, 1), true); // 1 enrolled + 1 soft hold = cap
+    assert.equal(occupiedSeminarSeats(gc, 1), 2);
+    assert.equal(claimableSeatCap(2, 1), 1);
+    assert.equal(claimableSeatCap(2, 2), 0);
+    assert.equal(claimableSeatCap(null, 5), null);
 });
 
 test('seminarIsFull is false when no capacity is set (unlimited)', () => {
@@ -143,37 +156,33 @@ test('computeSeatRequestDeadline is capped by the 7-day hold expiry', () => {
     assert.equal(deadline.getTime(), now + SEAT_REQUEST_HOLD_MS);
 });
 
-test('seatRequestWindowOpen only allows future seminars within the hold window', () => {
+test('seatRequestWindowOpen allows any future seminar (interest waitlist anytime)', () => {
     const now = 1_000_000_000_000;
     assert.equal(seatRequestWindowOpen(now - HOUR, now), false); // past
-    assert.equal(seatRequestWindowOpen(now + 3 * DAY, now), true); // within 7 days
-    assert.equal(seatRequestWindowOpen(now + 8 * DAY, now), false); // beyond 7 days
+    assert.equal(seatRequestWindowOpen(now + 3 * DAY, now), true);
+    assert.equal(seatRequestWindowOpen(now + 8 * DAY, now), true); // beyond old 7-day hold
+    assert.equal(seatRequestWindowOpen(now + 30 * DAY, now), true);
 });
 
-test('seatRequestWindowState separates "too early" from "closed" and "undated"', () => {
+test('seatRequestWindowState is open for future seminars (no too_early gate)', () => {
     const now = 1_000_000_000_000;
     assert.equal(seatRequestWindowState(now + 3 * DAY, now), 'open');
     assert.equal(seatRequestWindowState(now + SEAT_REQUEST_HOLD_MS, now), 'open');
-    assert.equal(seatRequestWindowState(now + 8 * DAY, now), 'too_early');
+    assert.equal(seatRequestWindowState(now + 8 * DAY, now), 'open');
     assert.equal(seatRequestWindowState(now - HOUR, now), 'closed');
     assert.equal(seatRequestWindowState(0, now), 'undated');
 });
 
-test('seatRequestWindowOpensAt is the boundary seatRequestWindowOpen enforces', () => {
+test('seatRequestWindowOpensAt still reports the legacy 7-day boundary', () => {
     const now = 1_000_000_000_000;
     const start = now + 30 * DAY;
-    const opensAt = seatRequestWindowOpensAt(start);
-    assert.equal(seatRequestWindowOpen(start, opensAt - 1), false);
-    assert.equal(seatRequestWindowOpen(start, opensAt), true);
+    assert.equal(seatRequestWindowOpensAt(start), start - SEAT_REQUEST_HOLD_MS);
 });
 
-test('seatRequestUnavailableMessage names the date to come back after', () => {
-    const now = Date.UTC(2026, 6, 28); // 2026-07-28
-    const start = Date.UTC(2026, 7, 20); // 2026-08-20, well beyond the hold window
-    const msg = seatRequestUnavailableMessage(start, now);
-    // Opens 7 days before the start: 2026-08-13.
-    assert.ok(msg && msg.includes('Aug 13, 2026'), msg || 'expected a message');
-    assert.ok(msg!.includes('check for seat availability again'));
+test('seatRequestUnavailableMessage is null far before start (join anytime)', () => {
+    const now = Date.UTC(2026, 6, 28);
+    const start = Date.UTC(2026, 7, 20);
+    assert.equal(seatRequestUnavailableMessage(start, now), null);
 });
 
 test('seatRequestUnavailableMessage is null once the waiting list is open', () => {
@@ -181,8 +190,16 @@ test('seatRequestUnavailableMessage is null once the waiting list is open', () =
     assert.equal(seatRequestUnavailableMessage(now + 3 * DAY, now), null);
 });
 
-test('seatRequestUnavailableMessage explains started and undated seminars', () => {
+test('seatRequestUnavailableMessage explains started seminars; undated is allowed', () => {
     const now = 1_000_000_000_000;
     assert.match(String(seatRequestUnavailableMessage(now - HOUR, now)), /already started/);
-    assert.match(String(seatRequestUnavailableMessage(0, now)), /start date/);
+    assert.equal(seatRequestUnavailableMessage(0, now), null);
+});
+
+test('isLegacyHeldSeatRequest detects card holds and wallet-approval pending rows', () => {
+    assert.equal(isLegacyHeldSeatRequest({ paymentIntent: 'pi_abc' }), true);
+    assert.equal(isLegacyHeldSeatRequest({ paymentMode: 'wallet', amount: 5000 }), true);
+    assert.equal(isLegacyHeldSeatRequest({ paymentMode: 'wallet', amount: 0 }), false);
+    assert.equal(isLegacyHeldSeatRequest({ amount: 0 }), false);
+    assert.equal(isLegacyHeldSeatRequest({}), false);
 });

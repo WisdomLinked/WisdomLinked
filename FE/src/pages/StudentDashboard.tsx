@@ -1606,6 +1606,10 @@ export default function StudentDashboard() {
           {activeItem !== 'chat' ? (
             <div className="px-4 pt-3 sm:px-6">
               <DecisionNotices
+                onOpenSeminar={(groupChatId) => {
+                  setOpenSeminarId(groupChatId);
+                  setActiveItem('seminars');
+                }}
                 onPay={(notice) => {
                   if (notice.kind === 'seat') {
                     setSeatPayTarget({

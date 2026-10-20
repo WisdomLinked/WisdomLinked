@@ -42,6 +42,8 @@ for (const scenario of ['expert accepts', 'different recipient', 'expired invita
       return request;
     });
     t.mock.method(SeatRequest, 'updateOne', async () => ({}));
+    // Soft-held seats are counted before claimSeminarSeat; no Mongo in this suite.
+    t.mock.method(SeatRequest, 'countDocuments', async () => 0);
     t.mock.method(PaymentHistory, 'find', () => ({ select: async () => [] }));
     t.mock.method(PaymentHistory.prototype, 'save', async function(this: any) { charge = this.toObject(); return this; });
     t.mock.method(AppState, 'findOne', async () => ({ stripeMode: 'test' }));
@@ -49,6 +51,11 @@ for (const scenario of ['expert accepts', 'different recipient', 'expired invita
       const chain = { populate: () => chain, then: (resolve: any) => Promise.resolve(group).then(resolve) };
       return chain;
     });
+    // Soft-seat-aware claim uses findOneAndUpdate; enrollAndConfirmSeminar still updateMany's.
+    t.mock.method(GroupChat, 'findOneAndUpdate', async () => ({
+      ...group,
+      participants: [...group.participants, guestId],
+    }));
     t.mock.method(GroupChat, 'updateMany', async (_filter: any, update: any) => { enrolled = update; });
     t.mock.method(User, 'findById', async (id: string) => ({ _id: id, role: 'expert', username: 'Expert', email: `${id}@example.com` }));
     t.mock.method(User, 'updateOne', async (filter: any, update: any) => { updatedUser = { filter, update }; });
