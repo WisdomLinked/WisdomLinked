@@ -21,6 +21,8 @@ export type ProfileCompletionSectionView = {
 
 type Props = {
   headingId?: string;
+  /** Small uppercase label above the title (matches expert setup card). */
+  eyebrow?: string;
   title: string;
   helperText: string;
   percent: number;
@@ -36,6 +38,7 @@ const SECONDARY_BUTTON = `inline-flex h-10 shrink-0 items-center justify-center 
 
 export default function ProfileCompletionCard({
   headingId = 'profile-completion-heading',
+  eyebrow = 'Finish your student profile',
   title,
   helperText,
   percent,
@@ -51,33 +54,36 @@ export default function ProfileCompletionCard({
     <section aria-labelledby={headingId} className={PROFILE_COMPLETION_CARD_CLASS}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h2 id={headingId} className="font-serif text-2xl font-medium leading-tight text-[#1A3A4A]">
+          {eyebrow ? (
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {eyebrow}
+            </p>
+          ) : null}
+          <h2
+            id={headingId}
+            className={`${eyebrow ? 'mt-1 ' : ''}font-serif text-2xl font-medium leading-tight text-[#1A3A4A]`}
+          >
             {title}
           </h2>
           <p className="mt-1 text-sm text-gray-500">{helperText}</p>
         </div>
-        <div className="flex shrink-0 items-start gap-2">
-          <p className="pt-0.5 text-3xl font-semibold tabular-nums text-[#234C6A]" aria-hidden>
-            {percent}%
-          </p>
-          {complete && onDismiss ? (
-            <button
-              type="button"
-              onClick={onDismiss}
-              aria-label="Dismiss profile completion card"
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 ${PROFILE_COMPLETION_FOCUS_RING}`}
-            >
-              <X className="h-4 w-4" aria-hidden />
-            </button>
-          ) : null}
-        </div>
+        {complete && onDismiss ? (
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Dismiss profile completion card"
+            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-[#234C6A] ${PROFILE_COMPLETION_FOCUS_RING}`}
+          >
+            <X className="h-5 w-5" aria-hidden />
+          </button>
+        ) : null}
       </div>
 
       <div className="mt-5">
         <SegmentedProgressBar
           label="Profile completion"
           segments={sections.map((section) => ({
-            // Weighted flex so filled area tracks the header percent.
+            // Weighted flex so filled area tracks the single under-bar percent.
             ratio: section.total ? section.filled / section.total : 0,
             weight: section.weight,
           }))}
@@ -167,12 +173,10 @@ export function ProfileCompletionCardSkeleton() {
       aria-hidden
       data-testid="profile-completion-skeleton"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="h-7 w-56 rounded bg-slate-200" />
-          <div className="h-4 w-full max-w-md rounded bg-slate-100" />
-        </div>
-        <div className="h-9 w-14 rounded bg-slate-200" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="h-3 w-40 rounded bg-slate-100" />
+        <div className="h-7 w-56 rounded bg-slate-200" />
+        <div className="h-4 w-full max-w-md rounded bg-slate-100" />
       </div>
       <div className="mt-5 h-1.5 rounded-full bg-slate-100" />
       <div className="mt-4 space-y-3">

@@ -104,6 +104,7 @@ export default function StudentProfileCompletionCard({ onOpenSection }: Props) {
 
   return (
     <ProfileCompletionCard
+      eyebrow="Finish your student profile"
       title={complete ? 'Your profile is complete' : 'Complete your profile'}
       helperText={
         complete

@@ -57,8 +57,11 @@ describe('ProfileCompletionCard', () => {
       'aria-valuenow',
       '20',
     );
+    expect(screen.getByText('Finish your student profile')).toBeInTheDocument();
     expect(screen.getByText('3 of 6')).toBeInTheDocument();
     expect(screen.getByText('0 of 3 complete')).toBeInTheDocument();
+    // Percent appears once under the bar (not also as a large header figure).
+    expect(screen.getAllByText('20%')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Finish section: Academic background' }));
     expect(onSectionAction).toHaveBeenCalledWith('#profile-academic');
   });
@@ -119,8 +122,10 @@ describe('StudentProfileCompletionCard', () => {
       'aria-valuenow',
       '20',
     );
+    expect(screen.getByText('Finish your student profile')).toBeInTheDocument();
     expect(screen.getByText('3 of 6')).toBeInTheDocument();
     expect(screen.getByText('0 of 3 complete')).toBeInTheDocument();
+    expect(screen.getAllByText('20%')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Finish section: Academic background' }));
     expect(onOpenSection).toHaveBeenCalledWith('#profile-academic');
   });
