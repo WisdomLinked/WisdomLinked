@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
-import { useAppSelector } from '../../store';
+import { useEffect, useMemo, useRef } from 'react';
+import { getMe } from '../../api/api';
+import { useAppDispatch, useAppSelector } from '../../store';
 import { detectUserTimeZone } from '../../utils/schedulingTimezone';
 import FormAlert from '../FormAlert';
 import { DASHBOARD_PAGE_TITLE } from './pageTitle';
@@ -12,6 +13,37 @@ export default function StudentSettings() {
   const userDetails = useAppSelector((s: any) => s.auth.userDetails);
   const initial = useMemo(() => settingsFromUser(userDetails, detectUserTimeZone()), [userDetails]);
   const { settings, update, banner, dismissBanner } = useAutoSaveSettings(initial);
+  const dispatch = useAppDispatch();
+  const userRef = useRef(userDetails);
+  userRef.current = userDetails;
+
+  useEffect(() => {
+    let running = false;
+    const refresh = async () => {
+      if (running || document.visibilityState !== 'visible') return;
+      running = true;
+      const res: any = await getMe(undefined, { logoutOnAuth: false }).finally(() => {
+        running = false;
+      });
+      const me = res?.me;
+      if (!me?.notificationPreferences || !me.timeZone) return;
+      const current = userRef.current;
+      const unchanged =
+        me.timeZone === current?.timeZone &&
+        JSON.stringify(me.notificationPreferences) === JSON.stringify(current?.notificationPreferences);
+      if (unchanged) return;
+      dispatch({
+        type: 'updateUserDetails',
+        payload: { notificationPreferences: me.notificationPreferences, timeZone: me.timeZone },
+      });
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [dispatch]);
 
   return (
     <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF] px-6 py-7">

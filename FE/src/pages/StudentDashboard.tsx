@@ -526,9 +526,11 @@ export default function StudentDashboard() {
   }, []);
   const goToDashboardTab = useCallback(() => setActiveItem('dashboard'), []);
   const [profileFocusSectionId, setProfileFocusSectionId] = useState<string | null>(null);
+  const [profileFocusNonce, setProfileFocusNonce] = useState(0);
   const openProfileSection = useCallback((href: string) => {
     const id = href.startsWith('#') ? href.slice(1) : href;
     setProfileFocusSectionId(id);
+    setProfileFocusNonce((n) => n + 1);
     setActiveItem('profile');
   }, []);
   const [showBackLogoutConfirm, setShowBackLogoutConfirm] = useState(false);
@@ -1633,7 +1635,10 @@ export default function StudentDashboard() {
               <StudentChat section={chatSection} />
             </div>
           ) : activeItem === 'profile' ? (
-            <StudentProfile focusSectionId={profileFocusSectionId} />
+            <StudentProfile
+              focusSectionId={profileFocusSectionId}
+              focusNonce={profileFocusNonce}
+            />
           ) : activeItem === 'settings' ? (
             <StudentSettings />
           ) : activeItem === 'expert-profile' ? (
