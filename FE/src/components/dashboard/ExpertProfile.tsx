@@ -30,6 +30,7 @@ import { seatWalletOption } from '../../utils/seatCheckoutOptions';
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
 import {
+  canJoinWaitlist,
   seatRequestActionLabel,
   seatRequestWindow,
   seatRequestWindowMessage,
@@ -480,14 +481,8 @@ export default function ExpertProfile({
           return;
         }
         window.localStorage.removeItem('pendingDetails');
-        if (res?.status === 'pending_approval') {
-          notify.success(
-              paymentBannerMessage({
-                kind: 'withheld',
-                amount: target.price,
-                deciderName: mentor.name,
-              }),
-            );
+        if (res?.status === 'pending' || res?.status === 'pending_approval') {
+          notify.success('You’re on the waitlist. We’ll email you if a seat opens.');
           setSeminarSeatRequestedId(target.id);
           setSeminarCheckout(null);
           return;
@@ -510,7 +505,7 @@ export default function ExpertProfile({
         SetLoadingStatus(false);
       }
     },
-    [loadExpertDetails, mentor.name, dispatch],
+    [loadExpertDetails, dispatch],
   );
 
   const registerSeminar = useCallback(
@@ -520,7 +515,7 @@ export default function ExpertProfile({
     [registerSeminarFor, seminarCheckout],
   );
 
-  // Settle an approved overflow seat, then reflect the new enrollment.
+  // Settle an offered seat (waitlist auto-offer or host invite), then reflect enrollment.
   const paySeatRequest = useCallback(async (paymentIntentId: string) => {
     if (!seatPayTarget) return;
     SetLoadingStatus(true);
@@ -551,31 +546,30 @@ export default function ExpertProfile({
     } finally {
       SetLoadingStatus(false);
     }
-  }, [seatPayTarget, loadExpertDetails, dispatch]);
+  }, [seatPayTarget, loadExpertDetails]);
 
-  // Wallet route for a full seminar: ask the host first, pay only once approved.
-  const requestSeminarSeatWithWallet = useCallback(async () => {
-    if (!seminarCheckout) return;
+  /** Interest waitlist — no payment on join. */
+  const joinSeminarWaitlist = useCallback(async (seminarId: string) => {
     SetLoadingStatus(true);
     setSeminarBookingError(null);
     try {
       const res: any = await requestSeminarSeat({
-        groupChatId: seminarCheckout.id,
-        paymentMode: 'wallet',
+        groupChatId: seminarId,
       }, { quietAccountRestriction: true });
       if (res === false || res?.status === 'FAIL' || res?.error) {
-        setSeminarBookingError(res?.error || 'Could not send your seat request.');
+        setSeminarBookingError(res?.error || 'Could not join the waitlist.');
         return;
       }
       window.localStorage.removeItem('pendingDetails');
-      setSeminarSeatRequestedId(seminarCheckout.id);
+      notify.success('You’re on the waitlist. We’ll email you if a seat opens.');
+      setSeminarSeatRequestedId(seminarId);
       setSeminarCheckout(null);
     } catch (e: any) {
-      setSeminarBookingError(e?.message || 'Could not send your seat request.');
+      setSeminarBookingError(e?.message || 'Could not join the waitlist.');
     } finally {
       SetLoadingStatus(false);
     }
-  }, [seminarCheckout]);
+  }, []);
 
   const displayFollowers =
     followerCountLive ?? mentor.followerCount ?? 0;
@@ -835,13 +829,13 @@ export default function ExpertProfile({
                       </div>
                     ) : item.seatRequest || seminarSeatRequestedId === item.id ? (
                       <div className="mt-2 rounded-[4px] bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
-                        You’re on the waiting list — awaiting host approval.
+                        You’re on the waitlist.
                       </div>
                     ) : (
                       (() => {
                         const waitingList = seatRequestWindow(item.startTs);
                         const canJoinWaitingList =
-                          item.isFull && waitingList.state === 'open';
+                          item.isFull && canJoinWaitlist(waitingList);
                         return (
                           <div className="mt-2 space-y-2">
                             {item.isFull ? (
@@ -864,14 +858,15 @@ export default function ExpertProfile({
                                     setSeminarBookingError('Please log in again to book this session.');
                                     return;
                                   }
+                                  if (item.isFull) {
+                                    void joinSeminarWaitlist(item.id);
+                                    return;
+                                  }
                                   const target = {
                                     id: item.id,
                                     price: item.price,
                                     name: item.title,
-                                    isSeatRequest: item.isFull,
                                   };
-                                  // Nothing to collect on a free seminar, so the
-                                  // checkout would only ask them to confirm twice.
                                   if (target.price > 0) {
                                     setSeminarCheckout(target);
                                     return;
@@ -1359,19 +1354,13 @@ export default function ExpertProfile({
           <StudentBookingCheckout
             type="Seminar"
             price={seminarCheckout.price}
-            isSeatRequest={!!seminarCheckout.isSeatRequest}
-            holdsFunds
             returnUrl={studentBookingReturnUrl}
             pendingDetails={{
               groupChatId: seminarCheckout.id,
               price: seminarCheckout.price,
               name: seminarCheckout.name,
             }}
-            walletOption={
-              seminarCheckout.isSeatRequest
-                ? { kind: 'request', onSubmit: requestSeminarSeatWithWallet }
-                : { kind: 'charge' }
-            }
+            walletOption={{ kind: 'charge' }}
             onPaymentSuccess={registerSeminar}
             onCancel={() => setSeminarCheckout(null)}
           />

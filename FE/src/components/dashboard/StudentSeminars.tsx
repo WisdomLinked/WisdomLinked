@@ -15,6 +15,7 @@ import { canonicalLabelsFromMixedServiceEntries } from '../../constants/serviceO
 import { resolveProfileImageSrc } from '../../utils/profileImage';
 import { seminarCapacityLabel } from '../../utils/seminarCapacityLabel';
 import {
+  canJoinWaitlist,
   seatRequestActionLabel,
   seatRequestWindow,
   seatRequestWindowMessage,
@@ -210,38 +211,12 @@ export default function StudentSeminars({
 
   // Register the student for the seminar once Stripe confirms (or immediately
   // for free seminars, where the checkout calls back with '0'). Enrollment is
-  // immediate — no host approval — and covers the whole recurring series.
-  const joinSeminar = async (
-    paymentIntentId: string,
-    opts?: { requiresApproval?: boolean },
-  ) => {
+  // immediate and covers the whole recurring series. Full seminars use joinWaitlist.
+  const joinSeminar = async (paymentIntentId: string) => {
     if (!selectedSeminar) return;
     SetLoadingStatus(true);
     setBookingError(null);
     try {
-      // A full seminar admits students only via host approval: the checkout has
-      // authorized (held) the fee, and we record a seat request instead of enrolling.
-      if (opts?.requiresApproval) {
-        const response: any = await requestSeminarSeat({
-          groupChatId: selectedSeminar.id,
-          payment_intent: paymentIntentId,
-        });
-        if (response === false || response?.status === 'FAIL' || response?.error) {
-          setBookingError(response?.error || 'Could not submit your seat request.');
-          return;
-        }
-        window.localStorage.removeItem('pendingDetails');
-        notify.success(
-            paymentBannerMessage({
-              kind: 'withheld',
-              amount: selectedSeminar.price,
-              deciderName: selectedSeminar.expertName,
-            }),
-          );
-        setCheckout(null);
-        setSeatRequested(true);
-        return;
-      }
       const response: any = await registerForSeminar({
         groupChatId: selectedSeminar.id,
         payment_intent: paymentIntentId,
@@ -270,7 +245,6 @@ export default function StudentSeminars({
     }
   };
 
-  // Wallet route for a full seminar: the host decides before any money moves.
   const loadSeatRequests = async () => {
     const res: any = await getMySeatRequests();
     setSeatRequestIndex(indexSeatRequests(res?.result));
@@ -318,26 +292,27 @@ export default function StudentSeminars({
     }
   };
 
-  const requestSeatWithWallet = async () => {
+  /** Interest waitlist — no payment, no Stripe hold. */
+  const joinWaitlist = async () => {
     if (!selectedSeminar) return;
     SetLoadingStatus(true);
     setBookingError(null);
     try {
       const response: any = await requestSeminarSeat({
         groupChatId: selectedSeminar.id,
-        paymentMode: 'wallet',
       }, { quietAccountRestriction: true });
       if (response === false || response?.status === 'FAIL' || response?.error) {
-        setBookingError(response?.error || 'Could not submit your seat request.');
+        setBookingError(response?.error || 'Could not join the waitlist.');
         return;
       }
       window.localStorage.removeItem('pendingDetails');
+      notify.success('You’re on the waitlist. We’ll email you if a seat opens.');
       setCheckout(null);
       setSeatRequested(true);
       void loadSeatRequests();
     } catch (err: unknown) {
       setBookingError(
-        err instanceof Error ? err.message : 'Could not submit your seat request.',
+        err instanceof Error ? err.message : 'Could not join the waitlist.',
       );
     } finally {
       SetLoadingStatus(false);
@@ -694,8 +669,8 @@ export default function StudentSeminars({
     const alreadyRegistered = mySeminarStatus.booked.has(s.id) || bookingDone;
     const isFull = s.isFull && !alreadyRegistered;
     const waitingList = seatRequestWindow(s.startMs);
-    const waitingListOpen = waitingList.state === 'open';
-    // An open request — awaiting the host, or approved and waiting to be paid — means
+    const waitingListOpen = canJoinWaitlist(waitingList);
+    // An open request — on the waitlist, or offered and waiting to be paid — means
     // there is nothing to ask for again.
     const openSeatRequest = alreadyRegistered ? null : seatRequestFor(seatRequestIndex, s);
     const seatAwaitingPayment = openSeatRequest?.state === 'awaiting_payment';
@@ -863,14 +838,14 @@ export default function StudentSeminars({
                 <p className="text-sm font-semibold text-emerald-900">
                   {seatWasInvited
                     ? `${s.expertName || 'The host'} invited you to this seminar.`
-                    : 'Your seat was approved.'}
+                    : 'A seat is available — pay to confirm'}
                 </p>
                 <p className="mt-1 text-xs text-emerald-800">
-                  Pay ${openSeatRequest!.price} to {seatWasInvited ? 'accept' : 'claim it'}
+                  Pay ${openSeatRequest!.price} to {seatWasInvited ? 'accept' : 'confirm your seat'}
                   {openSeatRequest!.payBy
                     ? ` by ${new Date(openSeatRequest!.payBy).toLocaleString()}`
                     : ''}
-                  . The {seatWasInvited ? 'invitation expires' : 'seat is released'} if payment isn't completed in time.
+                  . The {seatWasInvited ? 'invitation expires' : 'offer expires'} if payment isn't completed in time.
                 </p>
                 <button
                   type="button"
@@ -884,12 +859,10 @@ export default function StudentSeminars({
             ) : onWaitingList ? (
               <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
                 <p className="text-sm font-semibold text-amber-900">
-                  You’re on the waiting list.
+                  You’re on the waitlist.
                 </p>
                 <p className="mt-1 text-xs text-amber-800">
-                  {s.price > 0
-                    ? 'Your card is authorized but not charged — the host reviews the waiting list and you’re only charged if approved. Otherwise the hold is released.'
-                    : 'The host reviews the waiting list; you’ll join only if approved.'}
+                  You’ll be offered a seat if one opens (first come, first served). No payment until you join.
                 </p>
               </div>
             ) : alreadyRegistered ? (
@@ -941,7 +914,7 @@ export default function StudentSeminars({
                     {canRequestSeat ? (
                       <button
                         type="button"
-                        onClick={() => setCheckout('review')}
+                        onClick={() => void joinWaitlist()}
                         className="w-full rounded-[4px] bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white hover:brightness-110"
                       >
                         {seatRequestActionLabel(s.price)}
@@ -972,13 +945,8 @@ export default function StudentSeminars({
             <div className="my-auto w-full max-w-md">
               <div className="rounded-2xl border border-[#E5E2DB] bg-white p-4 sm:p-6 space-y-4">
                 <p className="font-serif text-lg font-medium text-[#1A3A4A]">
-                  {isFull ? 'Join the waiting list' : 'Review your booking'}
+                  Review your booking
                 </p>
-                {isFull ? (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    This seminar is full. {seatRequestWindowMessage(waitingList, { price: s.price })}
-                  </p>
-                ) : null}
                 <dl className="space-y-2 text-sm text-[#1A3A4A]">
                   <div className="flex justify-between gap-2">
                     <dt className="text-[#7A7A72]">Seminar</dt>
@@ -1004,19 +972,15 @@ export default function StudentSeminars({
                 <button
                   type="button"
                   onClick={() => {
-                    // Nothing to collect on a free seminar, so the payment step would
-                    // only ask them to confirm a second time.
                     if (s.price > 0) {
                       setCheckout('pay');
                       return;
                     }
-                    void joinSeminar('0', { requiresApproval: isFull });
+                    void joinSeminar('0');
                   }}
                   className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
                 >
-                  {isFull
-                    ? (s.price > 0 ? 'Continue to authorize' : 'Join the waiting list')
-                    : s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
+                  {s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
                 </button>
               </div>
             </div>
@@ -1027,7 +991,7 @@ export default function StudentSeminars({
           <div
             className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#1A3A4A]/40 p-4 backdrop-blur-sm"
             onClick={e => {
-              if (e.target === e.currentTarget) setCheckout('review');
+              if (e.target === e.currentTarget) setCheckout(seatAwaitingPayment ? null : 'review');
             }}
           >
             <div className="my-auto w-full max-w-2xl space-y-3">
@@ -1045,22 +1009,16 @@ export default function StudentSeminars({
                   }}
                   walletOption={seatWalletOption(openSeatRequest!.origin)}
                   onPaymentSuccess={paySeat}
-                  onCancel={() => setCheckout('review')}
+                  onCancel={() => setCheckout(null)}
                   cancelLabel="Back"
                 />
               ) : (
                 <StudentBookingCheckout
                   type="Seminar"
                   price={s.price}
-                  isSeatRequest={isFull}
-                  holdsFunds
                   returnUrl={seminarReturnUrl}
                   pendingDetails={{ groupChatId: s.id, price: s.price, name: s.title }}
-                  walletOption={
-                    isFull
-                      ? { kind: 'request', onSubmit: requestSeatWithWallet }
-                      : { kind: 'charge' }
-                  }
+                  walletOption={{ kind: 'charge' }}
                   onPaymentSuccess={joinSeminar}
                   onCancel={() => setCheckout('review')}
                   cancelLabel="Back"

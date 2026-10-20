@@ -92,7 +92,16 @@ const groupMemberIds = (groupChat: any): string[] => [
 ].filter(Boolean);
 
 import { hasJoinedCommunity } from '../utils/communityMembership';
-import { enrolledStudentIds, seminarIsFull, computeSeatRequestDeadline, seatRequestWindowOpen, seatRequestUnavailableMessage, resolveSeatApprovalBlock } from '../utils/seminarCapacity';
+import {
+    enrolledStudentIds,
+    seminarIsFull,
+    occupiedSeminarSeats,
+    claimableSeatCap,
+    seatRequestWindowOpen,
+    seatRequestUnavailableMessage,
+    resolveSeatApprovalBlock,
+    isLegacyHeldSeatRequest,
+} from '../utils/seminarCapacity';
 import { describeSeminarChanges, seminarDetailPairs } from '../utils/seminarChanges';
 import {
     normalizePaymentMode,
@@ -102,6 +111,7 @@ import {
     paymentWindowLapsed,
     WALLET_NOT_YET_PAYABLE,
 } from '../utils/walletPayment';
+import { seminarStudentDashboardUrl, seminarExpertDashboardUrl } from '../utils/appBaseUrl';
 
 const userCanAccessGroupChat = (groupChat: any, userId: string, opts: { allowOpenCommunity?: boolean } = {}): boolean => {
     if (!groupChat || !userId) return false;
@@ -1668,6 +1678,7 @@ const updateGroupChat = async (req, res) => {
             }
         }
 
+        const priorMax = groupChat.maxAttendees;
         // Update group chat with only provided fields
         await GroupChat.findByIdAndUpdate(String(groupId), updateFields, { new: true });
 
@@ -1680,6 +1691,18 @@ const updateGroupChat = async (req, res) => {
                 { seriesId: groupChat.seriesId, type: 'seminar' },
                 { $set: { price: updateFields.price } },
             );
+        }
+
+        // Raising capacity (or clearing the cap) frees seats for the interest waitlist.
+        if (groupChat.type === 'seminar' && updateFields.maxAttendees !== undefined) {
+            const nextMax = updateFields.maxAttendees;
+            const grew =
+                nextMax === null
+                || (typeof nextMax === 'number'
+                    && (typeof priorMax !== 'number' || nextMax > priorMax));
+            if (grew) {
+                await maybeOfferWaitlistAfterCapacityChange(groupId);
+            }
         }
 
         // [REMOVED] updateUsersGroupChatList(userId.toString());
@@ -1769,7 +1792,31 @@ const resolveServerStripeMode = async (): Promise<'test' | 'live'> => {
     return appState?.stripeMode === 'live' ? 'live' : 'test';
 };
 
-const claimSeminarSeat = async (groupChatId: any, userId: string, maxAttendees: unknown) => {
+/**
+ * Soft-held seats: awaiting_payment offers (auto-promote) and host invites.
+ * When a student is converting their own offer into enrollment, pass excludeCustomerId
+ * so their offer does not block themselves.
+ */
+const countSoftHeldSeats = async (
+    groupChatId: any,
+    opts?: { excludeCustomerId?: string },
+): Promise<number> => {
+    const filter: Record<string, any> = {
+        groupChat: groupChatId,
+        status: 'awaiting_payment',
+    };
+    if (opts?.excludeCustomerId) {
+        filter.customer = { $ne: opts.excludeCustomerId };
+    }
+    return SeminarSeatRequest.countDocuments(filter);
+};
+
+const claimSeminarSeat = async (
+    groupChatId: any,
+    userId: string,
+    maxAttendees: unknown,
+    opts?: { excludeOwnSoftHold?: boolean },
+) => {
     const filter: Record<string, any> = {
         _id: groupChatId,
         type: 'seminar',
@@ -1777,12 +1824,15 @@ const claimSeminarSeat = async (groupChatId: any, userId: string, maxAttendees: 
         admin: { $ne: userId },
         participants: { $ne: userId },
     };
-    const cap = typeof maxAttendees === 'number' ? maxAttendees : null;
-    if (cap != null && cap <= 0) {
-        // A cap of 0 (or less) means the seminar is closed — no seat to claim.
+    const softHeld = await countSoftHeldSeats(groupChatId, {
+        excludeCustomerId: opts?.excludeOwnSoftHold ? userId : undefined,
+    });
+    // Soft holds reserve capacity: claim only against the remaining hard seats.
+    const effectiveCap = claimableSeatCap(maxAttendees, softHeld);
+    if (effectiveCap != null && effectiveCap <= 0) {
         return null;
     }
-    if (cap != null) {
+    if (effectiveCap != null) {
         // Enrolled students exclude the host, mirroring enrolledStudentIds/seminarIsFull.
         filter.$expr = {
             $lt: [
@@ -1795,7 +1845,7 @@ const claimSeminarSeat = async (groupChatId: any, userId: string, maxAttendees: 
                         },
                     },
                 },
-                cap,
+                effectiveCap,
             ],
         };
     }
@@ -1806,7 +1856,11 @@ const claimSeminarSeat = async (groupChatId: any, userId: string, maxAttendees: 
     );
 };
 
-const claimFutureSiblingSeats = async (groupChat: any, userId: string): Promise<boolean> => {
+const claimFutureSiblingSeats = async (
+    groupChat: any,
+    userId: string,
+    opts?: { excludeOwnSoftHold?: boolean },
+): Promise<boolean> => {
     if (!groupChat.seriesId) return true;
     const claimedIds: any[] = [];
     try {
@@ -1820,7 +1874,7 @@ const claimFutureSiblingSeats = async (groupChat: any, userId: string): Promise<
         for (const sib of siblings) {
             const sibStart = sib.start ? new Date(sib.start).getTime() : 0;
             if (!(sibStart >= now)) continue;
-            const claimed = await claimSeminarSeat(sib._id, userId, sib.maxAttendees);
+            const claimed = await claimSeminarSeat(sib._id, userId, sib.maxAttendees, opts);
             if (!claimed) {
                 if (claimedIds.length) {
                     await GroupChat.updateMany({ _id: { $in: claimedIds } }, { $pull: { participants: userId } });
@@ -1890,6 +1944,221 @@ const unenrollSeminarSeries = async (groupChat: any, userId: string) => {
     }
 };
 
+const AUTO_SEAT_OFFER_NOTE_PAID =
+    'A seat opened for you. Pay to confirm your spot — first come, first served on the waitlist.';
+const AUTO_SEAT_OFFER_NOTE_FREE =
+    'A seat opened for you on this seminar — you are enrolled.';
+
+/**
+ * When a real seat exists under maxAttendees, offer it to the oldest pending
+ * interest waitlist entry (FIFO by createdAt). Free → enroll; paid → awaiting_payment.
+ * Does not enroll past capacity. No-op when full or no pending rows.
+ */
+const offerNextWaitlistedSeat = async (groupChatId: any): Promise<boolean> => {
+    try {
+        const seminarId = String(groupChatId || '');
+        if (!seminarId) return false;
+
+        let offered = false;
+        // Capacity may open by more than one seat (e.g. host raised maxAttendees).
+        for (let i = 0; i < 25; i += 1) {
+            const groupChat = await GroupChat.findById(seminarId);
+            if (!groupChat || groupChat.type !== 'seminar' || groupChat.status !== 'active') break;
+            const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
+            if (startMs > 0 && startMs <= Date.now()) break;
+
+            const softHeld = await countSoftHeldSeats(groupChat._id);
+            if (seminarIsFull(groupChat, softHeld)) break;
+
+            // Oldest pending interest row (skip legacy card/wallet holds still awaiting host approve).
+            const pending = await SeminarSeatRequest.find({
+                groupChat: groupChat._id,
+                status: 'pending',
+            }).sort({ createdAt: 1 }).limit(20);
+
+            const interest = pending.find((r: any) => !isLegacyHeldSeatRequest(r));
+            if (!interest) break;
+
+            const customerId = interest.customer.toString();
+            const customer = await User.findById(customerId);
+            const expert = await User.findById(groupChat.admin.toString());
+            if (!customer || !expert) {
+                await SeminarSeatRequest.updateOne(
+                    { _id: interest._id, status: 'pending' },
+                    { $set: { status: 'failed' } },
+                ).catch(() => null);
+                continue;
+            }
+
+            const alreadyEnrolled = (groupChat.participants || []).some(
+                (p: any) => p.toString() === customerId,
+            );
+            if (alreadyEnrolled) {
+                await SeminarSeatRequest.updateOne(
+                    { _id: interest._id, status: 'pending' },
+                    { $set: { status: 'approved', decisionNote: AUTO_SEAT_OFFER_NOTE_FREE, decisionNoteAt: new Date(), decisionNoteReadAt: null } },
+                ).catch(() => null);
+                continue;
+            }
+
+            const priceCents = dollarsToCents(groupChat.price);
+            const studentDeepLink = seminarStudentDashboardUrl(String(groupChat._id));
+
+            if (priceCents > 0) {
+                const appState = await AppState.findOne();
+                const payBy = paymentWindowDeadline({
+                    sessionStartMs: startMs,
+                    windowHours: paymentWindowHours(appState),
+                });
+                const softOffered = await SeminarSeatRequest.findOneAndUpdate(
+                    { _id: interest._id, status: 'pending' },
+                    {
+                        $set: {
+                            status: 'awaiting_payment',
+                            amount: priceCents,
+                            currency: groupChat.currency || 'usd',
+                            paymentDeadline: payBy,
+                            decisionNote: AUTO_SEAT_OFFER_NOTE_PAID,
+                            decisionNoteAt: new Date(),
+                            decisionNoteReadAt: null,
+                        },
+                    },
+                    { new: true },
+                );
+                if (!softOffered) break;
+
+                // Roll back if a concurrent soft-offer pushed occupied seats past the cap.
+                const afterOffer = await GroupChat.findById(seminarId);
+                const softAfter = await countSoftHeldSeats(seminarId);
+                const cap = typeof afterOffer?.maxAttendees === 'number' ? afterOffer.maxAttendees : null;
+                if (cap != null && afterOffer && occupiedSeminarSeats(afterOffer, softAfter) > cap) {
+                    await SeminarSeatRequest.updateOne(
+                        { _id: interest._id, status: 'awaiting_payment' },
+                        {
+                            $set: {
+                                status: 'pending',
+                                paymentDeadline: null,
+                                decisionNote: '',
+                                decisionNoteAt: null,
+                                amount: 0,
+                            },
+                        },
+                    ).catch(() => null);
+                    break;
+                }
+
+                if (customer.email) {
+                    await sendSeminarEmail(
+                        customer.email,
+                        `A seat opened — pay by ${emailWhen(payBy, customer.timeZone)} to join ${groupChat.name}`,
+                        {
+                            heading: 'A seat is available for you',
+                            previewText: 'Pay to confirm your seminar seat.',
+                            blocks: [
+                                emailParagraph(`A seat opened on the waitlist for <strong>${emailEscape(groupChat.name)}</strong>. Pay to confirm your spot — seats are offered first come, first served.`),
+                                emailFacts([
+                                    ['Seminar', groupChat.name],
+                                    ['Hosted by', expert.username],
+                                    ['Date & time', emailWhen(groupChat.start, customer.timeZone)],
+                                    ['Amount due', emailMoneyFromCents(priceCents, groupChat.currency)],
+                                    ['Payment deadline', emailWhen(payBy, customer.timeZone)],
+                                ]),
+                                emailCallout(`Your seat is confirmed only once payment completes. If it is not received by <strong>${emailEscape(emailWhen(payBy, customer.timeZone))}</strong>, this offer expires and the next person on the waitlist is offered the seat.`, 'warn'),
+                                emailButton('Open seminar to pay', studentDeepLink),
+                            ],
+                        },
+                    );
+                }
+                offered = true;
+                continue;
+            }
+
+            // Free: atomically claim a hard seat (soft holds counted inside claimSeminarSeat).
+            const hardClaimed = await claimSeminarSeat(
+                groupChat._id,
+                customerId,
+                groupChat.maxAttendees,
+            );
+            if (!hardClaimed) break;
+            if (!(await claimFutureSiblingSeats(hardClaimed, customerId))) {
+                await unenrollSeminarSeries(groupChat, customerId);
+                break;
+            }
+
+            const claimedFree = await SeminarSeatRequest.findOneAndUpdate(
+                { _id: interest._id, status: 'pending' },
+                {
+                    $set: {
+                        status: 'approved',
+                        decisionNote: AUTO_SEAT_OFFER_NOTE_FREE,
+                        decisionNoteAt: new Date(),
+                        decisionNoteReadAt: null,
+                    },
+                },
+                { new: true },
+            );
+            if (!claimedFree) {
+                await unenrollSeminarSeries(groupChat, customerId);
+                break;
+            }
+
+            try {
+                // Seat already claimed atomically; this attaches series/user lists + RC sync.
+                await enrollAndConfirmSeminar({
+                    groupChat: hardClaimed,
+                    customer,
+                    expert,
+                    charge: null,
+                    payment_intent: null,
+                    recordPayment: false,
+                });
+            } catch (enrollErr) {
+                console.log('[offerNextWaitlistedSeat] free enroll failed', enrollErr);
+                await unenrollSeminarSeries(groupChat, customerId);
+                await SeminarSeatRequest.updateOne(
+                    { _id: interest._id, status: 'approved' },
+                    { $set: { status: 'pending', decisionNote: '', decisionNoteAt: null } },
+                ).catch(() => null);
+                break;
+            }
+
+            if (customer.email) {
+                await sendSeminarEmail(
+                    bookingEmailTo(customer),
+                    `You’re in — ${groupChat.name}`,
+                    {
+                        heading: 'A seat opened — you are enrolled',
+                        previewText: 'You are registered.',
+                        blocks: [
+                            emailParagraph(`A seat opened on the waitlist for <strong>${emailEscape(groupChat.name)}</strong>, and you have been enrolled. This seminar is free, so no payment is required.`),
+                            emailFacts([
+                                ['Seminar', groupChat.name],
+                                ['Hosted by', expert.username],
+                                ['Date & time', emailWhen(groupChat.start, customer.timeZone)],
+                            ]),
+                            emailCallout('You are registered. No payment was required for this seminar.', 'good'),
+                            emailButton('View your seminar', studentDeepLink),
+                        ],
+                    },
+                );
+            }
+            offered = true;
+        }
+        return offered;
+    } catch (err: any) {
+        console.log('[offerNextWaitlistedSeat]', err?.message || err);
+        return false;
+    }
+};
+
+const maybeOfferWaitlistAfterCapacityChange = async (groupChatId: any) => {
+    try {
+        await offerNextWaitlistedSeat(groupChatId);
+    } catch (err: any) {
+        console.log('[maybeOfferWaitlistAfterCapacityChange]', err?.message || err);
+    }
+};
+
 // Cancels rather than deletes if the delete fails, so an unpaid session can never
 // surface on a dashboard as booked.
 const rollbackIndividualSession = async (chat: any, customerId: any, expertId: any) => {
@@ -1946,6 +2215,7 @@ const releaseUncapturedSeatClaim = async (seminarId: any, userId: any) => {
         });
         if (paidElsewhere) return;
         await unenrollSeminarSeries(gc, String(userId));
+        await maybeOfferWaitlistAfterCapacityChange(gc._id);
     } catch (err: any) {
         console.log('[releaseUncapturedSeatClaim]', err.message);
     }
@@ -2185,26 +2455,28 @@ const registerForSeminar = async (req, res) => {
                 }
                 return refundAndFail(409, "You are already registered for this seminar.", "Already registered (duplicate payment)");
             }
-            if (seminarIsFull(current)) {
+            const softHeldOnFull = await countSoftHeldSeats(current._id);
+            if (seminarIsFull(current, softHeldOnFull)) {
                 const startMs = current.start ? new Date(current.start).getTime() : 0;
-                const convertible = held && charge && seatRequestWindowOpen(startMs);
-                if (convertible) {
+                // Seminar filled while paying: release any hold and join the interest waitlist.
+                if (seatRequestWindowOpen(startMs) || !seatRequestUnavailableMessage(startMs)) {
                     const pending = await SeminarSeatRequest.findOne({
                         customer: userId,
                         groupChat: current._id,
-                        status: 'pending',
+                        status: { $in: ['pending', 'awaiting_payment'] },
                     });
                     if (!pending) {
+                        if (held && charge) {
+                            await cancelPaymentIntent(payment_intent, charge.paidBy).catch(() => null);
+                        }
                         const recorded = await recordSeatRequest({
                             groupChat: current,
                             userId,
-                            charge,
-                            payment_intent,
                         });
                         if (!recorded.duplicate) {
                             return res.status(200).json({
                                 success: true,
-                                status: 'pending_approval',
+                                status: 'pending',
                                 requestId: recorded.request._id,
                             });
                         }
@@ -2865,181 +3137,89 @@ const findParkedHold = async (groupChatId: any) => PaymentHistory.findOne({
     status: 'withheld',
 });
 
-const recordSeatRequest = async ({ groupChat, userId, charge, payment_intent, paymentMode = 'card' }: any) => {
-    const appState = await AppState.findOne();
-    const deadlineHours = typeof appState?.seminarApprovalDeadlineHours === 'number'
-        ? appState.seminarApprovalDeadlineHours
-        : 24;
-    const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
-    const decisionDeadline = computeSeatRequestDeadline(startMs, deadlineHours);
-
-    let pendingPaymentId: any = undefined;
-    let createdPaymentRow = false;
-    if (charge) {
-        const description = `Seat request (held, awaiting host approval): ${groupChat.name}`;
-        const existing = await PaymentHistory.findOne({
-            paymentIntent: String(payment_intent),
-            paymentType: 'charge',
-            status: { $in: ['pending', 'withheld'] },
-            customer: userId,
-            groupChat: groupChat._id,
-        });
-        if (existing) {
-            await PaymentHistory.updateOne(
-                { _id: existing._id },
-                {
-                    $set: {
-                        stripeMode: charge.paidBy,
-                        amount: charge.amount,
-                        currency: charge.currency,
-                        description,
-                        expert: groupChat.admin,
-                        status: 'withheld',
-                    },
-                },
-            );
-            pendingPaymentId = existing._id;
-        } else {
-            const ph = new PaymentHistory({
-                stripeMode: charge.paidBy,
-                paymentType: 'charge',
-                amount: charge.amount,
-                currency: charge.currency,
-                description,
-                paymentIntent: payment_intent,
-                status: 'withheld',
-                customer: userId,
-                expert: groupChat.admin,
-                groupChat: groupChat._id,
-            });
-            try {
-                await ph.save();
-            } catch (saveErr: any) {
-                // Another request already claimed this intent — treat as a duplicate
-                // request rather than cancelling a hold that is no longer ours.
-                if (saveErr?.code === 11000) {
-                    return { duplicate: true, request: null, decisionDeadline };
-                }
-                throw saveErr;
-            }
-            pendingPaymentId = ph._id;
-            createdPaymentRow = true;
-        }
-    }
-
+/** Interest-only waitlist join: no payment intent, no Stripe hold, no host approve. */
+const recordSeatRequest = async ({ groupChat, userId }: any) => {
     let request: any;
     try {
         request = await SeminarSeatRequest.create({
             customer: userId,
             groupChat: groupChat._id,
             expert: groupChat.admin,
-            paymentIntent: charge ? payment_intent : undefined,
-            paymentHistory: pendingPaymentId,
-            stripeMode: charge ? charge.paidBy : undefined,
-            amount: charge ? charge.amount : (paymentMode === 'wallet' ? dollarsToCents(groupChat.price) : 0),
-            currency: charge ? charge.currency : (groupChat.currency || 'usd'),
-            paymentMode,
-            decisionDeadline,
+            amount: 0,
+            currency: groupChat.currency || 'usd',
+            paymentMode: 'card',
+            origin: 'student',
+            status: 'pending',
         });
     } catch (createErr: any) {
-        if (createdPaymentRow) await PaymentHistory.findByIdAndDelete(pendingPaymentId).catch(() => null);
         if (createErr?.code === 11000) {
-            return { duplicate: true, request: null, decisionDeadline };
+            return { duplicate: true, request: null };
         }
-        if (charge) await cancelPaymentIntent(payment_intent, charge.paidBy);
         throw createErr;
     }
 
     const expert = await User.findById(groupChat.admin.toString());
     const customer = await User.findById(String(userId));
+    const studentDeepLink = seminarStudentDashboardUrl(String(groupChat._id));
+    const expertDeepLink = seminarExpertDashboardUrl();
 
     if (customer?.email) {
-        const holdLine = charge
-            ? `Your card has been authorized for <strong>$${(charge.amount / 100).toFixed(2)} ${String(charge.currency || 'USD').toUpperCase()}</strong> but not charged. You'll only be charged if the host approves your seat; otherwise the hold is released.`
-            : paymentMode === 'wallet'
-                ? `Nothing has been charged yet. If the host approves your seat, we'll email you a link to pay <strong>$${(dollarsToCents(groupChat.price) / 100).toFixed(2)}</strong> with WeChat Pay or Alipay within a limited window.`
-                : 'This is a free seminar, so no payment is involved.';
-        const seatPrice = dollarsToCents(groupChat.price);
-        const seatOutcomes = charge
-            ? [
-                `If ${emailEscape(expert?.username || 'the host')} <strong>approves</strong>, the ${emailMoneyFromCents(charge.amount, charge.currency)} authorization is charged and your seat is confirmed.`,
-                'If they <strong>decline</strong>, or do not respond before the deadline, the authorization is released automatically and no charge is made.',
-            ]
-            : paymentMode === 'wallet' && seatPrice > 0
-                ? [
-                    `If they <strong>approve</strong>, we email you a payment link and you have ${emailEscape(await walletWindowLabel())} to pay ${emailMoneyFromCents(seatPrice)}. Your seat is confirmed only once that payment completes.`,
-                    'If they <strong>decline</strong>, or do not respond in time, no payment is requested and no charge is made.',
-                ]
-                : [
-                    'If they <strong>approve</strong>, your seat is confirmed. This is a free seminar, so no payment is involved.',
-                    'If they <strong>decline</strong>, or do not respond before the deadline, the request expires automatically.',
-                ];
         await sendSeminarEmail(
             bookingEmailTo(customer),
-            charge ? 'Request submitted — no charge processed' : 'Request submitted — no payment required yet',
+            `You’re on the waitlist for ${groupChat.name}`,
             {
                 heading: `You are on the waiting list for ${groupChat.name}`,
                 previewText: 'Nothing has been charged.',
                 blocks: [
-                    emailParagraph('Your request to join this fully booked seminar has been received and is on the waiting list.'),
+                    emailParagraph('This seminar is full. You’re on the waitlist — you’ll be offered a seat if one opens (first come, first served). No payment until you join.'),
                     emailFacts([
                         ['Seminar', groupChat.name],
                         ['Hosted by', expert?.username],
                         ['Date & time', emailWhen(groupChat.start, customer.timeZone)],
-                        ['Host responds by', emailWhen(decisionDeadline, customer.timeZone)],
                     ]),
-                    charge
-                        ? emailCallout(`<strong>No charge has been made.</strong> A temporary authorization of ${emailMoneyFromCents(charge.amount, charge.currency)} is held on your card.`)
-                        : emailCallout('<strong>Nothing has been charged.</strong>'),
-                    emailBullets(seatOutcomes),
-                    emailParagraph('You can check the status of your request at any time from your dashboard.', { muted: true }),
-                    emailButton('View your requests'),
+                    emailCallout('<strong>Nothing has been charged.</strong> You’ll only pay if a seat opens and you confirm.'),
+                    emailBullets([
+                        'When a seat opens, the oldest waitlist entry is offered automatically — the host does not need to approve.',
+                        dollarsToCents(groupChat.price) > 0
+                            ? 'If offered a paid seat, you’ll get an email and homepage notice with a link to pay and confirm.'
+                            : 'If offered a free seat, you’ll be enrolled automatically and notified by email.',
+                    ]),
+                    emailParagraph('You can check your waitlist status anytime from your dashboard.', { muted: true }),
+                    emailButton('View your seminar', studentDeepLink),
                 ],
             },
         );
     }
 
     if (expert?.email) {
-        const holdNote = charge
-            ? 'Their card is authorized but not charged.'
-            : paymentMode === 'wallet'
-                ? 'They are paying by WeChat Pay or Alipay, which cannot hold funds — they pay once you approve.'
-                : 'This is a free seminar, so no payment is involved.';
-        const releaseNote = charge
-            ? 'otherwise the hold is released automatically.'
-            : 'otherwise the request expires automatically.';
         await sendSeminarEmail(
             expert.email,
-            `Action required: respond to a seat request by ${emailWhen(decisionDeadline, expert.timeZone)}`,
+            `Someone joined the waitlist for ${groupChat.name}`,
             {
-                heading: 'New seat request for your seminar',
-                previewText: `${customer?.username || 'A student'} would like a seat.`,
+                heading: 'New waitlist signup for your seminar',
+                previewText: `${customer?.username || 'A student'} joined the waitlist.`,
                 blocks: [
-                    emailParagraph(`${emailEscape(customer?.username || 'A student')} has asked to join <strong>${emailEscape(groupChat.name)}</strong>, which is currently full.`),
+                    emailParagraph(`${emailEscape(customer?.username || 'A student')} joined the waitlist for <strong>${emailEscape(groupChat.name)}</strong>, which is currently full.`),
                     emailFacts([
                         ['Seminar', groupChat.name],
                         ['Date & time', emailWhen(groupChat.start, expert.timeZone)],
                         ['Student', customer?.username],
-                        ['Respond by', emailWhen(decisionDeadline, expert.timeZone)],
                     ]),
-                    emailCallout(holdNote),
-                    emailBullets([
-                        'If you <strong>accept</strong>, the student is enrolled beyond the seminar capacity once their payment completes.',
-                        `If you <strong>decline</strong>, or take no action before the deadline, the request expires automatically, ${releaseNote}`,
-                    ]),
-                    emailButton('Review the request'),
+                    emailCallout('No action needed. When a seat opens, the oldest waitlisted student is offered it automatically.'),
+                    emailButton('Open your dashboard', expertDeepLink),
                 ],
             },
         );
     }
 
-    return { duplicate: false, request, decisionDeadline };
+    return { duplicate: false, request };
 };
 
 const requestSeminarSeat = async (req, res) => {
     try {
         const { userId } = req.user;
         const { groupChatId, payment_intent } = req.body;
+        // Old clients may still authorize a hold before joining the waitlist — release it.
         const releaseOwnHold = async () => {
             if (!payment_intent) return;
             const mode = await resolveServerStripeMode();
@@ -3068,94 +3248,23 @@ const requestSeminarSeat = async (req, res) => {
             return res.status(400).send("Sorry, the seminar is not active");
         }
 
-        const expectedCents = dollarsToCents(groupChat.price);
-        const paymentMode = normalizePaymentMode(req.body.paymentMode);
-        const walletRequest = paymentMode === 'wallet' && expectedCents > 0;
-
-        let charge: any = null;
-        if (expectedCents > 0 && !walletRequest) {
-            if (await paymentIntentAlreadyConsumed(payment_intent)) {
-                return res.status(409).send("This payment has already been used for a booking.");
-            }
-            const serverMode = await resolveServerStripeMode();
-            const authProbe = await checkPaymentIntentAuthorized(payment_intent, serverMode);
-            const authTest = serverMode === 'test' ? authProbe : false;
-            const authLive = serverMode === 'live' ? authProbe : false;
-            if (!authTest && !authLive) {
-                const succeededProbe = await checkPaymentIntentSucceeded(payment_intent, serverMode);
-                const capturedTest = serverMode === 'test' ? succeededProbe : false;
-                const capturedLive = serverMode === 'live' ? succeededProbe : false;
-                const captured = capturedTest || capturedLive;
-                if (!captured) {
-                    return res.status(400).send("Payment could not be verified.");
-                }
-                try {
-                    assertIntentMatchesBooking(captured, {
-                        userId: String(userId),
-                        groupChatId: String(groupChat._id),
-                    });
-                } catch (bindErr) {
-                    return res.status(400).send("This payment does not belong to this seminar.");
-                }
-                const refunded = await refundBookingCharge({
-                    payment_intent,
-                    charge: {
-                        paidBy: capturedTest ? 'test' : 'live',
-                        amount: captured.amount,
-                        currency: captured.currency,
-                    },
-                    name: groupChat.name,
-                    customer: await User.findById(String(userId)),
-                    expert: await User.findById(groupChat.admin.toString()),
-                    groupChatId: groupChat._id.toString(),
-                    reason: 'Seat requests hold the fee rather than charging it',
-                    recordStatus: 'refunded',
-                });
-                if (!refunded) {
-                    console.error('[requestSeminarSeat] captured payment could not be refunded', payment_intent);
-                    return res.status(500).send("Your payment was charged instead of held and could not be refunded automatically. Please contact support.");
-                }
-                return res.status(400).send("Your payment was charged instead of held, so it has been refunded. Please request a seat again.");
-            }
-            try {
-                assertIntentMatchesBooking(authTest || authLive, {
-                    userId: String(userId),
-                    groupChatId: String(groupChat._id),
-                });
-            } catch (bindErr) {
-                await releaseMismatchedHold(authTest || authLive, payment_intent, authTest ? 'test' : 'live', String(userId));
-                return res.status(400).send("This payment does not belong to this seminar.");
-            }
-            try {
-                charge = assertPaymentMatchesExpected(expectedCents, payment_intent, authTest, authLive);
-            } catch (verifyErr) {
-                await cancelPaymentIntent(payment_intent, authTest ? 'test' : 'live');
-                return res.status(400).send("Payment could not be verified.");
-            }
-            if (!charge) {
-                return res.status(400).send("Payment could not be verified.");
-            }
-        }
-
-        // Best-effort release of the hold (paid seminars only) if we reject below.
-        const releaseAndFail = async (code: number, msg: string) => {
-            if (charge) await cancelPaymentIntent(payment_intent, charge.paidBy);
-            return res.status(code).send(msg);
-        };
-
         const alreadyParticipant = (groupChat.participants || []).some(
             (p: any) => p.toString() === userId,
         );
         if (alreadyParticipant) {
-            return releaseAndFail(409, "You are already registered for this seminar.");
+            await releaseOwnHold();
+            return res.status(409).send("You are already registered for this seminar.");
         }
-        if (!seminarIsFull(groupChat)) {
-            return releaseAndFail(409, "Seats are available — please register normally.");
+        const softHeldForJoin = await countSoftHeldSeats(groupChat._id);
+        if (!seminarIsFull(groupChat, softHeldForJoin)) {
+            await releaseOwnHold();
+            return res.status(409).send("Seats are available — please register normally.");
         }
         const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
         const windowClosedMsg = seatRequestUnavailableMessage(startMs);
         if (windowClosedMsg) {
-            return releaseAndFail(400, windowClosedMsg);
+            await releaseOwnHold();
+            return res.status(400).send(windowClosedMsg);
         }
 
         const existing = await SeminarSeatRequest.findOne({
@@ -3164,17 +3273,20 @@ const requestSeminarSeat = async (req, res) => {
             status: { $in: ['pending', 'awaiting_payment'] },
         });
         if (existing) {
-            return releaseAndFail(409, existing.status === 'awaiting_payment'
-                ? "Your seat was already approved — please complete the payment instead."
+            await releaseOwnHold();
+            return res.status(409).send(existing.status === 'awaiting_payment'
+                ? "A seat was already offered to you — please complete the payment instead."
                 : "You already have a pending request for this seminar.");
         }
 
-        const recorded = await recordSeatRequest({ groupChat, userId, charge, payment_intent, paymentMode });
+        await releaseOwnHold();
+
+        const recorded = await recordSeatRequest({ groupChat, userId });
         if (recorded.duplicate) {
-            return releaseAndFail(409, "You already have a pending request for this seminar.");
+            return res.status(409).send("You already have a pending request for this seminar.");
         }
 
-        return res.status(200).json({ success: true, status: 'pending_approval', requestId: recorded.request._id });
+        return res.status(200).json({ success: true, status: 'pending', requestId: recorded.request._id });
     } catch (err) {
         console.log(err);
         return res.status(500).send(safeHttp500Message(err));
@@ -3201,6 +3313,12 @@ const approveSeminarSeatRequest = async (req, res) => {
         }
         if (normalizeId(groupChat.admin) !== String(userId)) {
             return res.status(403).send("Only the seminar host can approve seat requests.");
+        }
+
+        // Interest waitlist is auto-offered when a seat opens — host approve is only for
+        // legacy held rows (card auth / wallet) created before the redesign.
+        if (!isLegacyHeldSeatRequest(request)) {
+            return res.status(409).send("Seats are offered automatically when one opens — no approval is needed.");
         }
 
         const customer = await User.findById(request.customer.toString());
@@ -3578,7 +3696,41 @@ const paySeminarSeatRequest = async (req, res) => {
             return refundAndFail(409, "You are already registered for this seminar.", "Already enrolled before the seat was paid for");
         }
 
-        // Claim the request before enrolling so a double submit can't buy two seats.
+        // Atomically claim a hard seat. Exclude this student's own soft offer so it
+        // does not block converting awaiting_payment → enrolled.
+        const seatClaimed = await claimSeminarSeat(
+            groupChat._id,
+            String(userId),
+            groupChat.maxAttendees,
+            { excludeOwnSoftHold: true },
+        );
+        if (!seatClaimed) {
+            await SeminarSeatRequest.updateOne(
+                { _id: request._id, status: 'awaiting_payment' },
+                { $set: { status: 'expired' } },
+            ).catch(() => null);
+            await maybeOfferWaitlistAfterCapacityChange(groupChat._id);
+            return refundAndFail(
+                409,
+                "That seat is no longer available, so this offer has expired.",
+                "Seat taken before waitlist payment completed",
+            );
+        }
+        if (!(await claimFutureSiblingSeats(seatClaimed, String(userId), { excludeOwnSoftHold: true }))) {
+            await unenrollSeminarSeries(groupChat, String(userId));
+            await SeminarSeatRequest.updateOne(
+                { _id: request._id, status: 'awaiting_payment' },
+                { $set: { status: 'expired' } },
+            ).catch(() => null);
+            await maybeOfferWaitlistAfterCapacityChange(groupChat._id);
+            return refundAndFail(
+                409,
+                "A later session in this series is full, so this offer has expired.",
+                "Series capacity blocked waitlist payment enrollment",
+            );
+        }
+
+        // Claim the request before finishing enrollment so a double submit can't buy two seats.
         const claimed = await SeminarSeatRequest.findOneAndUpdate(
             { _id: request._id, status: 'awaiting_payment' },
             {
@@ -3593,6 +3745,7 @@ const paySeminarSeatRequest = async (req, res) => {
             { new: true },
         );
         if (!claimed) {
+            await unenrollSeminarSeries(groupChat, String(userId));
             return refundAndFail(409, "This seat request has already been settled.", "Seat request settled concurrently");
         }
 
@@ -3620,6 +3773,7 @@ const paySeminarSeatRequest = async (req, res) => {
                 await SeminarSeatRequest.updateOne({ _id: request._id }, { $set: { paymentHistory: ph._id } });
             } catch (historyErr: any) {
                 if (historyErr?.code === 11000) {
+                    await unenrollSeminarSeries(groupChat, String(userId));
                     await SeminarSeatRequest.updateOne(
                         { _id: request._id, status: 'approved' },
                         { $set: { status: 'awaiting_payment' } },
@@ -3631,7 +3785,15 @@ const paySeminarSeatRequest = async (req, res) => {
         }
 
         try {
-            await enrollAndConfirmSeminar({ groupChat, customer, expert, charge, payment_intent, recordPayment: false });
+            // Seat already claimed; this attaches series/user lists, RC, and receipt email.
+            await enrollAndConfirmSeminar({
+                groupChat: seatClaimed,
+                customer,
+                expert,
+                charge,
+                payment_intent,
+                recordPayment: false,
+            });
         } catch (enrollErr) {
             console.log('[paySeminarSeatRequest] enrollment failed after payment', enrollErr);
             await unenrollSeminarSeries(groupChat, String(userId));
@@ -3648,6 +3810,7 @@ const paySeminarSeatRequest = async (req, res) => {
                 { _id: request._id, status: 'approved' },
                 { $set: { status: 'failed' } },
             );
+            await maybeOfferWaitlistAfterCapacityChange(groupChat._id);
             return res.status(500).send(refunded
                 ? "We couldn't complete your registration, so your payment has been refunded."
                 : "We couldn't complete your registration and the payment could not be refunded automatically. Please contact support.");
@@ -3904,10 +4067,11 @@ const inviteToSeminar = async (req, res) => {
             }
         }
 
+        const softHeldAtEnd = await countSoftHeldSeats(groupChat._id);
         return res.status(200).json({
             success: true,
             free: priceCents <= 0,
-            seminarFull: seminarIsFull(groupChat),
+            seminarFull: seminarIsFull(groupChat, softHeldAtEnd),
             results,
         });
     } catch (err) {
@@ -3941,6 +4105,10 @@ const rejectSeminarSeatRequest = async (req, res) => {
         }
         if (normalizeId(groupChat.admin) !== String(userId)) {
             return res.status(403).send("Only the seminar host can decline seat requests.");
+        }
+
+        if (!isLegacyHeldSeatRequest(request)) {
+            return res.status(409).send("Waitlisted students are offered seats automatically — decline is only for legacy held requests.");
         }
 
         const decided = await SeminarSeatRequest.findOneAndUpdate(
@@ -3992,7 +4160,20 @@ const rejectSeminarSeatRequest = async (req, res) => {
 const getSeminarSeatRequests = async (req, res) => {
     try {
         await sweepExpiredSeatRequests();
+        await sweepExpiredWalletPayments();
         const { userId } = req.user;
+        // Opportunistically drain the interest waitlist if capacity opened while idle.
+        const pendingForExpert = await SeminarSeatRequest.find({
+            expert: userId,
+            status: 'pending',
+        }).select('groupChat').limit(50);
+        const seenSeminars = new Set<string>();
+        for (const row of pendingForExpert) {
+            const sid = String(row.groupChat || '');
+            if (!sid || seenSeminars.has(sid)) continue;
+            seenSeminars.add(sid);
+            await maybeOfferWaitlistAfterCapacityChange(sid);
+        }
         const requests = await SeminarSeatRequest.find({ expert: userId, status: 'pending' })
             .populate('customer', 'username email image')
             .populate({
@@ -4380,6 +4561,8 @@ const sweepExpiredWalletPayments = async () => {
             expired += 1;
 
             const customer = await User.findById(request.customer.toString());
+            const seminarId = request.groupChat?._id || request.groupChat;
+            const deepLink = seminarId ? seminarStudentDashboardUrl(String(seminarId)) : undefined;
             if (customer?.email) {
                 await sendSeminarEmail(
                     bookingEmailTo(customer),
@@ -4388,13 +4571,16 @@ const sweepExpiredWalletPayments = async () => {
                         heading: 'Your payment window has expired',
                         previewText: 'No charge has been made.',
                         blocks: [
-                            emailParagraph(`The payment deadline for your approved seat in <strong>${emailEscape(request.groupChat?.name || 'the seminar')}</strong> has passed, so the reservation has expired and the seat has been released.`),
+                            emailParagraph(`The payment deadline for your seat in <strong>${emailEscape(request.groupChat?.name || 'the seminar')}</strong> has passed, so the offer has expired and the seat has been released.`),
                             emailCallout('No charge has been made to your account, and you have not been enrolled.'),
-                            emailParagraph('If seats are still available, you are welcome to request one again.'),
-                            emailButton('View the seminar'),
+                            emailParagraph('If the seminar is still full you can rejoin the waitlist; otherwise register normally if seats are open.'),
+                            emailButton('View the seminar', deepLink),
                         ],
                     },
                 );
+            }
+            if (seminarId) {
+                await maybeOfferWaitlistAfterCapacityChange(seminarId);
             }
         }
     } catch (err: any) {
@@ -5992,6 +6178,7 @@ const leftSeminar = async (req, res) => {
         }
 
         await unenrollSeminarSeries(groupChat, String(userId));
+        await maybeOfferWaitlistAfterCapacityChange(groupChat._id);
 
         return res.status(200).send(`You have left the seminar.${refundMessage}`);
     } catch (err) {
@@ -6121,4 +6308,5 @@ module.exports = {
     leftSeminar,
     removeMemberFromCommunityChat,
     setCommunityCoModerator,
+    offerNextWaitlistedSeat,
 };

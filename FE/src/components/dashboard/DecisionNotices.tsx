@@ -16,13 +16,6 @@ export type DecisionNotice = {
   expertName?: string | null;
 };
 
-const HEADLINE: Record<DecisionNotice['outcome'], string> = {
-  accepted: 'accepted',
-  accepted_awaiting_payment: 'accepted',
-  declined: 'declined',
-  withdrawn: 'withdrew',
-};
-
 const hoursLeft = (decidedAt: string) => {
   const decided = new Date(decidedAt).getTime();
   if (!Number.isFinite(decided)) return 0;
@@ -30,16 +23,18 @@ const hoursLeft = (decidedAt: string) => {
 };
 
 /**
- * Notes an expert attached to a recent accept or decline. The backend only
+ * Notes from recent accept / decline / seat-offer decisions. The backend only
  * returns notices inside the 48-hour window, and dismissing one marks it read so
  * it never comes back — email remains the durable copy.
  */
 export default function DecisionNotices({
   enabled = true,
   onPay,
+  onOpenSeminar,
 }: {
   enabled?: boolean;
   onPay?: (notice: DecisionNotice) => void;
+  onOpenSeminar?: (groupChatId: string) => void;
 }) {
   const [notices, setNotices] = useState<DecisionNotice[]>([]);
 
@@ -66,8 +61,21 @@ export default function DecisionNotices({
         const awaitingPayment = notice.outcome === 'accepted_awaiting_payment';
         const accepted = notice.outcome === 'accepted' || awaitingPayment;
         const who = notice.expertName || 'The expert';
-        const what = notice.kind === 'seat' ? 'seminar seat request' : '1:1 request';
         const remaining = hoursLeft(notice.decidedAt);
+        const seatOffer = notice.kind === 'seat' && accepted;
+        const headline = seatOffer
+          ? awaitingPayment
+            ? `A seat is available for “${notice.title || 'this seminar'}” — pay to confirm.`
+            : `A seat opened for you on “${notice.title || 'this seminar'}” — you’re in.`
+          : `${who} ${
+              notice.outcome === 'accepted' || awaitingPayment
+                ? 'accepted'
+                : notice.outcome === 'withdrawn'
+                  ? 'withdrew'
+                  : 'declined'
+            } your ${notice.kind === 'seat' ? 'seminar seat request' : '1:1 request'}${
+              notice.title ? ` for “${notice.title}”` : ''
+            }.`;
         return (
           <div
             key={`${notice.kind}-${notice.id}`}
@@ -88,31 +96,48 @@ export default function DecisionNotices({
                   accepted ? 'text-emerald-900' : 'text-amber-900'
                 }`}
               >
-                {who} {HEADLINE[notice.outcome]} your {what}
-                {notice.title ? ` for “${notice.title}”` : ''}.
+                {headline}
               </p>
               <p className="mt-1 whitespace-pre-line text-[12px] text-slate-700">{notice.note}</p>
               {awaitingPayment ? (
                 <div className="mt-2">
                   <p className="text-[12px] font-medium text-emerald-900">
                     Pay
-                    {typeof notice.price === 'number' ? ` $${notice.price}` : ''} with WeChat Pay or
-                    Alipay to confirm it
+                    {typeof notice.price === 'number' ? ` $${notice.price}` : ''} to confirm
                     {notice.payBy
                       ? ` by ${new Date(notice.payBy).toLocaleString()}`
                       : ''}
                     .
                   </p>
-                  {onPay ? (
-                    <button
-                      type="button"
-                      onClick={() => onPay(notice)}
-                      className="mt-2 rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#122635]"
-                    >
-                      Pay now
-                    </button>
-                  ) : null}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {notice.kind === 'seat' && notice.groupChatId && onOpenSeminar ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenSeminar(String(notice.groupChatId))}
+                        className="rounded-[4px] border border-[#1A3A4A]/20 bg-white px-3 py-1.5 text-[12px] font-semibold text-[#1A3A4A] hover:bg-[#F5F3EF]"
+                      >
+                        Open seminar
+                      </button>
+                    ) : null}
+                    {onPay ? (
+                      <button
+                        type="button"
+                        onClick={() => onPay(notice)}
+                        className="rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#122635]"
+                      >
+                        Pay now
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
+              ) : seatOffer && notice.groupChatId && onOpenSeminar ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenSeminar(String(notice.groupChatId))}
+                  className="mt-2 rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#122635]"
+                >
+                  Open seminar
+                </button>
               ) : null}
               <p className="mt-1 text-[10px] text-slate-500">
                 Also sent to your email

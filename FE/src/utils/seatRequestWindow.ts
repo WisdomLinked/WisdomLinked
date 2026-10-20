@@ -1,24 +1,21 @@
-// Waiting-list (seat request) availability for a full seminar, mirrored from the
-// server guard in BE/utils/seminarCapacity.ts. A request holds the fee on the
-// student's card via Stripe, and that authorization only lives ~7 days, so the
-// waiting list cannot open earlier than 7 days before the seminar starts.
-// The student is told this up front instead of discovering it at the payment step.
+// Waiting-list availability for a full seminar. Students can join the interest
+// waitlist anytime before the seminar starts — no payment until a seat is offered.
 
 export const SEAT_REQUEST_HOLD_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type SeatRequestWindowState =
-  /** Inside the hold window — the student can pay to join the waiting list now. */
+  /** Seminar is still upcoming — student can join the waitlist. */
   | 'open'
-  /** Still further out than the hold window — come back after `opensAtMs`. */
+  /** @deprecated Interest waitlist no longer waits for a 7-day hold window. */
   | 'too_early'
   /** The seminar has started; nothing to wait for. */
   | 'closed'
-  /** No usable start date on the seminar yet. */
+  /** No usable start date on the seminar yet — still allow waitlist join. */
   | 'undated';
 
 export type SeatRequestWindow = {
   state: SeatRequestWindowState;
-  /** When the waiting list opens; 0 when the seminar has no usable start date. */
+  /** Legacy field; unused for interest waitlist (always 0 when open). */
   opensAtMs: number;
 };
 
@@ -31,9 +28,8 @@ export function seatRequestWindow(
   if (!Number.isFinite(start) || start <= 0 || start >= Number.MAX_SAFE_INTEGER) {
     return { state: 'undated', opensAtMs: 0 };
   }
-  const opensAtMs = start - SEAT_REQUEST_HOLD_MS;
-  if (start <= nowMs) return { state: 'closed', opensAtMs };
-  return { state: start <= nowMs + SEAT_REQUEST_HOLD_MS ? 'open' : 'too_early', opensAtMs };
+  if (start <= nowMs) return { state: 'closed', opensAtMs: start - SEAT_REQUEST_HOLD_MS };
+  return { state: 'open', opensAtMs: start - SEAT_REQUEST_HOLD_MS };
 }
 
 export function formatSeatRequestOpenDate(ms: number): string {
@@ -44,41 +40,42 @@ export function formatSeatRequestOpenDate(ms: number): string {
   });
 }
 
+const FULL_WAITLIST_COPY =
+  'This seminar is full. Join the waitlist — you’ll be offered a seat if one opens (first come, first served). No payment until you join.';
+
 /** Full sentence shown next to a "Full" seminar, explaining what the student can do. */
 export function seatRequestWindowMessage(
   window: SeatRequestWindow,
-  options?: { price?: number },
+  _options?: { price?: number },
 ): string {
-  const paid = (options?.price ?? 0) > 0;
   switch (window.state) {
     case 'open':
-      return paid
-        ? 'Pay to get on the waiting list for the host to approve. Your card is authorized, not charged — you’re only charged if the host approves.'
-        : 'Join the waiting list for the host to approve. You’re enrolled only if they approve.';
     case 'too_early':
-      return `After ${formatSeatRequestOpenDate(window.opensAtMs)}, check for seat availability again — the waiting list opens 7 days before the seminar starts.`;
+    case 'undated':
+      return FULL_WAITLIST_COPY;
     case 'closed':
-      return 'This seminar has already started, so the waiting list is closed.';
+      return 'This seminar is full and has already started, so the waiting list is closed.';
     default:
-      return 'The waiting list opens once the host sets a start date.';
+      return FULL_WAITLIST_COPY;
   }
 }
 
 /** Compact version for cards and badges, where a full sentence doesn't fit. */
 export function seatRequestWindowShortLabel(window: SeatRequestWindow): string {
   switch (window.state) {
-    case 'open':
-      return 'Waiting list open';
-    case 'too_early':
-      return `Waiting list opens ${formatSeatRequestOpenDate(window.opensAtMs)}`;
     case 'closed':
       return 'Waiting list closed';
     default:
-      return 'Waiting list opens once dated';
+      return 'Join waitlist';
   }
 }
 
 /** Button label for joining the waiting list; only meaningful when the window is open. */
-export function seatRequestActionLabel(price: number): string {
-  return price > 0 ? 'Pay to join the waiting list' : 'Join the waiting list';
+export function seatRequestActionLabel(_price?: number): string {
+  return 'Join waitlist';
+}
+
+/** True when a full seminar can take an interest waitlist join. */
+export function canJoinWaitlist(window: SeatRequestWindow): boolean {
+  return window.state !== 'closed';
 }

@@ -36,3 +36,15 @@ export const expertRequestReviewUrl = (
     env: Record<string, string | undefined> = process.env,
 ): string =>
     `${resolveAppBaseUrl(env)}/user/expertdashboard?review_request=${encodeURIComponent(String(requestId))}`;
+
+/** Student dashboard deep link that opens a specific seminar (waitlist offer / pay CTA). */
+export const seminarStudentDashboardUrl = (
+    groupChatId: string,
+    env: Record<string, string | undefined> = process.env,
+): string =>
+    `${resolveAppBaseUrl(env)}/user/studentdashboard?seminar=${encodeURIComponent(String(groupChatId))}`;
+
+/** Expert dashboard — best available CTA for host waitlist notifications. */
+export const seminarExpertDashboardUrl = (
+    env: Record<string, string | undefined> = process.env,
+): string => appDashboardUrl('expert', env);

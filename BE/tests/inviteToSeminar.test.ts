@@ -88,6 +88,7 @@ const withStubs = async (chat: any, run: () => Promise<void>, opts: any = {}) =>
     appState: AppState.findOne,
     seatFindOne: SeminarSeatRequest.findOne,
     seatCreate: SeminarSeatRequest.create,
+    seatCountDocuments: SeminarSeatRequest.countDocuments,
   };
   try {
     GroupChat.findById = (id: string) => {
@@ -107,6 +108,8 @@ const withStubs = async (chat: any, run: () => Promise<void>, opts: any = {}) =>
     AppState.findOne = async () => ({});
     SeminarSeatRequest.findOne = async () => opts.openRequest ?? null;
     SeminarSeatRequest.create = async (doc: any) => ({ ...doc, _id: `req-${doc.customer}` });
+    // Soft-held capacity check at end of invite; no DB in this suite.
+    SeminarSeatRequest.countDocuments = async () => opts.softHeld ?? 0;
     await run();
   } finally {
     GroupChat.findById = originals.gcFindById;
@@ -118,6 +121,7 @@ const withStubs = async (chat: any, run: () => Promise<void>, opts: any = {}) =>
     AppState.findOne = originals.appState;
     SeminarSeatRequest.findOne = originals.seatFindOne;
     SeminarSeatRequest.create = originals.seatCreate;
+    SeminarSeatRequest.countDocuments = originals.seatCountDocuments;
   }
 };
 

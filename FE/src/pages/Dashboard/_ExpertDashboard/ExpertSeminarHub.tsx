@@ -274,8 +274,15 @@ function SeminarCard({
   );
 }
 
-// Overflow seat requests for a full seminar: students who paid (funds held) and
-// are awaiting the host's approval. Approving captures the hold; declining releases it.
+/** True for legacy held waitlist rows that still need host approve/capture. */
+const isLegacyHeldSeatRequest = (r: any): boolean => {
+  if (r?.paymentIntent) return true;
+  if (String(r?.paymentMode || '') === 'wallet' && Number(r?.amount) > 0) return true;
+  return false;
+};
+
+// Interest waitlist is view-only (auto-offered when a seat opens). Legacy held
+// rows keep Approve/Decline until drained.
 function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
   const { auth: { userDetails } } = useAppSelector((s) => s);
   const { openPeerProfile, peerProfileModal } = usePeerProfileModal(userDetails?.role);
@@ -283,9 +290,7 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Decided rows show a confirmation in place for a few seconds, then drop out.
   const [notices, setNotices] = useState<Record<string, string>>({});
-  // Per-request note the student receives with the decision.
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [noteErrors, setNoteErrors] = useState<Record<string, string>>({});
   const noticeTimers = useRef<number[]>([]);
@@ -315,7 +320,6 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
 
   const decide = async (requestId: string, action: 'approve' | 'reject') => {
     const note = (notes[String(requestId)] ?? '').trim();
-    // Turning a student away past capacity must come with something they can act on.
     if (action === 'reject' && !note) {
       setNoteErrors((prev) => ({
         ...prev,
@@ -361,15 +365,20 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
   if (loading) return null;
   if (requests.length === 0) return null;
 
+  const interestCount = requests.filter((r) => !isLegacyHeldSeatRequest(r)).length;
+  const legacyCount = requests.length - interestCount;
+
   return (
     <>
     <div className="mt-5 border-t border-[#E5E2DB] pt-4">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7A7A72]">
-        Seat requests ({requests.length})
+        Waitlist ({requests.length})
       </p>
       <p className="mt-1 text-xs text-[#7A7A72]">
-        These students requested a seat beyond capacity. Approving admits them (and charges any
-        held payment); declining releases any hold.
+        Students on the waitlist are offered a seat automatically when one opens (first come, first served).
+        {legacyCount > 0
+          ? ' Legacy held requests below still need your approval until they expire.'
+          : ''}
       </p>
       {error ? (
         <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
@@ -391,6 +400,8 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
           }
           const name = r?.customer?.username || r?.customer?.email || 'Student';
           const customerId = r?.customer?._id ? String(r.customer._id) : '';
+          const joinedAt = r?.createdAt ? new Date(r.createdAt) : null;
+          const legacy = isLegacyHeldSeatRequest(r);
           const deadline = r?.decisionDeadline ? new Date(r.decisionDeadline) : null;
           const busy = busyId === String(r._id);
           return (
@@ -409,54 +420,68 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
               ) : (
                 <p className="text-sm font-semibold text-[#1A3A4A]">{name}</p>
               )}
-              <p className="mt-0.5 text-[11px] font-medium text-[#234C6A]">
-                {typeof r?.amount === 'number' && r.amount > 0
-                  ? `$${(r.amount / 100).toFixed(2)} held`
-                  : 'Free seminar'}
-              </p>
-              {deadline ? (
+              {joinedAt ? (
                 <p className="mt-0.5 text-[11px] text-[#7A7A72]">
-                  Decide by {deadline.toLocaleString()}
+                  Joined waitlist {joinedAt.toLocaleString()}
                 </p>
               ) : null}
-              <div className="mt-2">
-                <DecisionNoteField
-                  id={`seat-note-${String(r._id)}`}
-                  value={notes[String(r._id)] ?? ''}
-                  onChange={(next) => {
-                    setNotes((prev) => ({ ...prev, [String(r._id)]: next }));
-                    if (next.trim()) {
-                      setNoteErrors((prev) => ({ ...prev, [String(r._id)]: '' }));
-                    }
-                  }}
-                  required
-                  disabled={busy}
-                  label="Note to the student (required to decline)"
-                />
-                {noteErrors[String(r._id)] ? (
-                  <p className="mt-1 text-[10px] font-semibold text-rose-600">
-                    {noteErrors[String(r._id)]}
+              {legacy ? (
+                <>
+                  <p className="mt-0.5 text-[11px] font-medium text-[#234C6A]">
+                    {typeof r?.amount === 'number' && r.amount > 0
+                      ? `$${(r.amount / 100).toFixed(2)} held (legacy)`
+                      : 'Legacy request'}
                   </p>
-                ) : null}
-              </div>
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => decide(String(r._id), 'approve')}
-                  className="flex-1 rounded-lg bg-[#234C6A] px-3 py-2 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-60"
-                >
-                  {busy ? '…' : 'Approve'}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => decide(String(r._id), 'reject')}
-                  className="flex-1 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
-                >
-                  {busy ? '…' : 'Decline'}
-                </button>
-              </div>
+                  {deadline ? (
+                    <p className="mt-0.5 text-[11px] text-[#7A7A72]">
+                      Decide by {deadline.toLocaleString()}
+                    </p>
+                  ) : null}
+                  <div className="mt-2">
+                    <DecisionNoteField
+                      id={`seat-note-${String(r._id)}`}
+                      value={notes[String(r._id)] ?? ''}
+                      onChange={(next) => {
+                        setNotes((prev) => ({ ...prev, [String(r._id)]: next }));
+                        if (next.trim()) {
+                          setNoteErrors((prev) => ({ ...prev, [String(r._id)]: '' }));
+                        }
+                      }}
+                      required
+                      disabled={busy}
+                      label="Note to the student (required to decline)"
+                    />
+                    {noteErrors[String(r._id)] ? (
+                      <p className="mt-1 text-[10px] font-semibold text-rose-600">
+                        {noteErrors[String(r._id)]}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => decide(String(r._id), 'approve')}
+                      className="flex-1 rounded-lg bg-[#234C6A] px-3 py-2 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                    >
+                      {busy ? '…' : 'Approve'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => decide(String(r._id), 'reject')}
+                      className="flex-1 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                    >
+                      {busy ? '…' : 'Decline'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="mt-0.5 text-[11px] text-[#7A7A72]">
+                  Offered automatically when a seat opens
+                  {interestCount > 1 ? ' · FIFO order' : ''}
+                </p>
+              )}
             </div>
           );
         })}
