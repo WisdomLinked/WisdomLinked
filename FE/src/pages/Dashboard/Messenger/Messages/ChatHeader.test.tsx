@@ -41,4 +41,21 @@ describe("ChatHeader status label", () => {
     expect(screen.getByRole("button", { name: /start video call/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /start voice call/i })).not.toBeInTheDocument();
   });
+
+  it("can leave the call action out while keeping the other actions", () => {
+    render(
+      <ChatHeader
+        name="Alex"
+        status="online"
+        avatarInitials="A"
+        showVideo={false}
+        onVideoClick={() => {}}
+        onMoreClick={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /start video call/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /more options/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Alex" })).toBeInTheDocument();
+  });
 });

@@ -12,7 +12,6 @@ const MeetingThread = require('../models/MeetingThread');
 const Conversation = require('../models/Conversation');
 const GroupChat = require('../models/GroupChat');
 const User = require('../models/User');
-const Event = require('../models/Event');
 const MeetingGuestInvite = require('../models/MeetingGuestInvite');
 import {
     resolveMeetingRatingTargetUserId,
@@ -41,7 +40,9 @@ import {
     MEETING_ONLY_EXPERTS_REVOKE_DELEGATED,
     MEETING_REMOVED_BY_HOST,
     MEETING_WAITING_FOR_HOST,
+    MEETING_STUDENT_CANNOT_START_DM_CALL,
 } from '../utils/meetingUserFacingCopy';
+import { canStartDirectMessageCall } from '../utils/directCallRules';
 import { buildMeetingInviteUrl, resolvePublicAppBaseUrl } from '../utils/inviteUrl';
 import { wlDisplayName } from '../utils/wlDisplayName';
 import { jitsiDisplayInitials } from '../utils/jitsiDisplayName';
@@ -567,30 +568,8 @@ export const startMeeting = async (req: any, res: Response) => {
                 return joinActiveMeetingResponse(existingDm, me, res);
             }
 
-            const otherUserId = (conversation.participants || []).find((p: any) => String(p) !== String(userId));
-            const otherParticipant = otherUserId
-                ? await User.findById(otherUserId).select('role').lean()
-                : null;
-            const myRole = String(me?.role || '').toLowerCase();
-            const otherRole = String(otherParticipant?.role || '').toLowerCase();
-            if (myRole === 'customer' && otherRole === 'expert') {
-                // Students may only join the call once their scheduled 1:1 is imminent
-                // (within ~2 min of start) or in progress. Experts can call anytime.
-                const CALL_LEAD_MS = 2 * 60 * 1000;
-                const now = Date.now();
-                const callableEvent = await Event.findOne({
-                    expert: otherUserId,
-                    customer: userId,
-                    status: 'accepted',
-                    start: { $lte: new Date(now + CALL_LEAD_MS) },
-                    end: { $gt: new Date(now) },
-                }).lean();
-                if (!callableEvent) {
-                    return res.status(403).json({
-                        error:
-                            'You can join the call about 2 minutes before your scheduled meeting starts. Until then, keep chatting here.',
-                    });
-                }
+            if (!canStartDirectMessageCall(me?.role)) {
+                return res.status(409).json({ error: MEETING_STUDENT_CANNOT_START_DM_CALL });
             }
         }
         if (groupChatId) {
