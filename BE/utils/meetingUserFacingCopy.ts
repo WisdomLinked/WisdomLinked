@@ -33,6 +33,9 @@ export const MEETING_NOT_DELEGATED_EXPERT =
 export const MEETING_STILL_IN_PROGRESS =
     'This meeting is still in progress, so it was not ended.';
 
+export const MEETING_STUDENT_CANNOT_START_DM_CALL =
+    "Students can't start calls in direct messages. You can join a call once the other person starts it.";
+
 /** Non-host clicked Join/Start before the group admin opened the call. */
 export const MEETING_WAITING_FOR_HOST =
     'Waiting for the host to start the call. You can join once it is in progress.';
