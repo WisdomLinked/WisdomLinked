@@ -1,5 +1,4 @@
-import type { LucideIcon } from 'lucide-react';
-import { Check, FileText, GraduationCap, Target, X } from 'lucide-react';
+import { ArrowRight, Check, X } from 'lucide-react';
 import SegmentedProgressBar from './SegmentedProgressBar';
 import {
   PROFILE_COMPLETION_CARD_CLASS,
@@ -31,13 +30,9 @@ type Props = {
   onDismiss?: () => void;
 };
 
-const SECTION_ICONS: Record<string, LucideIcon> = {
-  academic: GraduationCap,
-  preferences: Target,
-  resume: FileText,
-};
-
-const ACTION_BUTTON = `inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-[#234C6A] px-4 text-sm font-medium text-white transition-colors hover:bg-[#1b3c53] ${PROFILE_COMPLETION_FOCUS_RING}`;
+/** Match expert setup step buttons so both dashboards share the same CTA language. */
+const PRIMARY_BUTTON = `inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#234C6A] px-4 text-sm font-medium text-white transition-colors hover:bg-[#1b3c53] ${PROFILE_COMPLETION_FOCUS_RING}`;
+const SECONDARY_BUTTON = `inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#234C6A]/30 bg-white px-4 text-sm font-medium text-[#234C6A] transition-colors hover:bg-[#e8f0f8] ${PROFILE_COMPLETION_FOCUS_RING}`;
 
 export default function ProfileCompletionCard({
   headingId = 'profile-completion-heading',
@@ -49,6 +44,9 @@ export default function ProfileCompletionCard({
   onSectionAction,
   onDismiss,
 }: Props) {
+  const completedCount = sections.filter((section) => section.isComplete).length;
+  const currentIndex = sections.findIndex((section) => !section.isComplete);
+
   return (
     <section aria-labelledby={headingId} className={PROFILE_COMPLETION_CARD_CLASS}>
       <div className="flex items-start justify-between gap-3">
@@ -79,9 +77,11 @@ export default function ProfileCompletionCard({
         <SegmentedProgressBar
           label="Profile completion"
           segments={sections.map((section) => ({
+            // Weighted flex so filled area tracks the header percent.
             ratio: section.total ? section.filled / section.total : 0,
             weight: section.weight,
           }))}
+          valueText={`${completedCount} of ${sections.length} complete`}
           percentText={`${percent}%`}
           ariaValueNow={percent}
           ariaValueMax={100}
@@ -90,27 +90,38 @@ export default function ProfileCompletionCard({
       </div>
 
       <ul className="mt-4 space-y-1">
-        {sections.map((section) => {
-          const Icon = SECTION_ICONS[section.id] ?? Target;
+        {sections.map((section, index) => {
+          const current = index === currentIndex;
+          const buttonClass = current ? PRIMARY_BUTTON : SECONDARY_BUTTON;
           return (
             <li
               key={section.id}
-              className={`rounded-xl px-3 py-3 sm:px-4 ${
-                section.isComplete ? '' : 'sm:bg-transparent'
-              }`}
+              className={`rounded-xl px-3 py-3 sm:px-4 ${current ? 'bg-[#e8f0f8]' : ''}`}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex min-w-0 flex-1 items-start gap-3">
-                  {section.isComplete ? (
-                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
-                      <Check className="h-4 w-4" aria-hidden />
-                      <span className="sr-only">Done:</span>
-                    </span>
-                  ) : (
-                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-300 bg-white text-[#234C6A]">
-                      <Icon className="h-3.5 w-3.5" aria-hidden />
-                    </span>
-                  )}
+                  <span
+                    className={[
+                      'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+                      section.isComplete
+                        ? 'bg-emerald-600 text-white'
+                        : current
+                          ? 'bg-[#234C6A] text-white'
+                          : 'border border-gray-300 bg-white text-gray-500',
+                    ].join(' ')}
+                  >
+                    {section.isComplete ? (
+                      <>
+                        <Check className="h-4 w-4" aria-hidden />
+                        <span className="sr-only">Done:</span>
+                      </>
+                    ) : (
+                      <>
+                        <span aria-hidden>{index + 1}</span>
+                        <span className="sr-only">Not done:</span>
+                      </>
+                    )}
+                  </span>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-semibold text-gray-800">{section.label}</h3>
@@ -124,16 +135,20 @@ export default function ProfileCompletionCard({
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-0.5 text-sm text-gray-500">{section.description}</p>
+                    <p className={`mt-0.5 text-sm ${section.isComplete ? 'text-gray-700' : 'text-gray-500'}`}>
+                      {section.description}
+                    </p>
                   </div>
                 </div>
                 {section.isComplete ? null : (
                   <button
                     type="button"
                     onClick={() => onSectionAction(section.href)}
-                    className={`ml-10 self-start sm:ml-0 sm:self-auto ${ACTION_BUTTON}`}
+                    className={`ml-10 self-start sm:ml-0 sm:self-auto ${buttonClass}`}
+                    aria-label={`${section.actionLabel}: ${section.label}`}
                   >
                     {section.actionLabel}
+                    <ArrowRight className="h-4 w-4" aria-hidden />
                   </button>
                 )}
               </div>
