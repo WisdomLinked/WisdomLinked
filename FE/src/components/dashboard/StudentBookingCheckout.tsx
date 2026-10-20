@@ -298,9 +298,9 @@ const CheckoutForm = ({
           className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-60"
         >
           {processing
-            ? (isSeatRequest ? 'Joining the waiting list…' : 'Processing payment…')
+            ? (isSeatRequest ? 'Joining the waitlist…' : 'Processing payment…')
             : isSeatRequest
-              ? (price > 0 ? `Authorize $${price} & join waiting list` : 'Join waiting list')
+              ? 'Join waitlist'
               : price > 0
                 ? payButtonLabel(price, paymentMode, selectedMethod)
                 : 'Confirm booking'}
@@ -455,9 +455,7 @@ export default function StudentBookingCheckout({
         </p>
         {isSeatRequest && activeTab === 'card' ? (
           <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
-            This seminar is full. {price > 0
-              ? 'Pay to get on the waiting list for the host to approve — your card is authorized but not charged, and you\'re only charged if the host approves. Otherwise the hold is released.'
-              : 'You\'re joining the waiting list; the host approves it and you\'ll join only if they do.'}
+            This seminar is full. Join the waitlist — you’ll be offered a seat if one opens (first come, first served). No payment until you join.
           </p>
         ) : null}
       </div>

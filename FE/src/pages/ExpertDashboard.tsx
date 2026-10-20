@@ -122,6 +122,12 @@ function pickStudent(g: any): any {
   return withBackground || (typeof g?.createdBy === 'object' ? g.createdBy : null);
 }
 
+function isLegacyHeldSeatRequest(r: any): boolean {
+  if (r?.paymentIntent) return true;
+  if (String(r?.paymentMode || '') === 'wallet' && Number(r?.amount) > 0) return true;
+  return false;
+}
+
 function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
   const seminar = r?.groupChat || {};
   const start = seminar?.start ? new Date(seminar.start).getTime() : Date.now();
@@ -131,19 +137,26 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
         timeStyle: 'short',
       })
     : '—';
+  const legacy = isLegacyHeldSeatRequest(r);
   const metaLines: string[] = [];
-  if (typeof r?.amount === 'number' && r.amount > 0) {
-    // A wallet request holds nothing — approving it asks the student to pay.
-    metaLines.push(
-      r?.paymentMode === 'wallet'
-        ? `$${(r.amount / 100).toFixed(2)} — WeChat Pay / Alipay, paid after you approve`
-        : `$${(r.amount / 100).toFixed(2)} held`,
-    );
+  if (legacy) {
+    if (typeof r?.amount === 'number' && r.amount > 0) {
+      metaLines.push(
+        r?.paymentMode === 'wallet'
+          ? `$${(r.amount / 100).toFixed(2)} — WeChat Pay / Alipay, paid after you approve`
+          : `$${(r.amount / 100).toFixed(2)} held (legacy)`,
+      );
+    } else {
+      metaLines.push('Legacy request');
+    }
+    if (r?.decisionDeadline) {
+      metaLines.push(`Decide by ${new Date(r.decisionDeadline).toLocaleString()}`);
+    }
   } else {
-    metaLines.push('Free seminar');
-  }
-  if (r?.decisionDeadline) {
-    metaLines.push(`Decide by ${new Date(r.decisionDeadline).toLocaleString()}`);
+    metaLines.push('On waitlist — offered automatically when a seat opens');
+    if (r?.createdAt) {
+      metaLines.push(`Joined ${new Date(r.createdAt).toLocaleString()}`);
+    }
   }
   return {
     id: String(r._id),
@@ -155,7 +168,8 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
     location: 'Online · WisdomLinked',
     with: r?.customer?.username || r?.customer?.email || 'Student',
     peerUserId: r?.customer?._id ? String(r.customer._id) : undefined,
-    seatRequestId: String(r._id),
+    // Only legacy held rows expose Accept/Decline in the modal.
+    seatRequestId: legacy ? String(r._id) : undefined,
     detail: {
       title: seminar?.name || 'Seminar',
       description: seminar?.description,
@@ -467,7 +481,7 @@ export default function ExpertDashboard() {
   );
 
   // Overflow seminar seat requests (students who registered past the cap) awaiting
-  // the host's approval — surfaced as the "Pending seminars" card + modal.
+  // the interest waitlist — surfaced as the "Seminar waitlist" card + modal.
   const [seatRequests, setSeatRequests] = useState<any[]>([]);
 
   const loadSeatRequests = useCallback(async () => {
@@ -1327,11 +1341,11 @@ export default function ExpertDashboard() {
               }
             />
             <StatCard
-              label="Pending seminars"
+              label="Seminar waitlist"
               value={seatRequests.length}
               icon={AlertCircle}
               color="warning"
-              tooltip="Seat requests past capacity awaiting your approval"
+              tooltip="Students waiting for a seat — offered automatically when one opens"
               onClick={() => {
                 void loadSeatRequests();
                 setExpertUpcomingModal({ kind: 'seminar', status: 'pending' });

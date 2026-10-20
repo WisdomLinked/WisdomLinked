@@ -330,7 +330,9 @@ test("a free seat request has no hold to release", async () => {
       res,
     );
 
-    assert.equal(res.statusCode, 200);
+    // Interest waitlist rows are auto-offered; hosts can only decline legacy held requests.
+    assert.equal(res.statusCode, 409);
+    assert.match(String(res.body), /automatically/i);
     assert.equal(calls.cancelIntent, undefined);
     assert.equal(calls.historyUpdate, undefined, "there is no payment row to settle");
   } finally {

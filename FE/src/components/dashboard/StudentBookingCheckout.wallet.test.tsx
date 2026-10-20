@@ -146,15 +146,12 @@ describe('StudentBookingCheckout payment method tabs', () => {
     expect(createStripePaymentIntent).not.toHaveBeenCalled();
   });
 
-  it('keeps the card tab on the authorize-and-hold wording for a full seminar', async () => {
+  it('explains interest waitlist with no payment until offered for a full seminar', async () => {
     const onSubmit = vi.fn();
     renderCheckout({ isSeatRequest: true, walletOption: { kind: 'request', onSubmit } });
 
-    expect(await screen.findByText(/your card is authorized but not charged/i)).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('tab', { name: /wechat pay \/ alipay/i }));
-    // The hold explanation is card-only; a wallet never holds.
-    expect(screen.queryByText(/your card is authorized but not charged/i)).toBeNull();
+    expect(await screen.findByText(/no payment until you join/i)).toBeTruthy();
+    expect(screen.queryByText(/authorized but not charged/i)).toBeNull();
   });
 
   it('offers no card tab when the booking is pinned to the wallet', async () => {
