@@ -27,6 +27,7 @@ const { sendEmailNewUserAccountApproval } = require('../services/notifications')
 import { v4 as uuidv4 } from 'uuid';
 import { syncUserToRocketChat } from '../services/rocketchat.service';
 import { NEW_EXPERT_PENDING_SETUP_STEPS } from '../utils/expertSetup';
+import { NOTIFICATION_PREFERENCE_KEYS } from '../utils/emailPreferences';
 const utils = require('../services/utils')
 const randomize = require('randomatic');
 const Event = require("../models/Event");
@@ -1011,8 +1012,7 @@ const updateProfile = async (req: any, res: Response) => {
         const notificationPreferences =
             safeParse(req.body.notificationPreferences) || req.body.notificationPreferences;
         if (notificationPreferences && typeof notificationPreferences === 'object') {
-            const prefKeys = ['email', 'push', 'seminarReminders', 'sessionReminders', 'marketing'];
-            for (const key of prefKeys) {
+            for (const key of NOTIFICATION_PREFERENCE_KEYS) {
                 if (typeof notificationPreferences[key] === 'boolean') {
                     updates[`notificationPreferences.${key}`] = notificationPreferences[key];
                 }
@@ -1057,8 +1057,9 @@ const updateProfile = async (req: any, res: Response) => {
             ...(updates.appointmentDurations !== undefined ? ['durations'] : []),
         ];
         const safeUpdates = withoutOperatorKeys(updates);
-        if (typeof updates['notificationPreferences.email'] === 'boolean') {
-            safeUpdates['notificationPreferences.email'] = updates['notificationPreferences.email'];
+        for (const key of NOTIFICATION_PREFERENCE_KEYS) {
+            const field = `notificationPreferences.${key}`;
+            if (typeof updates[field] === 'boolean') safeUpdates[field] = updates[field];
         }
         await User.findOneAndUpdate(
             { email: String(email) },

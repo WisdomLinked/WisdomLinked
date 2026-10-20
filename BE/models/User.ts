@@ -40,6 +40,7 @@ const userSchema = new mongoose.Schema(
         notificationPreferences: {
             email: { type: Boolean, default: true },
             push: { type: Boolean, default: true },
+            bookings: { type: Boolean, default: true },
             seminarReminders: { type: Boolean, default: true },
             sessionReminders: { type: Boolean, default: true },
             marketing: { type: Boolean, default: false },

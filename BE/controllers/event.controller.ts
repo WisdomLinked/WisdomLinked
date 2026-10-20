@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { HTTP_GENERIC_ERROR, safeHttp500Message } from '../utils/httpUserFacingCopy';
 import { computeBookingPriceCents, extractHourlyRate, assertPaymentMatchesExpected, assertIntentMatchesBooking } from '../utils/bookingPrice';
 import { isExpertSetupComplete, EXPERT_SETUP_INCOMPLETE_FOR_EXPERT } from '../utils/expertSetup';
+import { bookingEmailTo } from '../utils/emailPreferences';
 const AppState = require("../models/AppState");
 const Event = require("../models/Event");
 const User = require("../models/User");
@@ -195,7 +196,9 @@ const appendEvent = async (req, res) => {
             eventExists.duration = duration
             await eventExists.save()
 
-            sendEmailMeetingAcceptance(expertUser.email, expertUser.username, customerUser.username, start, duration, expertUser.timeZone);
+            if (bookingEmailTo(expertUser)) {
+                sendEmailMeetingAcceptance(expertUser.email, expertUser.username, customerUser.username, start, duration, expertUser.timeZone);
+            }
 
             if (charge) {
                 await appendPaymentHistory({
@@ -447,7 +450,9 @@ const acceptEvent = async (req, res) => {
         const receiver = await User.findById(event.expert);
 
         //
-        sendEmailMeetingAcceptance(sender.email, sender.username, receiver.username, updatedEvent.start, updatedEvent.duration, sender.timeZone);
+        if (bookingEmailTo(sender)) {
+            sendEmailMeetingAcceptance(sender.email, sender.username, receiver.username, updatedEvent.start, updatedEvent.duration, sender.timeZone);
+        }
 
         // Reminders are no longer queued here — services/sessionReminderSweep.ts
         // sends them when they fall due, which also covers sessions further out
@@ -567,7 +572,7 @@ const notifyCancelledEventRefund = async ({ event, expert, customer, payment, tr
                 }),
             )
         }
-        if (expert?.email) {
+        if (bookingEmailTo(expert)) {
             await sendNotificationEmail(
                 expert.email,
                 `Session cancelled — ${event.title || '1:1 session'}`,

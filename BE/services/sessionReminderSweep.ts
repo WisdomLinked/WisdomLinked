@@ -23,24 +23,17 @@ const {
     dueReminders,
     reminderQueryWindow,
 } = require('../utils/sessionReminders');
+const { wantsEmail } = require('../utils/emailPreferences');
 
 /** Seminars and 1:1s both live in GroupChat; communities have no start time. */
 const REMINDABLE_GROUP_TYPES = ['seminar', 'individual'];
 
-/**
- * Which notification toggle governs this session type.
- * These are written by the Settings UI but, until now, read by nothing.
- */
+/** Which notification toggle governs this session type. */
 const preferenceKeyFor = (kind: string): string =>
     kind === 'seminar' ? 'seminarReminders' : 'sessionReminders';
 
-const wantsReminder = (user: any, sessionKind: string): boolean => {
-    const prefs = user?.notificationPreferences;
-    if (!prefs) return true;                      // no preferences recorded = opted in
-    if (prefs.email === false) return false;      // master email switch
-    const value = prefs[preferenceKeyFor(sessionKind)];
-    return value !== false;                       // undefined means never set = opted in
-};
+const wantsReminder = (user: any, sessionKind: string): boolean =>
+    wantsEmail(user, preferenceKeyFor(sessionKind));
 
 /**
  * Claim one reminder for one session, atomically.
