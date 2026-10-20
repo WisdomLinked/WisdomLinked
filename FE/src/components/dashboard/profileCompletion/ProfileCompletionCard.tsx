@@ -1,4 +1,4 @@
-import { ArrowRight, Check, X } from 'lucide-react';
+import { ArrowRight, Check } from 'lucide-react';
 import SegmentedProgressBar from './SegmentedProgressBar';
 import {
   PROFILE_COMPLETION_CARD_CLASS,
@@ -27,9 +27,7 @@ type Props = {
   helperText: string;
   percent: number;
   sections: ProfileCompletionSectionView[];
-  complete?: boolean;
   onSectionAction: (href: string) => void;
-  onDismiss?: () => void;
 };
 
 /** Match expert setup step buttons so both dashboards share the same CTA language. */
@@ -43,40 +41,26 @@ export default function ProfileCompletionCard({
   helperText,
   percent,
   sections,
-  complete = false,
   onSectionAction,
-  onDismiss,
 }: Props) {
   const completedCount = sections.filter((section) => section.isComplete).length;
   const currentIndex = sections.findIndex((section) => !section.isComplete);
 
   return (
     <section aria-labelledby={headingId} className={PROFILE_COMPLETION_CARD_CLASS}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          {eyebrow ? (
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              {eyebrow}
-            </p>
-          ) : null}
-          <h2
-            id={headingId}
-            className={`${eyebrow ? 'mt-1 ' : ''}font-serif text-2xl font-medium leading-tight text-[#1A3A4A]`}
-          >
-            {title}
-          </h2>
-          <p className="mt-1 text-sm text-gray-500">{helperText}</p>
-        </div>
-        {complete && onDismiss ? (
-          <button
-            type="button"
-            onClick={onDismiss}
-            aria-label="Dismiss profile completion card"
-            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-[#234C6A] ${PROFILE_COMPLETION_FOCUS_RING}`}
-          >
-            <X className="h-5 w-5" aria-hidden />
-          </button>
+      <div className="min-w-0">
+        {eyebrow ? (
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+            {eyebrow}
+          </p>
         ) : null}
+        <h2
+          id={headingId}
+          className={`${eyebrow ? 'mt-1 ' : ''}font-serif text-2xl font-medium leading-tight text-[#1A3A4A]`}
+        >
+          {title}
+        </h2>
+        <p className="mt-1 text-sm text-gray-500">{helperText}</p>
       </div>
 
       <div className="mt-5">
