@@ -66,17 +66,98 @@ test('a profile save that does not mention preferences leaves the email switch a
   assert.equal(set.username, 'Alice');
 });
 
-test('scope: the other four switches are still not stored (left for later on purpose)', async t => {
-  const { set } = await saveSettings(t, allPrefs(false));
-  for (const key of ['push', 'seminarReminders', 'sessionReminders', 'marketing']) {
-    assert.equal(`notificationPreferences.${key}` in set, false, key);
+const PREFERENCE_PATHS = [
+  'notificationPreferences.email',
+  'notificationPreferences.push',
+  'notificationPreferences.bookings',
+  'notificationPreferences.seminarReminders',
+  'notificationPreferences.sessionReminders',
+  'notificationPreferences.marketing',
+];
+
+test('the student/expert Settings save stores every switch, including Bookings and approvals', async t => {
+  // Exactly what settingsModel.toProfileUpdate sends.
+  const { set } = await saveSettings(t, {
+    timeZone: 'America/Chicago',
+    notificationPreferences: {
+      email: true,
+      bookings: false,
+      seminarReminders: false,
+      sessionReminders: true,
+      marketing: false,
+    },
+  });
+  assert.equal(set.timeZone, 'America/Chicago');
+  assert.equal(set['notificationPreferences.email'], true);
+  assert.equal(set['notificationPreferences.bookings'], false);
+  assert.equal(set['notificationPreferences.seminarReminders'], false);
+  assert.equal(set['notificationPreferences.sessionReminders'], true);
+  assert.equal(set['notificationPreferences.marketing'], false);
+});
+
+test('switching a sub-option back on is stored', async t => {
+  const { set } = await saveSettings(t, {
+    notificationPreferences: { bookings: true, seminarReminders: true, sessionReminders: true },
+  });
+  assert.equal(set['notificationPreferences.bookings'], true);
+  assert.equal(set['notificationPreferences.seminarReminders'], true);
+  assert.equal(set['notificationPreferences.sessionReminders'], true);
+});
+
+test('the admin Settings save stores push and marketing too', async t => {
+  const { set } = await saveSettings(t, {
+    notificationPreferences: { email: true, push: false, marketing: true },
+  });
+  assert.equal(set['notificationPreferences.push'], false);
+  assert.equal(set['notificationPreferences.marketing'], true);
+});
+
+test('a multipart save stores the sub-options as well', async t => {
+  const { set } = await saveSettings(t, {
+    notificationPreferences: JSON.stringify({ bookings: false, sessionReminders: false }),
+  });
+  assert.equal(set['notificationPreferences.bookings'], false);
+  assert.equal(set['notificationPreferences.sessionReminders'], false);
+});
+
+test('a save that names only some switches leaves the others alone', async t => {
+  const { set } = await saveSettings(t, { notificationPreferences: { seminarReminders: false } });
+  assert.equal(set['notificationPreferences.seminarReminders'], false);
+  for (const path of PREFERENCE_PATHS.filter(p => !p.endsWith('seminarReminders'))) {
+    assert.equal(path in set, false, path);
+  }
+});
+
+test('only a real boolean is stored, for every switch', async t => {
+  for (const value of ['false', 0, null, { $ne: true }, ['false']]) {
+    const prefs = Object.fromEntries(PREFERENCE_PATHS.map(p => [p.split('.')[1], value]));
+    const { set } = await saveSettings(t, { notificationPreferences: prefs });
+    for (const path of PREFERENCE_PATHS) {
+      assert.equal(path in set, false, `${path} stored ${JSON.stringify(value)}`);
+    }
+  }
+});
+
+test('names that are not Settings switches are never stored', async t => {
+  const { set } = await saveSettings(t, {
+    notificationPreferences: JSON.parse('{"role":false,"$where":true,"email.x":false,"__proto__":{"email":false}}'),
+  });
+  for (const key of Object.keys(set)) {
+    assert.equal(key.startsWith('notificationPreferences.'), false, key);
   }
 });
 
 test('the operator-key guard still holds for everything else', async t => {
-  const { set } = await saveSettings(t, { ...allPrefs(false), title: 'T' });
+  const { set } = await saveSettings(t, {
+    ...allPrefs(false),
+    title: 'T',
+    'notificationPreferences.email': true,
+    'role.x': 'admin',
+    $set: { role: 'admin' },
+  });
   for (const key of Object.keys(set)) {
     assert.equal(key.startsWith('$'), false, key);
-    if (key.includes('.')) assert.equal(key, 'notificationPreferences.email');
+    if (key.includes('.')) assert.ok(PREFERENCE_PATHS.includes(key), key);
   }
+  assert.equal(set['notificationPreferences.email'], false);
 });

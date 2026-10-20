@@ -58,7 +58,8 @@ describe('ProfileCompletionCard', () => {
       '20',
     );
     expect(screen.getByText('3 of 6')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Finish section' }));
+    expect(screen.getByText('0 of 3 complete')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Finish section: Academic background' }));
     expect(onSectionAction).toHaveBeenCalledWith('#profile-academic');
   });
 
@@ -119,7 +120,8 @@ describe('StudentProfileCompletionCard', () => {
       '20',
     );
     expect(screen.getByText('3 of 6')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Finish section' }));
+    expect(screen.getByText('0 of 3 complete')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Finish section: Academic background' }));
     expect(onOpenSection).toHaveBeenCalledWith('#profile-academic');
   });
 });

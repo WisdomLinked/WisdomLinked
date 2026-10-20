@@ -33,12 +33,24 @@ describe('getStudentProfileCompletion', () => {
     });
     expect(servicesOnly.percent).toBe(15);
 
+    // Slug-shaped service docs (same shape the profile page stores/loads).
+    const slugService = getStudentProfileCompletion({
+      services: [{ value: 'study_abroad' }],
+    });
+    expect(slugService.percent).toBe(15);
+
     const both = getStudentProfileCompletion({
       services: ['Work Abroad'],
       keywords: ['Computer Science'],
     });
     expect(both.percent).toBe(30);
     expect(both.sections.find((s) => s.id === 'preferences')?.isComplete).toBe(true);
+  });
+
+  it('counts numeric GPA the same as a string GPA', () => {
+    const result = getStudentProfileCompletion({ gpa: 3.75 });
+    expect(result.sections.find((s) => s.id === 'academic')?.filled).toBe(1);
+    expect(result.percent).toBe(Math.round(40 * (1 / 6)));
   });
 
   it('counts resume as the full 30% section', () => {

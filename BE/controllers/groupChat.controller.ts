@@ -58,6 +58,7 @@ const {
 } = require("../services/rocketchat.service");
 import { safeErrorMessage, safeHttp500Message } from '../utils/httpUserFacingCopy';
 import { isChatAdminOf } from '../utils/adminChatAccess';
+import { bookingEmailTo } from '../utils/emailPreferences';
 import { computeBookingPriceCents, extractHourlyRate, dollarsToCents, assertPaymentMatchesExpected, assertIntentMatchesBooking, voluntaryCancellationRefundCents, capturedAmountCents, balanceTransactionId } from '../utils/bookingPrice';
 import { resolvePendingPayment, resolveOrphanedIntent } from '../utils/pendingPayment';
 import {
@@ -817,7 +818,7 @@ const createGroupChatByUser = async (req, res) => {
             if (currentUser?.email) {
                 try {
                     await sendSeminarEmail(
-                        currentUser.email,
+                        bookingEmailTo(currentUser),
                         'Request sent — no charge processed yet',
                         {
                             heading: `Your request has been sent to ${expertUser.username}`,
@@ -882,7 +883,7 @@ const createGroupChatByUser = async (req, res) => {
             if (currentUser?.email) {
                 try {
                     await sendSeminarEmail(
-                        currentUser.email,
+                        bookingEmailTo(currentUser),
                         'Request sent — no charge processed yet',
                         {
                             heading: `Your request has been sent to ${expertUser.username}`,
@@ -1062,7 +1063,7 @@ const proposeIndividualAppointment = async (req, res) => {
 
         sendEmailMeetingRequestToCustomer(customerUser.email, name, customerUser.username, chat.start, duration, finalPrice, customerUser.timeZone, payBy, { expertName: expertUser.username, note: typeof description === 'string' ? description.trim() : '' });
 
-        if (expertUser?.email) {
+        if (bookingEmailTo(expertUser)) {
             Promise.resolve(
                 sendEmailSessionOfferSentToExpert(expertUser.email, expertUser.username, customerUser.username, name, chat.start, duration, finalPrice, expertUser.timeZone, payBy),
             ).catch((emailErr) => console.log('[proposeIndividualAppointment] offer-sent email failed', emailErr));
@@ -1463,7 +1464,7 @@ const joinGroupChat = async (req, res) => {
 const notifySeminarChangeToStudents = async (before: any, changes: string[], updateFields: Record<string, any> = {}) => {
     const studentIds = enrolledStudentIds(before);
     if (!studentIds.length || !changes.length) return;
-    const students = await User.find({ _id: { $in: studentIds } }).select('email username');
+    const students = await User.find({ _id: { $in: studentIds } }).select('email username notificationPreferences');
     const host = await User.findById(before?.admin).select('username email');
     const details: Array<[string, string]> = [
         ...seminarDetailPairs(before, updateFields),
@@ -1472,7 +1473,7 @@ const notifySeminarChangeToStudents = async (before: any, changes: string[], upd
     for (const student of students) {
         if (!student?.email) continue;
         await sendSeminarEmail(
-            student.email,
+            bookingEmailTo(student),
             `Your seminar ${before?.name || 'Seminar'} has been updated`,
             {
                 heading: 'Your seminar has been updated',
@@ -1501,7 +1502,7 @@ const notifySeminarCancelledToStudents = async (docs: any[]) => {
     for (const doc of seminars) enrolledStudentIds(doc).forEach((id: string) => studentIds.add(String(id)));
     if (!studentIds.size) return;
 
-    const students = await User.find({ _id: { $in: Array.from(studentIds) } }).select('email username');
+    const students = await User.find({ _id: { $in: Array.from(studentIds) } }).select('email username notificationPreferences');
     const host = await User.findById(anchor?.admin).select('username email');
     const hostName = host?.username || host?.email || 'the host';
     const title = anchor?.name || 'Seminar';
@@ -1516,7 +1517,7 @@ const notifySeminarCancelledToStudents = async (docs: any[]) => {
     for (const student of students) {
         if (!student?.email) continue;
         await sendSeminarEmail(
-            student.email,
+            bookingEmailTo(student),
             `Your seminar ${title} has been cancelled`,
             {
                 heading: 'Your seminar has been cancelled',
@@ -2080,7 +2081,7 @@ const registerForSeminar = async (req, res) => {
             if (!payment.ok) {
                 if (customer?.email) {
                     await sendSeminarEmail(
-                        customer.email,
+                        bookingEmailTo(customer),
                         "We couldn't complete your booking — no charge processed",
                         {
                             heading: "We couldn't complete your booking",
@@ -2111,7 +2112,7 @@ const registerForSeminar = async (req, res) => {
                 if (customer?.email) {
                     const tookLastSeat = /capacity|full/i.test(String(reason));
                     await sendSeminarEmail(
-                        customer.email,
+                        bookingEmailTo(customer),
                         tookLastSeat
                             ? 'The last seat was just taken — no charge processed'
                             : 'Reservation cancelled — no charge processed',
@@ -2974,7 +2975,7 @@ const recordSeatRequest = async ({ groupChat, userId, charge, payment_intent, pa
                     'If they <strong>decline</strong>, or do not respond before the deadline, the request expires automatically.',
                 ];
         await sendSeminarEmail(
-            customer.email,
+            bookingEmailTo(customer),
             charge ? 'Request submitted — no charge processed' : 'Request submitted — no payment required yet',
             {
                 heading: `You are on the waiting list for ${groupChat.name}`,
@@ -3379,7 +3380,7 @@ const approveSeminarSeatRequest = async (req, res) => {
             );
 
             await sendSeminarEmail(
-                customer.email,
+                charge ? customer.email : bookingEmailTo(customer),
                 charge
                     ? `Not able to complete your booking — ${emailMoneyFromCents(charge.amount, charge.currency)} refunded`
                     : "Not able to complete your booking — no charge processed",
@@ -3429,7 +3430,7 @@ const approveSeminarSeatRequest = async (req, res) => {
         }
 
         await sendSeminarEmail(
-            customer.email,
+            charge ? customer.email : bookingEmailTo(customer),
             charge
                 ? `Booking successful — ${emailMoneyFromCents(charge.amount, charge.currency)} charged for ${groupChat.name}`
                 : `You are confirmed for ${groupChat.name}`,
@@ -3834,7 +3835,7 @@ const inviteToSeminar = async (req, res) => {
                     });
                     results.push({ userId: id, name, outcome: 'enrolled' });
                     await sendSeminarEmail(
-                        student.email,
+                        bookingEmailTo(student),
                         `You have been added to ${groupChat.name}`,
                         {
                             heading: `${expert.username} has added you to ${groupChat.name}`,
@@ -3961,7 +3962,7 @@ const rejectSeminarSeatRequest = async (req, res) => {
                 : outcome === 'stuck' ? ' We are still releasing your payment hold — please contact support if it has not cleared within a few days.'
                 : ' Your payment hold has been released and you were not charged.';
             await sendSeminarEmail(
-                customer.email,
+                outcome === 'released' ? bookingEmailTo(customer) : customer.email,
                 'Request declined — no charge processed',
                 {
                     heading: 'Your request was not approved',
@@ -4175,7 +4176,7 @@ const sweepExpiredSeatRequests = async () => {
                     : outcome === 'stuck' ? ' We are still releasing your payment hold — please contact support if it has not cleared within a few days.'
                     : ' Your payment hold has been released and you were not charged.';
                 await sendSeminarEmail(
-                    customer.email,
+                    outcome === 'released' ? bookingEmailTo(customer) : customer.email,
                     'Request expired — no charge processed',
                     {
                         heading: 'Your request has expired',
@@ -4241,7 +4242,7 @@ const sweepExpiredSessionHolds = async () => {
                     const student = staleBacklog ? null : await User.findById(String(chat.createdBy));
                     if (student?.email) {
                         await sendSeminarEmail(
-                            student.email,
+                            bookingEmailTo(student),
                             'Your request expired — no charge processed',
                             {
                                 heading: 'Your 1:1 session request has expired',
@@ -4302,7 +4303,7 @@ const sweepExpiredSessionHolds = async () => {
                         ? ' We are still releasing your payment authorization — please contact support if it has not cleared within a few days.'
                         : ' Your payment authorization has been released, and no payment has been processed.';
                 await sendSeminarEmail(
-                    customer.email,
+                    outcome === 'released' ? bookingEmailTo(customer) : customer.email,
                     'Your request expired — no charge processed',
                     {
                         heading: 'Your 1:1 session request has expired',
@@ -4345,7 +4346,7 @@ const sweepExpiredWalletPayments = async () => {
             const student = await User.findById(String(chat.createdBy));
             if (student?.email) {
                 await sendSeminarEmail(
-                    student.email,
+                    bookingEmailTo(student),
                     'Offer expired — no charge processed',
                     {
                         heading: 'Your payment window has expired',
@@ -4381,7 +4382,7 @@ const sweepExpiredWalletPayments = async () => {
             const customer = await User.findById(request.customer.toString());
             if (customer?.email) {
                 await sendSeminarEmail(
-                    customer.email,
+                    bookingEmailTo(customer),
                     'Offer expired — no charge processed',
                     {
                         heading: 'Your payment window has expired',
@@ -4442,7 +4443,7 @@ const sweepExpiredProposedSessions = async () => {
             const student = studentId ? await User.findById(studentId) : null;
             if (student?.email) {
                 await sendSeminarEmail(
-                    student.email,
+                    bookingEmailTo(student),
                     'Offer expired — no charge processed',
                     {
                         heading: 'This session offer has expired',
@@ -4460,7 +4461,7 @@ const sweepExpiredProposedSessions = async () => {
             const expert = await User.findById(expertId);
             if (expert?.email) {
                 await sendSeminarEmail(
-                    expert.email,
+                    bookingEmailTo(expert),
                     'Your session offer expired — no charge was made',
                     {
                         heading: 'Your session offer has expired',
@@ -4576,7 +4577,7 @@ const sweepPendingSeminarPayments = async () => {
                     const student = await User.findById(String(row.customer));
                     if (student?.email) {
                         await sendSeminarEmail(
-                            student.email,
+                            action === 'refund' ? student.email : bookingEmailTo(student),
                             action === 'refund'
                                 ? 'Unable to complete your booking — payment refunded'
                                 : 'Reservation cancelled — no charge processed',
@@ -5308,7 +5309,7 @@ const acceptIndividualAppointment = async (req, res) => {
         void (async () => {
             try {
                 const customerUser = await User.findById(groupChat.createdBy);
-                if (customerUser?.email && !charge) {
+                if (bookingEmailTo(customerUser) && !charge) {
                     await sendEmailMeetingAcceptance(
                         customerUser.email,
                         customerUser.username,
@@ -5750,7 +5751,7 @@ const cancelIndividualAppointment = async (req, res) => {
 
             if (student?.email) {
                 await sendSeminarEmail(
-                    student.email,
+                    outcome === 'released' ? bookingEmailTo(student) : student.email,
                     outcome === 'refunded'
                         ? `Your 1:1 session request was declined — ${emailMoneyFromCents(payment?.amount, payment?.currency)} refunded`
                         : 'Your 1:1 session request was declined — no charge processed',
@@ -5821,7 +5822,7 @@ const cancelIndividualAppointment = async (req, res) => {
             }
         } else if (expertProposed && cancelledByExpert && student?.email) {
             await sendSeminarEmail(
-                student.email,
+                bookingEmailTo(student),
                 `Session offer withdrawn — ${sessionName}`,
                 {
                     heading: 'This session offer has been withdrawn',
@@ -5840,7 +5841,7 @@ const cancelIndividualAppointment = async (req, res) => {
 
         if (decliningStudentRequest && !studentNotified && student?.email) {
             await sendSeminarEmail(
-                student.email,
+                bookingEmailTo(student),
                 'Your 1:1 session request was declined — no charge processed',
                 sessionDeclinedEmail({
                     sessionName,
@@ -5857,7 +5858,7 @@ const cancelIndividualAppointment = async (req, res) => {
             const expert = await User.findById(expertId);
             if (expert?.email) {
                 await sendSeminarEmail(
-                    expert.email,
+                    bookingEmailTo(expert),
                     `Your session offer was declined — ${sessionName}`,
                     {
                         heading: 'Your session offer was declined',
@@ -5874,7 +5875,7 @@ const cancelIndividualAppointment = async (req, res) => {
 
         if (cancelledOwnRequest && expertUser?.email) {
             await sendSeminarEmail(
-                expertUser.email,
+                bookingEmailTo(expertUser),
                 `A session request was cancelled — ${sessionName}`,
                 {
                     heading: 'A session request was cancelled',
