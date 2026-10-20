@@ -368,14 +368,14 @@ export default function UpcomingSessionModal({
     const expert = role === 'expert';
     if (kind === 'seminar') {
       return {
-        title: status === 'pending' ? 'Pending seminar seat requests' : 'Upcoming seminars',
+        title: status === 'pending' ? 'Seminar waitlist' : 'Upcoming seminars',
         typeLabel: 'Seminar',
         description: expert
           ? status === 'pending'
-            ? 'Students who registered past the seminar capacity. Accept to admit them (charging any held payment); decline to release the hold.'
+            ? 'Students on the waitlist are offered a seat automatically when one opens (first come, first served). Legacy held requests still show Accept/Decline until drained.'
             : 'Seminars you are hosting — join to open the meeting room in chat.'
           : status === 'pending'
-            ? 'These seminar requests are waiting for mentor approval.'
+            ? 'You’re on these seminar waitlists — you’ll be offered a seat if one opens.'
             : 'These are your upcoming booked seminar sessions.',
         icon: <BookOpen className="h-4 w-4" aria-hidden />,
       };

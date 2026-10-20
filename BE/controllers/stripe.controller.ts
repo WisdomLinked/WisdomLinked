@@ -3,6 +3,7 @@ import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
 import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { expectedBookingIntentCents, extractHourlyRate, balanceTransactionId } from '../utils/bookingPrice';
 import { seminarIsFull, firstFullFutureOccurrence, seatRequestUnavailableMessage } from '../utils/seminarCapacity';
+const SeminarSeatRequest = require("../models/SeminarSeatRequest");
 import { checkoutPaymentMetadata, retryLinkExpiry } from '../utils/retryPaymentLink';
 import {
     normalizePaymentMode,
@@ -165,7 +166,11 @@ const createStripePaymentIntent = async (req, res) => {
                     return res.status(409).send({ error: "You're already registered for this seminar." });
                 }
 
-                if (seminarIsFull(groupChat)) {
+                const softHeld = await SeminarSeatRequest.countDocuments({
+                    groupChat: groupChat._id,
+                    status: 'awaiting_payment',
+                });
+                if (seminarIsFull(groupChat, softHeld)) {
                     const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
                     const unavailable = seatRequestUnavailableMessage(startMs);
                     if (unavailable) {
@@ -174,6 +179,7 @@ const createStripePaymentIntent = async (req, res) => {
                     if (wallet) {
                         return res.status(409).send({ error: WALLET_NEEDS_APPROVAL_MESSAGE });
                     }
+                    // Interest waitlist — no authorize-hold; client joins without a PI.
                     manualCapture = true;
                     requiresApproval = true;
                     metadata.seatRequest = 'true';

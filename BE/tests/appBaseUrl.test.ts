@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveAppBaseUrl, appAssetUrl, expertRequestReviewUrl } from "../utils/appBaseUrl";
+import {
+    resolveAppBaseUrl,
+    appAssetUrl,
+    expertRequestReviewUrl,
+    seminarStudentDashboardUrl,
+    seminarExpertDashboardUrl,
+} from "../utils/appBaseUrl";
 
 test("prefers FRONTEND_BASE_URL over FE_URL", () => {
     assert.equal(
@@ -36,5 +42,23 @@ test("the review-request link opens the expert dashboard on that request", () =>
     assert.equal(
         new URL(expertRequestReviewUrl("a b&c", {})).searchParams.get("review_request"),
         "a b&c",
+    );
+});
+
+test("seminar waitlist offer link deep-links to the student dashboard seminar", () => {
+    assert.equal(
+        seminarStudentDashboardUrl("sem-7", { FE_URL: "https://staging.wisdomlinked.com/" }),
+        "https://staging.wisdomlinked.com/user/studentdashboard?seminar=sem-7",
+    );
+    assert.equal(
+        new URL(seminarStudentDashboardUrl("a&b", {})).searchParams.get("seminar"),
+        "a&b",
+    );
+});
+
+test("expert waitlist notification CTA lands on the expert dashboard", () => {
+    assert.equal(
+        seminarExpertDashboardUrl({ FE_URL: "https://staging.wisdomlinked.com/" }),
+        "https://staging.wisdomlinked.com/user/expertdashboard",
     );
 });

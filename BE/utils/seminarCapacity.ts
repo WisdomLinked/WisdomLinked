@@ -15,13 +15,35 @@ export const enrolledStudentIds = (groupChat: any): string[] => {
 export const hasCapacityLimit = (maxAttendees: unknown): boolean =>
     typeof maxAttendees === 'number';
 
-// A seminar is full once it has a capacity limit and enrolment has reached it.
-// A cap of 0 or less is always full.
-export const seminarIsFull = (groupChat: any): boolean => {
+/**
+ * Occupied seats = enrolled students + soft holds (awaiting_payment offers/invites).
+ * Soft holds reserve capacity until the student pays or the offer expires.
+ */
+export const occupiedSeminarSeats = (
+    groupChat: any,
+    softHeldCount: number = 0,
+): number => enrolledStudentIds(groupChat).length + Math.max(0, Number(softHeldCount) || 0);
+
+/**
+ * Effective enrollment cap for an atomic participant claim after soft holds are reserved.
+ * Returns null when unlimited; 0 when closed or fully soft-held.
+ */
+export const claimableSeatCap = (
+    maxAttendees: unknown,
+    softHeldCount: number = 0,
+): number | null => {
+    if (typeof maxAttendees !== 'number') return null;
+    if (maxAttendees <= 0) return 0;
+    return Math.max(0, maxAttendees - Math.max(0, Number(softHeldCount) || 0));
+};
+
+// A seminar is full once it has a capacity limit and occupied seats (enrolled +
+// soft-held awaiting_payment offers) have reached it. A cap of 0 or less is always full.
+export const seminarIsFull = (groupChat: any, softHeldCount: number = 0): boolean => {
     const cap = typeof groupChat?.maxAttendees === 'number' ? groupChat.maxAttendees : null;
     if (cap == null) return false;
     if (cap <= 0) return true;
-    return enrolledStudentIds(groupChat).length >= cap;
+    return occupiedSeminarSeats(groupChat, softHeldCount) >= cap;
 };
 
 // Given a list of seminar occurrences, returns the first that is both still in the
@@ -94,13 +116,12 @@ export const computeSeatRequestDeadline = (
     return new Date(Math.min(effective, holdExpiry));
 };
 
-// A full seminar only accepts seat requests while it's inside the hold window
-// (future, but no more than ~7 days out).
+// Interest waitlist: join anytime while the seminar is still in the future.
+// (Legacy Stripe-hold code still uses SEAT_REQUEST_HOLD_MS for decision deadlines.)
 export const seatRequestWindowOpen = (startMs: number, nowMs: number = Date.now()): boolean =>
-    startMs > nowMs && startMs <= nowMs + SEAT_REQUEST_HOLD_MS;
+    Number.isFinite(startMs) && startMs > nowMs;
 
-// The moment the waiting list opens for a full seminar: a Stripe auth only lives
-// ~7 days, so requests can't be taken (and money can't be held) before then.
+// Kept for legacy callers/tests that still reason about the old 7-day hold boundary.
 export const seatRequestWindowOpensAt = (startMs: number): number => startMs - SEAT_REQUEST_HOLD_MS;
 
 export type SeatRequestWindowState = 'open' | 'too_early' | 'closed' | 'undated';
@@ -111,32 +132,34 @@ export const seatRequestWindowState = (
 ): SeatRequestWindowState => {
     if (!Number.isFinite(startMs) || startMs <= 0) return 'undated';
     if (startMs <= nowMs) return 'closed';
-    return startMs <= nowMs + SEAT_REQUEST_HOLD_MS ? 'open' : 'too_early';
+    // Interest waitlist no longer waits for the 7-day hold window — future = open.
+    return 'open';
 };
 
-const formatOpensAt = (ms: number): string =>
-    new Date(ms).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        timeZone: 'UTC',
-    });
-
-// Why a full seminar can't take a waiting-list request right now. Null when it can.
-// The date is the one the student is told to come back after, so it must be the same
-// boundary the guard uses.
+/** Why a full seminar can't take a waitlist join right now. Null when it can. */
 export const seatRequestUnavailableMessage = (
     startMs: number,
     nowMs: number = Date.now(),
 ): string | null => {
     switch (seatRequestWindowState(startMs, nowMs)) {
         case 'open':
-            return null;
         case 'too_early':
-            return `This seminar is full. After ${formatOpensAt(seatRequestWindowOpensAt(startMs))}, check for seat availability again — the waiting list opens 7 days before the seminar starts.`;
+            return null;
         case 'closed':
             return 'This seminar is full and has already started, so the waiting list is closed.';
         default:
-            return 'This seminar is full. The waiting list opens once the host sets a start date.';
+            // Undated but still listed as full — allow interest join.
+            return null;
     }
+};
+
+/** Legacy card/wallet holds that still need host approve+capture until drained. */
+export const isLegacyHeldSeatRequest = (request: {
+    paymentIntent?: string | null;
+    paymentMode?: string | null;
+    amount?: number | null;
+}): boolean => {
+    if (request?.paymentIntent) return true;
+    if (String(request?.paymentMode || '') === 'wallet' && Number(request?.amount) > 0) return true;
+    return false;
 };
