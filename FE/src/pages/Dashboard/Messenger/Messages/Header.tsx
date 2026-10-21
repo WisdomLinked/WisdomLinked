@@ -94,6 +94,7 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const [headerLeaveCommunityOpen, setHeaderLeaveCommunityOpen] = useState(false);
     const [deleteCommunityConfirmOpen, setDeleteCommunityConfirmOpen] = useState(false);
     const [deleteSeminarConfirmOpen, setDeleteSeminarConfirmOpen] = useState(false);
+    const [deleteSeminarApproved, setDeleteSeminarApproved] = useState(false);
     const [addCommunityMembersOpen, setAddCommunityMembersOpen] = useState(false);
     const [callHistoryOpen, setCallHistoryOpen] = useState(false);
     const [callHistoryLoading, setCallHistoryLoading] = useState(false);
@@ -238,6 +239,8 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             const isCommunity = chosenGroupChatDetails?.type === "community";
             const label = isCommunity ? "community" : "seminar";
             if (!skipConfirm && !isCommunity && seminarEnrolledCount > 0) {
+                // The host confirms participant approval afresh every time.
+                setDeleteSeminarApproved(false);
                 setDeleteSeminarConfirmOpen(true);
                 return;
             }
@@ -261,8 +264,14 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         handleDeleteGroup(true);
     };
 
-    const confirmDeleteSeminarFromHeader = () => {
+    const closeDeleteSeminarConfirm = () => {
         setDeleteSeminarConfirmOpen(false);
+        setDeleteSeminarApproved(false);
+    };
+
+    const confirmDeleteSeminarFromHeader = () => {
+        if (!deleteSeminarApproved) return;
+        closeDeleteSeminarConfirm();
         handleDeleteGroup(true);
     };
 
@@ -1084,19 +1093,30 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
             )}
             <Dialog
                 open={deleteSeminarConfirmOpen}
-                onClose={() => setDeleteSeminarConfirmOpen(false)}
+                onClose={closeDeleteSeminarConfirm}
                 maxWidth="xs"
                 fullWidth
             >
                 <DialogTitle>Delete this seminar?</DialogTitle>
                 <DialogContent>
-                    <p className="text-sm font-semibold text-rose-600">
-                        I have approval from all the participants to delete this seminar
-                    </p>
+                    <label className="flex cursor-pointer items-start gap-2.5 text-sm font-semibold text-rose-600">
+                        <input
+                            type="checkbox"
+                            checked={deleteSeminarApproved}
+                            onChange={(e) => setDeleteSeminarApproved(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-rose-600"
+                        />
+                        <span>I have approval from all the participants to delete this seminar</span>
+                    </label>
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
-                    <Button onClick={() => setDeleteSeminarConfirmOpen(false)}>Cancel</Button>
-                    <Button variant="contained" color="error" onClick={confirmDeleteSeminarFromHeader}>
+                    <Button onClick={closeDeleteSeminarConfirm}>Cancel</Button>
+                    <Button
+                        variant="contained"
+                        color="error"
+                        onClick={confirmDeleteSeminarFromHeader}
+                        disabled={!deleteSeminarApproved}
+                    >
                         Delete Seminar
                     </Button>
                 </DialogActions>

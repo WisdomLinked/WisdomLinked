@@ -33,7 +33,7 @@ const seminar = (status?: string) => ({
   price: 25,
 });
 
-function show(selectedSeminar?: ReturnType<typeof seminar>, enrolledCount = 0) {
+function show(selectedSeminar?: ReturnType<typeof seminar>, enrolledCount = 0, onSaved?: (status: string) => void) {
   const onAfterSeminarSave = vi.fn();
   const store = configureStore({
     reducer: { auth: () => ({ userDetails: { _id: 'host', groupChats: [], events: [] } }) },
@@ -45,6 +45,7 @@ function show(selectedSeminar?: ReturnType<typeof seminar>, enrolledCount = 0) {
           selectedSeminar={selectedSeminar}
           enrolledCount={enrolledCount}
           onAfterSeminarSave={onAfterSeminarSave}
+          onSaved={onSaved}
         />
       </MemoryRouter>
     </Provider>,
@@ -54,6 +55,13 @@ function show(selectedSeminar?: ReturnType<typeof seminar>, enrolledCount = 0) {
 
 const draftButton = () => screen.queryByRole('button', { name: 'Save as Draft' });
 const next = () => fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+const approvalCheckbox = () =>
+  screen.getByRole('checkbox', { name: /I have the approval from all the participants/ });
+/** The dialog's Publish button (the editor's own one is rendered first). */
+const confirmPublishButton = () => {
+  const buttons = screen.getAllByRole('button', { name: 'Publish Seminar' });
+  return buttons[buttons.length - 1];
+};
 
 describe('seminar draft availability in the shared tab/chat editor', () => {
   beforeEach(() => {
@@ -131,8 +139,8 @@ describe('seminar draft availability in the shared tab/chat editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Publish Seminar' }));
     expect(screen.getByText('Publish these changes?')).toBeInTheDocument();
     expect(updateGroupChat).not.toHaveBeenCalled();
-    const publishButtons = screen.getAllByRole('button', { name: 'Publish Seminar' });
-    fireEvent.click(publishButtons[publishButtons.length - 1]);
+    fireEvent.click(approvalCheckbox());
+    fireEvent.click(confirmPublishButton());
     await waitFor(() => expect(afterSave).toHaveBeenCalledWith('active'));
     expect(draftButton()).not.toBeInTheDocument();
   });
@@ -165,5 +173,195 @@ describe('seminar draft availability in the shared tab/chat editor', () => {
     expect(afterSave).not.toHaveBeenCalled();
     fireEvent.click(draftButton()!);
     await waitFor(() => expect(afterSave).toHaveBeenCalledWith('draft'));
+  });
+});
+
+describe('participant approval before publishing changes to a seminar with students', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    updateGroupChat.mockResolvedValue({ result: {} });
+  });
+
+  const openConfirm = () => {
+    show(seminar('active'), 2);
+    next();
+    next();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Seminar' }));
+  };
+
+  it('starts unticked with Publish disabled, and saves nothing until ticked', () => {
+    openConfirm();
+    expect(approvalCheckbox()).not.toBeChecked();
+    expect(confirmPublishButton()).toBeDisabled();
+    fireEvent.click(confirmPublishButton());
+    expect(updateGroupChat).not.toHaveBeenCalled();
+    expect(screen.getByText('Publish these changes?')).toBeInTheDocument();
+  });
+
+  it('enables Publish once ticked and disables it again when unticked', () => {
+    openConfirm();
+    fireEvent.click(approvalCheckbox());
+    expect(confirmPublishButton()).toBeEnabled();
+    fireEvent.click(approvalCheckbox());
+    expect(confirmPublishButton()).toBeDisabled();
+  });
+
+  it('ticks when the approval text itself is clicked', () => {
+    openConfirm();
+    fireEvent.click(screen.getByText(/I have the approval from all the participants/));
+    expect(approvalCheckbox()).toBeChecked();
+  });
+
+  it('publishes the changes once approval is ticked', async () => {
+    openConfirm();
+    fireEvent.click(approvalCheckbox());
+    fireEvent.click(confirmPublishButton());
+    await waitFor(() => expect(updateGroupChat).toHaveBeenCalledWith(
+      expect.objectContaining({ groupId: 'seminar-1', status: 'active' }),
+    ));
+    expect(updateGroupChat).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Publish these changes?')).not.toBeInTheDocument();
+  });
+
+  it('asks again after Cancel', () => {
+    openConfirm();
+    fireEvent.click(approvalCheckbox());
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText('Publish these changes?')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Seminar' }));
+    expect(approvalCheckbox()).not.toBeChecked();
+    expect(confirmPublishButton()).toBeDisabled();
+    expect(updateGroupChat).not.toHaveBeenCalled();
+  });
+
+  it('asks again after closing by clicking outside the dialog', () => {
+    openConfirm();
+    fireEvent.click(approvalCheckbox());
+    const backdrop = screen.getByText('Publish these changes?').parentElement!.parentElement!;
+    fireEvent.click(backdrop);
+    expect(screen.queryByText('Publish these changes?')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Seminar' }));
+    expect(approvalCheckbox()).not.toBeChecked();
+    expect(updateGroupChat).not.toHaveBeenCalled();
+  });
+
+  it('asks again on the next publish after a successful one', async () => {
+    openConfirm();
+    fireEvent.click(approvalCheckbox());
+    fireEvent.click(confirmPublishButton());
+    await waitFor(() => expect(updateGroupChat).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Seminar' }));
+    expect(approvalCheckbox()).not.toBeChecked();
+    expect(confirmPublishButton()).toBeDisabled();
+  });
+
+  it('does not ask for approval when no students have joined', async () => {
+    const afterSave = show(seminar('active'), 0);
+    next();
+    next();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Seminar' }));
+    expect(screen.queryByText('Publish these changes?')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /approval/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(afterSave).toHaveBeenCalledWith('active'));
+  });
+});
+
+describe('onSaved (used by the chat "Edit Seminar Details" popup to close itself)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    updateGroupChat.mockResolvedValue({ result: {} });
+  });
+
+  it('is told about a successful publish, alongside the usual post-save step', async () => {
+    const onSaved = vi.fn();
+    const afterSave = show(seminar('active'), 0, onSaved);
+    next();
+    next();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Seminar' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith('active'));
+    expect(afterSave).toHaveBeenCalledWith('active');
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('is told about a successful publish after participant approval', async () => {
+    const onSaved = vi.fn();
+    show(seminar('active'), 2, onSaved);
+    next();
+    next();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Seminar' }));
+    expect(onSaved).not.toHaveBeenCalled();
+    fireEvent.click(approvalCheckbox());
+    fireEvent.click(confirmPublishButton());
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith('active'));
+  });
+
+  it('is not told when saving fails, so the editor stays open', async () => {
+    updateGroupChat.mockResolvedValue(false);
+    const onSaved = vi.fn();
+    show(seminar('active'), 0, onSaved);
+    next();
+    next();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Seminar' }));
+    await waitFor(() => expect(updateGroupChat).toHaveBeenCalled());
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it('is not told when the network fails', async () => {
+    updateGroupChat.mockRejectedValueOnce(new Error('Offline'));
+    const onSaved = vi.fn();
+    show(seminar('active'), 0, onSaved);
+    next();
+    next();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Seminar' }));
+    await waitFor(() => expect(updateGroupChat).toHaveBeenCalled());
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+});
+
+describe('editing a seminar that is already free', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    updateGroupChat.mockResolvedValue({ result: {} });
+  });
+
+  const freeMessage = () => screen.queryByText('This seminar will be free for all attendees.');
+  const priceError = () => screen.queryByText('Price must be greater than 0.');
+
+  it('opens with Free switched on and publishes as free without touching it', async () => {
+    show({ ...seminar('active'), price: 0 });
+    next();
+    next();
+    expect(freeMessage()).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Seminar' }));
+    await waitFor(() => expect(updateGroupChat).toHaveBeenCalledWith(
+      expect.objectContaining({ groupId: 'seminar-1', price: 0, status: 'active' }),
+    ));
+    expect(priceError()).not.toBeInTheDocument();
+  });
+
+  it('keeps Free off for a paid seminar', () => {
+    show(seminar('active'));
+    next();
+    next();
+    expect(freeMessage()).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('25')).toBeInTheDocument();
+  });
+
+  it('keeps Free off for a draft saved at price 0', async () => {
+    show({ ...seminar('draft'), price: 0 });
+    next();
+    next();
+    expect(freeMessage()).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish Seminar' }));
+    expect(await screen.findByText('Price must be greater than 0.')).toBeInTheDocument();
+    expect(updateGroupChat).not.toHaveBeenCalled();
+  });
+
+  it('keeps Free off when the seminar has no price', () => {
+    const { price, ...noPrice } = seminar('active');
+    show(noPrice as any);
+    next();
+    next();
+    expect(freeMessage()).not.toBeInTheDocument();
   });
 });

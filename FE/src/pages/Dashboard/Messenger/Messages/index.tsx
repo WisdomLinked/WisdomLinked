@@ -708,10 +708,18 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
 
     useEffect(() => {
         setEvents()
+    }, [chosenChatDetails, chosenGroupChatDetails, userDetails?.groupChats, userDetails?.events])
+
+    const openChatKey = chosenChatDetails?.userId
+        ? `dm:${chosenChatDetails.userId}`
+        : chosenGroupChatDetails
+            ? `group:${chosenGroupChatDetails.groupId ?? (chosenGroupChatDetails as any)._id ?? ''}`
+            : ''
+    useEffect(() => {
         set_eventsModalShow(false)
         set_seminarDetailsModalShow(false)
         set_editSeminarModalShow(false)
-    }, [chosenChatDetails, chosenGroupChatDetails, userDetails?.groupChats, userDetails?.events])
+    }, [openChatKey])
 
     useEffect(() => {
         if (isScrollToTop && !gotAllChats) {
@@ -915,10 +923,6 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
             {
                 seminarDetailsModalShow ?
                     <div className={`absolute top-0 left-0 w-full h-full z-[1000] p-4 sm:p-8 flex items-center justify-center ${theme === "light" ? "bg-black/30" : "bg-white bg-opacity-10"}`}>
-                        <div
-                            className="absolute top-0 left-0 z-0 h-full w-full cursor-pointer"
-                            onClick={() => set_seminarDetailsModalShow(false)}
-                        />
                         <div className={`relative z-10 w-full max-w-[620px] max-h-full flex flex-col rounded-2xl p-6 shadow-xl border ${theme === "light" ? "bg-white text-slate-900 border-slate-200" : "bg-black text-white border-slate-700"}`}>
                             <div className={`h-1.5 w-full absolute left-0 top-0 rounded-t-2xl ${theme === "light" ? "bg-gradient-to-r from-[#234C6A] via-[#456882] to-[#234C6A]" : "bg-gradient-to-r from-slate-600 via-slate-500 to-slate-600"}`} />
                             <div className={`shrink-0 text-center text-2xl mb-6 font-semibold ${theme === "light" ? "text-slate-900" : "text-white"}`}>
@@ -978,6 +982,7 @@ const Messages = ({ theme = "dark", onReplyMessage }: { theme?: string; onReplyM
                                 <ExpertSeminar
                                     selectedSeminar={chosenGroupChatDetails}
                                     enrolledCount={seminarEnrolledCount}
+                                    onSaved={() => set_editSeminarModalShow(false)}
                                 />
                             </div>
                         </div>
