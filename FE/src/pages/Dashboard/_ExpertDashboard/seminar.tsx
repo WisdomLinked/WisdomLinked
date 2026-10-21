@@ -33,6 +33,7 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
     type RecurrenceEndMode,
     type RecurrenceUnit,
   } from '../../../utils/recurrencePreview';
+  import { isSavedFreeSeminar } from '../../../utils/seminarFree';
 
   type StepId = 1 | 2 | 3;
 
@@ -128,6 +129,8 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
      * draft save but returns to the list after publishing.
      */
     onAfterSeminarSave?: (status: 'active' | 'draft') => void;
+    /** Notified after every successful save, alongside the usual post-save step (e.g. to close a host popup). */
+    onSaved?: (status: 'active' | 'draft') => void;
     /** Return to seminar list without saving */
     onCancel?: () => void;
     enrolledCount?: number;
@@ -229,10 +232,11 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
   ];
   
   const CURRENCY_OPTIONS: string[] = ['USD', 'EUR', 'GBP', 'INR'];
-  
+
   const ExpertSeminar: React.FC<ExpertSeminarProps> = ({
     selectedSeminar,
     onAfterSeminarSave,
+    onSaved,
     onCancel,
     enrolledCount = 0,
   }) => {
@@ -270,6 +274,7 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
     }));
     const [openDropdown, setOpenDropdown] = useState<DropdownId>(null);
     const [confirmPublishOpen, setConfirmPublishOpen] = useState(false);
+    const [participantsApproved, setParticipantsApproved] = useState(false);
     const [restrictionMessage, setRestrictionMessage] = useState<string | null>(null);
     const [tagInput, setTagInput] = useState<string>('');
     const [errors, setErrors] = useState<SeminarErrors>({});
@@ -419,6 +424,7 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
         tags: Array.isArray(selectedSeminar.tags) ? selectedSeminar.tags.filter((t): t is string => typeof t === 'string') : [],
         purposeOther: selectedSeminar.purposeOther || '',
         price: selectedSeminar.price ?? '',
+        isFree: isSavedFreeSeminar(selectedSeminar),
         maxAttendees: typeof selectedSeminar.maxAttendees === 'number' ? selectedSeminar.maxAttendees : '',
         isRecurring: !!selectedSeminar.isRecurring,
         ...hydrateRecurrence(selectedSeminar),
@@ -718,6 +724,7 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
           }
 
           await (dispatch as any)(updateMe());
+          onSaved?.(status);
           if (onAfterSeminarSave) {
             onAfterSeminarSave(status);
           } else {
@@ -733,13 +740,19 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
     const handlePublish = () => {
       if (enrolledCount > 0) {
+        setParticipantsApproved(false);
         setConfirmPublishOpen(true);
         return;
       }
       void persistSeminar('active');
     };
-    const confirmPublishWithApproval = () => {
+    const closeConfirmPublish = () => {
       setConfirmPublishOpen(false);
+      setParticipantsApproved(false);
+    };
+    const confirmPublishWithApproval = () => {
+      if (!participantsApproved) return;
+      closeConfirmPublish();
       void persistSeminar('active');
     };
     const handleSaveDraft = () => persistSeminar('draft');
@@ -1536,18 +1549,24 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
           <div
             className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-900/40 px-4"
             onClick={(e) => {
-              if (e.target === e.currentTarget) setConfirmPublishOpen(false);
+              if (e.target === e.currentTarget) closeConfirmPublish();
             }}
           >
             <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
               <h2 className="text-base font-semibold text-slate-900">Publish these changes?</h2>
-              <p className="mt-3 text-sm font-semibold text-rose-600">
-                I have the approval from all the participants for these particular seminar settings
-              </p>
+              <label className="mt-3 flex cursor-pointer items-start gap-2.5 text-sm font-semibold text-rose-600">
+                <input
+                  type="checkbox"
+                  checked={participantsApproved}
+                  onChange={(e) => setParticipantsApproved(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[#234C6A]"
+                />
+                <span>I have the approval from all the participants for these particular seminar settings</span>
+              </label>
               <div className="mt-5 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setConfirmPublishOpen(false)}
+                  onClick={closeConfirmPublish}
                   className="rounded-lg border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
                 >
                   Cancel
@@ -1555,7 +1574,8 @@ import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
                 <button
                   type="button"
                   onClick={confirmPublishWithApproval}
-                  className="rounded-lg bg-[#234C6A] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#1b3c53]"
+                  disabled={!participantsApproved}
+                  className="rounded-lg bg-[#234C6A] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#1b3c53] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#234C6A]"
                 >
                   Publish Seminar
                 </button>
