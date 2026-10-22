@@ -24,7 +24,7 @@ const AppState = require("../models/AppState");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
 const PaymentHistory = require("../models/PaymentHistory");
-const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
+const { seminarRegistrationClosedError } = require("../utils/bookingLeadTime");
 const { resolveAppBaseUrl } = require("../utils/appBaseUrl");
 const { logAdminAction } = require("../utils/adminAudit");
 
@@ -194,11 +194,9 @@ const createStripePaymentIntent = async (req, res) => {
                             return res.status(400).send({ error: 'A later session in this seminar series is full, so registration is closed.' });
                         }
                     }
-                    const expert = await User.findById(groupChat.admin.toString());
-                    try {
-                        assertBookingLeadTime(expert, groupChat.start, 'Seminar registrations');
-                    } catch (leadErr) {
-                        return res.status(400).send({ error: leadErr.message || 'This seminar can no longer be booked.' });
+                    const registrationClosed = seminarRegistrationClosedError(groupChat.start);
+                    if (registrationClosed) {
+                        return res.status(400).send({ error: registrationClosed });
                     }
                     if (!wallet) manualCapture = true;
                 }

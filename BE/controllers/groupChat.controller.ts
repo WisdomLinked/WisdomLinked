@@ -186,7 +186,7 @@ const {
     escapeHtml: emailEscape,
 } = require('../services/emailTemplate')
 const { sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
-const { assertBookingLeadTime, expertSchedulingPastStartError } = require("../utils/bookingLeadTime");
+const { assertBookingLeadTime, expertSchedulingPastStartError, seminarRegistrationClosedError } = require("../utils/bookingLeadTime");
 const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
 import { sanitizeDecisionNote, decisionNoteEmailBlock } from '../utils/decisionNote';
@@ -2427,10 +2427,9 @@ const registerForSeminar = async (req, res) => {
             return refundAndFail(404, "User not found", "Student account not found");
         }
 
-        try {
-            assertBookingLeadTime(expert, groupChat.start, "Seminar registrations");
-        } catch (leadErr: any) {
-            return refundAndFail(400, safeHttp500Message(leadErr), leadErr?.message || "Registration lead time not met");
+        const registrationClosed = seminarRegistrationClosedError(groupChat.start);
+        if (registrationClosed) {
+            return refundAndFail(400, registrationClosed, "Seminar already started");
         }
 
         const claimed = await claimSeminarSeat(groupChat._id, userId, groupChat.maxAttendees);
