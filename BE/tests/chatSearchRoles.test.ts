@@ -26,6 +26,12 @@ test("an unknown or missing role falls back to the original behaviour", () => {
     assert.deepEqual(searchableRolesFor("moderator"), ["expert", "customer"]);
 });
 
+test("no role can ever search for an admin", () => {
+    for (const role of ["customer", "expert", "admin", "", undefined, "moderator"]) {
+        assert.ok(!searchableRolesFor(role).includes("admin"), `role ${String(role)} must not find admins`);
+    }
+});
+
 test("callers cannot mutate the shared role list", () => {
     const first = searchableRolesFor("expert");
     first.push("admin");
