@@ -64,6 +64,7 @@ import AdminAuditLog from './Dashboard/_AdminDashboard/auditLog';
 import AdminExpertsManager from '../components/dashboard/AdminExpertsManager';
 import Chatbot from '../components/chatbot';
 import { PendingContactRequestsProvider } from '../hooks/usePendingContactRequestsCount';
+import { useAdminDmUnread } from '../hooks/useAdminDmUnread';
 import { DASHBOARD_PAGE_TITLE } from '../components/dashboard/pageTitle';
 
 const AUTH_BASE = process.env.REACT_APP_AUTH_URL || '/user/';
@@ -305,6 +306,8 @@ export default function AdminDashboard() {
 
   const sidebarActive =
     extraView === 'profile' || extraView === 'settings' ? extraView : section;
+
+  const dmUnread = useAdminDmUnread(Boolean(userDetails?.email));
 
   const adminName =
     (userDetails?.username as string | undefined) ||
@@ -589,7 +592,8 @@ export default function AdminDashboard() {
           studentName={adminName}
           avatarUrl={avatarUrl}
           roleLabel="Admin"
-          notifications={{}}
+          notifications={{ chat: sidebarActive === 'chat' ? 0 : dmUnread.total }}
+          subItemCounts={{ chat: dmUnread.bySection }}
         />
 
         <main className="flex-1 min-w-0 lg:ml-[220px]">
