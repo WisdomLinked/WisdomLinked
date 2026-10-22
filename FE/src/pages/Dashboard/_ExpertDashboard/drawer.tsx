@@ -174,7 +174,7 @@ export default function ExpertDrawer() {
                     </div>
                     <div className="bg-black w-full h-[1px]" />
                     <div className="flex items-center mb-4">
-                        <FriendsTitle title="Seminars" />
+                        <FriendsTitle title="My Seminars" />
                         <Link
                             title="Create New Seminar"
                             to={`${process.env.REACT_APP_AUTH_URL}expertdashboard/seminar`}

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import {
   LayoutDashboard,
@@ -22,10 +22,14 @@ import TopBar from '../components/layout/TopBar';
 import type { TopBarNotificationItem } from '../components/layout/TopBar';
 import StatCard from '../components/ui/StatCard';
 import AdminMetricsPanel from '../components/dashboard/AdminMetricsPanel';
-import AdminSnapshotDrilldown, {
-  type SnapshotListType,
-} from '../components/dashboard/AdminSnapshotDrilldown';
+import AdminSnapshotMetricView from '../components/dashboard/AdminSnapshotMetricView';
+import type { SnapshotListType } from '../components/dashboard/adminSnapshotTypes';
 import { doGetAdminDashboardStats, type AdminDashboardStatsData } from '../api/api';
+import {
+  DEFAULT_SNAPSHOT_RANGE,
+  parseSnapshotRangeKey,
+  snapshotRangeBounds,
+} from '../utils/adminSnapshotRange';
 import {
   loadAdminTopBarDismiss,
   pruneDismissForResolvedStats,
@@ -59,7 +63,6 @@ import AdminMajors from './Dashboard/_AdminDashboard/majors';
 import AdminAuditLog from './Dashboard/_AdminDashboard/auditLog';
 import AdminExpertsManager from '../components/dashboard/AdminExpertsManager';
 import Chatbot from '../components/chatbot';
-import { usePeerProfileModal } from '../hooks/usePeerProfileModal';
 import { PendingContactRequestsProvider } from '../hooks/usePendingContactRequestsCount';
 import { DASHBOARD_PAGE_TITLE } from '../components/dashboard/pageTitle';
 
@@ -83,7 +86,7 @@ const adminNavItems = [
 function pathToSection(pathname: string): string {
   const m = pathname.match(/\/admindashboard\/?(.*)$/);
   const rest = (m?.[1] || '').replace(/\/$/, '');
-  if (!rest) return 'dashboard';
+  if (!rest || rest.startsWith('snapshot')) return 'dashboard';
   return rest;
 }
 
@@ -101,21 +104,22 @@ const emptyStats: AdminDashboardStatsData = {
 };
 
 function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
-  const {
-    auth: { userDetails },
-  } = useAppSelector(state => state);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rangeKey = parseSnapshotRangeKey(searchParams.get('range'));
   const [stats, setStats] = useState<AdminDashboardStatsData>(emptyStats);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [activeListType, setActiveListType] = useState<SnapshotListType | null>(null);
-  const { openPeerProfile, closePeerProfile, peerProfileModal } = usePeerProfileModal(
-    String(userDetails?.role || 'admin'),
-  );
+
+  useEffect(() => {
+    if (!searchParams.get('range')) {
+      setSearchParams({ range: DEFAULT_SNAPSHOT_RANGE }, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setStatsLoading(true);
-      const res = await doGetAdminDashboardStats();
+      const res = await doGetAdminDashboardStats(snapshotRangeBounds(rangeKey));
       if (!cancelled && res?.status === 'SUCCESS' && res.data) {
         setStats(res.data);
       }
@@ -124,7 +128,7 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [rangeKey]);
 
   const fmt = (n: number) => (statsLoading ? '—' : n);
 
@@ -143,6 +147,7 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
             <StatCard
               alignStart
               label="User management"
+              labelClassName="text-xs uppercase tracking-wider text-muted"
               value={fmt(stats.pendingApprovals)}
               subline="Users with status: review"
               icon={Users}
@@ -153,6 +158,7 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
             <StatCard
               alignStart
               label="Payments"
+              labelClassName="text-xs uppercase tracking-wider text-muted"
               value={fmt(stats.totalPayments)}
               subline="Payment records (excl. refund-only rows)"
               icon={CreditCard}
@@ -163,6 +169,7 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
             <StatCard
               alignStart
               label="Contact us"
+              labelClassName="text-xs uppercase tracking-wider text-muted"
               value={fmt(stats.newContactMessages)}
               subline="New messages awaiting action"
               icon={Inbox}
@@ -173,6 +180,7 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
             <StatCard
               alignStart
               label="HelpBot Q&A"
+              labelClassName="text-xs uppercase tracking-wider text-muted"
               value={fmt(stats.unansweredChatbotQuestions)}
               subline="User questions without an answer yet"
               icon={Bot}
@@ -190,28 +198,13 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
             ) : (
               <AdminMetricsPanel
                 stats={stats}
-                onSelectList={type => {
-                  closePeerProfile();
-                  setActiveListType(type);
-                }}
+                rangeKey={rangeKey}
+                onRangeChange={next => setSearchParams({ range: next }, { replace: true })}
+                onSelectList={(type: SnapshotListType) => go(`snapshot/${type}`, `?range=${rangeKey}`)}
               />
             )}
           </div>
         </div>
-
-        {activeListType ? (
-          <AdminSnapshotDrilldown
-            listType={activeListType}
-            onClose={() => {
-              closePeerProfile();
-              setActiveListType(null);
-            }}
-            onPersonClick={seed => {
-              void openPeerProfile(seed);
-            }}
-          />
-        ) : null}
-        {peerProfileModal}
 
         <section>
           <h3 className="mb-3 text-left text-sm font-semibold uppercase tracking-wide text-wl-muted">
@@ -362,7 +355,7 @@ export default function AdminDashboard() {
   const goToSection = React.useCallback(
     (id: string, search = '') => {
       if (id === 'dashboard') {
-        navigate(`${AUTH_BASE}admindashboard`);
+        navigate(`${AUTH_BASE}admindashboard${search}`);
         return;
       }
       navigate(`${AUTH_BASE}admindashboard/${id}${search}`);
@@ -558,6 +551,7 @@ export default function AdminDashboard() {
     <div className="h-[calc(100vh-56px)] overflow-y-auto bg-wl-page">
       <Routes>
         <Route index element={<AdminOverview go={goToSection} />} />
+        <Route path="snapshot/:listType" element={<AdminSnapshotMetricView />} />
         <Route path="usermgmt" element={<UserMgmt />} />
         <Route path="payment" element={<Payment />} />
         <Route path="feedbacks" element={<Feedback />} />

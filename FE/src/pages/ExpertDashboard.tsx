@@ -804,7 +804,7 @@ export default function ExpertDashboard() {
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'chat', label: 'Chat', icon: MessageSquare },
       { id: 'clients', label: 'Clients', icon: Users },
-      { id: 'seminar', label: 'Seminars', icon: BookOpen },
+      { id: 'seminar', label: 'My Seminars', icon: BookOpen },
       { id: 'calendar', label: 'Calendar', icon: Calendar },
       { id: 'join-meeting', label: 'Join Meeting', icon: Video },
       { id: 'availability', label: 'Availability', icon: Clock },
@@ -1623,7 +1623,7 @@ export default function ExpertDashboard() {
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-semibold text-slate-900">
-                Seminars
+                My Seminars
               </h4>
               <span className="text-[11px] text-slate-500">
                 {acceptedSeminars.length} upcoming

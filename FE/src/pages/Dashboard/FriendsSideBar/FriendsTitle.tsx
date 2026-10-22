@@ -7,7 +7,7 @@ const FriendsTitle = ({ title }: { title: string }) => {
         <div className="w-[250px] uppercase text-grey text-[14px] mt-[4px] flex items-center gap-[10px]">
             {title === "Private Chats" ? (
                 <MailIcon />
-            ) : title === "Seminars" ? (
+            ) : title === "Seminars" || title === "My Seminars" ? (
                 <CastForEducationIcon />
             ) : (
                 <GroupsIcon />

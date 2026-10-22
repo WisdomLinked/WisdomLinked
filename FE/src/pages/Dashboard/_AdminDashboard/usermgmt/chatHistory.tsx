@@ -1,210 +1,187 @@
-import React, { useEffect, useRef, useState } from "react";
-import FriendsTitle from "../../FriendsSideBar/FriendsTitle";
-import FriendsListItem from "../../FriendsSideBar/FriendsList/FriendsListItem";
-import GroupChatListItem from "../../FriendsSideBar/GroupChatList/GroupChatListItem";
-import DateSeparator from "../../Messenger/Messages/DateSeparator";
-import Message from "../../Messenger/Messages/Message";
-import { doGetDirectChatHistory, doGetGroupChatHistory } from "../../../../api/api";
-import { formatDateHH_MM_AMPM } from "../../../../actions/common";
-import GeneralChatList from "../../FriendsSideBar/GeneralChatList";
-import GeneralChatListItem from "../../FriendsSideBar/GeneralChatList/GeneralChatListItem";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { doGetDirectChatHistory, doGetGroupChatHistory } from '../../../../api/api';
+import ConversationList from './audit/ConversationList';
+import ConversationPane from './audit/ConversationPane';
+import {
+  buildConversations,
+  type AuditConversation,
+  type ChatMessage,
+  type SegmentFilter,
+} from './audit/auditModel';
 
-const ChatHistory = ({
-    userDetails
-}: any) => {
-    console.log(userDetails, './//')
-    const [isFirstLoad, set_isFirstLoad] = useState(true)
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-    const [selectedChat, set_selectedChat] = useState<any>({});
-    const [scrollPosition, setScrollPosition] = useState(0);
-    const [isScrollToTop, set_isScrollToTop] = useState(false)
-    const [gotAllChats, set_gotAllChats] = useState(false)
-    const [currentPage, set_currentPage] = useState(0)
-    const [messages, set_messages] = useState<Array<any>>([])
+const LG_QUERY = '(min-width: 1024px)';
 
+function useIsLg() {
+  const [isLg, setIsLg] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia(LG_QUERY).matches
+      : true,
+  );
 
-    const sameAuthor = (message: any, index: number) => {
-        if (index === 0) {
-            return false;
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const media = window.matchMedia(LG_QUERY);
+    const onChange = () => setIsLg(media.matches);
+    onChange();
+    media.addEventListener?.('change', onChange);
+    return () => media.removeEventListener?.('change', onChange);
+  }, []);
+
+  return isLg;
+}
+
+const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
+  const isLg = useIsLg();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isFirstLoad, set_isFirstLoad] = useState(true);
+  const [selectedChat, set_selectedChat] = useState<AuditConversation | undefined>();
+  const [isScrollToTop, set_isScrollToTop] = useState(false);
+  const [gotAllChats, set_gotAllChats] = useState(false);
+  const [currentPage, set_currentPage] = useState(0);
+  const [messages, set_messages] = useState<ChatMessage[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [failedIds, setFailedIds] = useState<Record<string, boolean>>({});
+  const [query, setQuery] = useState('');
+  const [segment, setSegment] = useState<SegmentFilter>('all');
+
+  const buckets = useMemo(() => buildConversations(userDetails), [userDetails]);
+
+  const getChatHistory = useCallback(
+    async (pageNum: number, conversation: AuditConversation, mode: 'load' | 'retry' = 'load') => {
+      if (!conversation?.id || !userDetails?._id) return;
+      set_currentPage(pageNum);
+      if (pageNum === 0) {
+        if (mode === 'retry') {
+          setRetrying(true);
+        } else {
+          setLoading(true);
+          setError(false);
         }
-        return message.author._id === messages[index - 1].author._id;
+      }
+      const response: any = conversation.fetchAsGroup
+        ? await doGetGroupChatHistory(
+            {
+              currentPage: pageNum,
+              groupChatId: conversation.id,
+            },
+            { notify: false },
+          )
+        : await doGetDirectChatHistory(
+            {
+              currentPage: pageNum,
+              senderId: userDetails._id,
+              receiverId: conversation.receiverId || conversation.id,
+            },
+            { notify: false },
+          );
+
+      if (response) {
+        if (!pageNum) {
+          set_messages([...(response.result || [])]);
+        } else {
+          set_messages(prev => [...(response.result || []), ...prev]);
+        }
+        set_gotAllChats(Boolean(response.gotAllChats));
+        setFailedIds(prev => {
+          if (!prev[conversation.id]) return prev;
+          const next = { ...prev };
+          delete next[conversation.id];
+          return next;
+        });
+        setError(false);
+      } else if (pageNum === 0) {
+        set_messages([]);
+        setError(true);
+        setFailedIds(prev => ({ ...prev, [conversation.id]: true }));
+      }
+      setLoading(false);
+      setRetrying(false);
+    },
+    [userDetails?._id],
+  );
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (e.currentTarget.scrollTop === 0 && e.currentTarget.scrollHeight !== e.currentTarget.clientHeight) {
+      set_isScrollToTop(true);
     }
+  };
 
-    const scrollToBottom = () => {
-        if (messagesEndRef.current) {
-            messagesEndRef?.current.scrollIntoView({ behavior: "smooth" });
-            if (isFirstLoad)
-                set_isFirstLoad(false)
-        }
-    };
-
-    const getChatHistory = async (pageNum: any) => {
-        set_currentPage(pageNum)
-        const response: any =
-            selectedChat?.admin ?
-                await doGetGroupChatHistory({
-                    currentPage: pageNum,
-                    groupChatId: selectedChat._id,
-                }) :
-                await doGetDirectChatHistory({
-                    currentPage: pageNum,
-                    senderId: userDetails._id,
-                    receiverId: selectedChat._id,
-                })
-        if (response) {
-            if (!pageNum) {
-                set_messages([...response.result])
-            } else {
-                set_messages([...response.result, ...messages])
-            }
-            set_gotAllChats(response.gotAllChats)
-        }
+  useEffect(() => {
+    if (isScrollToTop && !gotAllChats && selectedChat && !loading && !error) {
+      void getChatHistory(currentPage + 1, selectedChat);
     }
+    set_isScrollToTop(false);
+  }, [isScrollToTop, gotAllChats, selectedChat, currentPage, getChatHistory, loading, error]);
 
-    const handleScroll = (e: React.UIEvent<HTMLDivElement, UIEvent>) => {
-        setScrollPosition(e.currentTarget.scrollTop);
-        if (e.currentTarget.scrollTop === 0 && e.currentTarget.scrollHeight !== e.currentTarget.clientHeight)
-            set_isScrollToTop(true)
-    };
+  useEffect(() => {
+    if (selectedChat?.id) {
+      set_isFirstLoad(true);
+      set_messages([]);
+      void getChatHistory(0, selectedChat);
+    }
+  }, [selectedChat?.id, getChatHistory]);
 
-    useEffect(() => {
-        if (isScrollToTop && !gotAllChats) {
-            console.log('SCROLL GETS TO TOP ------------------')
-            getChatHistory(currentPage + 1)
-        }
-        set_isScrollToTop(false)
-    }, [isScrollToTop])
+  useEffect(() => {
+    if (messages.length && isFirstLoad && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      set_isFirstLoad(false);
+    }
+  }, [isFirstLoad, messages]);
 
-    useEffect(() => {
-        if (selectedChat?._id) {
-            set_isFirstLoad(true)
-            getChatHistory(0)
-        }
-    }, [selectedChat])
+  useEffect(() => {
+    set_selectedChat(undefined);
+    set_messages([]);
+    setError(false);
+    setFailedIds({});
+  }, [userDetails?._id]);
 
-    useEffect(() => {
-        if (messages.length && isFirstLoad) {
+  useEffect(() => {
+    if (isLg && !selectedChat && buckets.all.length > 0) {
+      set_selectedChat(buckets.all[0]);
+    }
+  }, [isLg, selectedChat, buckets.all]);
 
-            scrollToBottom();
-        }
-    }, [isFirstLoad, messages]);
+  const showList = !selectedChat || isLg;
+  const showPane = Boolean(selectedChat) || isLg;
 
-    return (
-        <div className="w-full h-full flex flex-col lg:flex-row justify-between">
-            <div className="hidden lg:block min-w-[260px] h-full border-r-[1px] border-lightgrey overflow-y-auto pt-6">
-                <FriendsTitle title="General Chats" />
-                <div className="pr-4">
-                    {
-                        userDetails?.generalChats?.map((chat: any, index: number) => {
-                            if (chat.name === 'Global Chat') {
-                                return
-                            } else if (chat.name === 'Admin') {
-                                return
-                            } else if (chat.admin._id === userDetails._id) {
-                                chat.type = 'mine'
-                                chat.name = 'General Chat'
-                            }
-                            return (
-                                <GeneralChatListItem
-                                    chat={chat}
-                                    key={chat._id}
-                                    missedChats={chat.missedChats}
-                                    lastChatDate={chat.updatedAt}
-                                    clickHandler={() => set_selectedChat(chat)}
-                                    isActive={selectedChat?._id === chat._id}
-                                />
-                            )
-                        })
-                    }
-                </div>
-                <FriendsTitle title="Private Chats" />
-                <div className="pr-4">
-                    {
-                        userDetails?.friends?.map((f: any, index: number) => (
-                            <FriendsListItem
-                                key={f._id}
-                                username={f.username}
-                                id={f._id}
-                                email={f.email}
-                                image={f.image}
-                                clickHandler={() => set_selectedChat(f)}
-                                isActive={selectedChat?._id === f._id}
-                            />
-                        ))
-                    }
-                </div>
-                <div className="bg-grey mt-4 w-[calc(100%-24px)] h-[1px]" />
-                <div className="flex items-center mt-2">
-                    <FriendsTitle title="Seminars" />
-                </div>
-                <div className="pr-4">
-                    {
-                        userDetails?.groupChats?.map((chat: any, index: number) => (
-                            <GroupChatListItem
-                                key={chat._id}
-                                chat={chat}
-                                clickHandler={() => set_selectedChat(chat)}
-                                isActive={selectedChat?._id === chat._id}
-                            />
-                        ))
-                    }
-                </div>
-            </div>
-            <div className="w-full h-[100px] lg:hidden border-b-[1px] border-b-grey">
-
-            </div>
-            <div className="w-full h-[calc(100%-100px)] lg:h-full bg-wl-page overflow-auto py-3 flex flex-col items-center" onScroll={handleScroll}>
-                {
-                    gotAllChats ?
-                        <div className="mt-[15px] text-[13px] text-grey text-center px-6">
-                            {!selectedChat?.admin
-                                ? `This is the beginning of your conversation with ${selectedChat?.username}`
-                                : selectedChat?.type === 'community'
-                                  ? 'This is the beginning of the conversation with your community.'
-                                  : 'This is the beginning of the conversation with your friends!'}
-                        </div>
-                        : null
-                }
-                {messages.map((message, index) => {
-                    const thisMessageDate = new Date(
-                        message.createdAt
-                    ).toDateString();
-                    const prevMessageDate =
-                        index > 0 &&
-                        new Date(messages[index - 1]?.createdAt).toDateString();
-
-                    const isSameDay =
-                        index > 0 ? thisMessageDate === prevMessageDate : true;
-                    const thisMessageTime = formatDateHH_MM_AMPM(new Date(message.createdAt));
-                    const prevMessageTime = index > 0 && formatDateHH_MM_AMPM(new Date(messages[index - 1]?.createdAt));
-                    const isSameTime = index > 0 ? thisMessageTime === prevMessageTime : false;
-                    const incomingMessage =
-                        message.author._id !== (userDetails as any)._id;
-
-                    return (
-                        <div key={message._id + index} style={{ width: "97%" }}>
-                            {(!isSameDay || index === 0) && (
-                                <DateSeparator date={message.createdAt} />
-                            )}
-
-                            <Message
-                                content={message.content}
-                                username={message.author.username}
-                                image={message.author.image}
-                                sameAuthor={sameAuthor(message, index)}
-                                date={message.createdAt}
-                                incomingMessage={incomingMessage}
-                                hideDate={isSameDay && isSameTime}
-                                hiddenDropDown={true}
-                                myRole='admin'
-                            />
-                        </div>
-                    );
-                })}
-                <div ref={messagesEndRef} />
-            </div>
-        </div>
-    );
+  return (
+    <div
+      className="mt-4 flex min-h-0 overflow-hidden rounded-xl border border-audit-line bg-audit-surface"
+      style={{ height: 'min(640px, calc(100dvh - 220px))' }}
+    >
+      {showList ? (
+        <ConversationList
+          group={buckets.group}
+          privateChats={buckets.privateChats}
+          seminars={buckets.seminars}
+          selectedId={selectedChat?.id}
+          failedIds={failedIds}
+          query={query}
+          onQueryChange={setQuery}
+          segment={segment}
+          onSegmentChange={setSegment}
+          onSelect={set_selectedChat}
+        />
+      ) : null}
+      {showPane ? (
+        <ConversationPane
+          conversation={selectedChat}
+          messages={messages}
+          loading={loading}
+          error={error}
+          retrying={retrying}
+          auditedUserId={userDetails?._id}
+          showBack={!isLg}
+          onBack={() => set_selectedChat(undefined)}
+          onRetry={() => selectedChat && getChatHistory(0, selectedChat, 'retry')}
+          onMessagesScroll={handleScroll}
+          messagesEndRef={messagesEndRef}
+        />
+      ) : null}
+    </div>
+  );
 };
 
 export default ChatHistory;
