@@ -15,6 +15,7 @@ import type { ICountry } from 'country-state-city';
 import CountryField, { COUNTRY_REQUIRED_MESSAGE } from '../components/ui/CountryField';
 import PhoneField from '../components/ui/PhoneField';
 import { PHONE_INVALID_MESSAGE, isPhoneValid, toStoredPhone } from '../utils/phone';
+import { SignupSignatureFields, SignupTermsModal, useSharedSignupContract } from '../components/terms/SignupTerms';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -36,6 +37,7 @@ export default function WLCustomerRegister() {
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [showTermsModal, setShowTermsModal] = useState(false);
+    const signupTerms = useSharedSignupContract();
     
     const [showServiceDrop, setShowServiceDrop] = useState(false);
     
@@ -116,6 +118,10 @@ export default function WLCustomerRegister() {
             const err = validateField(key, form[key as keyof typeof form]);
             if (err) e[key] = err;
         });
+        if (signupTerms.published) {
+            const signatureErr = signupTerms.signatureError();
+            if (signatureErr) e.signature = signatureErr;
+        }
         
         const allTouched = Object.keys(form).reduce((acc, key) => ({ ...acc, [key]: true }), {});
         setTouched(allTouched);
@@ -141,7 +147,18 @@ export default function WLCustomerRegister() {
         }
         setSubmitting(true);
         clearFormAlert();
+        if (!signupTerms.loaded) {
+            setFormError('Terms are still loading. Please try again.');
+            setSubmitting(false);
+            return;
+        }
+        if (signupTerms.error) {
+            setFormError('Could not load the terms. Refresh and try again.');
+            setSubmitting(false);
+            return;
+        }
         try {
+            const agreement = signupTerms.published ? signupTerms.payload() : null;
             const data = {
                 role: 'customer',
                 username: form.fullName,
@@ -154,7 +171,8 @@ export default function WLCustomerRegister() {
                 email: form.email,
                 password: form.password,
                 timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-                ...(form.specialNote.trim() && { specialNote: form.specialNote.trim() })
+                ...(form.specialNote.trim() && { specialNote: form.specialNote.trim() }),
+                ...(agreement ? { termsAgreement: agreement } : {}),
             };
             const response = await callApi('POST', 'auth/register', data, undefined, {
                 notify: false,
@@ -385,6 +403,14 @@ export default function WLCustomerRegister() {
                                     <span className="text-sm text-slate-600">I agree to the <button type="button" onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }} className="text-[#234C6A] font-semibold hover:underline">Terms and Conditions</button></span>
                                 </label>
                                 {(touched.terms && errors.terms) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.terms}</p>}
+                                {signupTerms.published ? (
+                                    <SignupSignatureFields
+                                        typedName={signupTerms.typedName}
+                                        onTypedName={signupTerms.setTypedName}
+                                        onSignature={signupTerms.setSignaturePng}
+                                    />
+                                ) : null}
+                                {errors.signature ? <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.signature}</p> : null}
                             </div>
                         </div>
 
@@ -400,40 +426,29 @@ export default function WLCustomerRegister() {
                 </div>
             </div>
 
-            {/* Terms & Conditions Modal */}
-            {showTermsModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)' }} onClick={() => setShowTermsModal(false)}>
-                    <div className="w-full max-w-lg max-h-[80vh] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 flex flex-col" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' }} onClick={e => e.stopPropagation()}>
-                        <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #234C6A, #456882)' }} />
-                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                            <h3 className="font-display text-lg font-bold text-slate-800">Terms and Conditions</h3>
-                            <button type="button" onClick={() => setShowTermsModal(false)} className="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
-                        </div>
-                        <div className="px-6 py-4 overflow-y-auto flex-1 text-sm text-slate-600 leading-relaxed space-y-4">
-                            <p className="font-semibold text-slate-700">Last Updated: March 15, 2026</p>
-                            <p>Welcome to WisdomLinked. By creating an account and using our services, you agree to the following terms and conditions. Please read them carefully.</p>
-                            <h4 className="font-semibold text-slate-800">1. Acceptance of Terms</h4>
-                            <p>By accessing or using WisdomLinked, you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions. If you do not agree with any part of these terms, you must not use our services.</p>
-                            <h4 className="font-semibold text-slate-800">2. User Accounts</h4>
-                            <p>You are responsible for maintaining the confidentiality of your account credentials. You agree to provide accurate, current, and complete information during registration and to update it as necessary.</p>
-                            <h4 className="font-semibold text-slate-800">3. Use of Services</h4>
-                            <p>You agree to use WisdomLinked only for lawful purposes and in compliance with all applicable laws and regulations. You shall not misuse, abuse, or attempt to gain unauthorized access to any part of the platform.</p>
-                            <h4 className="font-semibold text-slate-800">4. Intellectual Property</h4>
-                            <p>All content, trademarks, and intellectual property on WisdomLinked are owned by or licensed to us. You may not reproduce, modify, or distribute any content without prior written consent.</p>
-                            <h4 className="font-semibold text-slate-800">5. Privacy</h4>
-                            <p>Your privacy is important to us. Our collection and use of personal information is governed by our Privacy Policy, which is incorporated into these terms by reference.</p>
-                            <h4 className="font-semibold text-slate-800">6. Limitation of Liability</h4>
-                            <p>WisdomLinked shall not be held liable for any indirect, incidental, or consequential damages arising out of or related to your use of our platform.</p>
-                            <h4 className="font-semibold text-slate-800">7. Changes to Terms</h4>
-                            <p>We reserve the right to modify these terms at any time. Continued use of the platform after changes constitutes your acceptance of the updated terms.</p>
-                        </div>
-                        <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
-                            <button type="button" onClick={() => setShowTermsModal(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">Close</button>
-                            <button type="button" onClick={() => { handleChange('terms', true); handleBlur('terms'); setShowTermsModal(false); }} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-colors" style={{ background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' }}>I Agree</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <SignupTermsModal
+                open={showTermsModal}
+                onClose={() => setShowTermsModal(false)}
+                loaded={signupTerms.loaded}
+                loadError={signupTerms.error}
+                contract={signupTerms.contract}
+                typedName={signupTerms.typedName}
+                onTypedName={signupTerms.setTypedName}
+                onSignature={signupTerms.setSignaturePng}
+                onAgree={() => {
+                    if (signupTerms.published) {
+                        const signatureErr = signupTerms.signatureError();
+                        if (signatureErr) {
+                            setErrors((prev) => ({ ...prev, signature: signatureErr }));
+                            setTouched((prev) => ({ ...prev, terms: true }));
+                            return;
+                        }
+                    }
+                    handleChange('terms', true);
+                    handleBlur('terms');
+                    setShowTermsModal(false);
+                }}
+            />
         </div>
     );
 }

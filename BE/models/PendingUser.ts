@@ -42,6 +42,10 @@ const pendingUserSchema = new mongoose.Schema(
         rating: { type: Number, default: 0 },
         specialNote: { type: String },
         timeZone: { type: String, default: 'UTC' },
+        /** Shared-contract signature captured at register, written to TermsAcceptance when the account is created. */
+        termsAcceptance: { type: mongoose.Schema.Types.Mixed },
+        /** Set once this pending signup has created its User, so a signature retry cannot attach to a different account. */
+        createdUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     },
     { timestamps: true }
 );

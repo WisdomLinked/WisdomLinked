@@ -1,9 +1,17 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import ProfileCompletionCard from './ProfileCompletionCard';
 import StudentProfileCompletionCard from './StudentProfileCompletionCard';
+
+const { getRequiredContracts } = vi.hoisted(() => ({
+  getRequiredContracts: vi.fn(),
+}));
+
+vi.mock('../../../api/termsApi', () => ({
+  getRequiredContracts,
+}));
 
 describe('ProfileCompletionCard', () => {
   it('shows section actions and a partial academic badge', () => {
@@ -69,7 +77,15 @@ describe('ProfileCompletionCard', () => {
 });
 
 describe('StudentProfileCompletionCard', () => {
-  it('renders from the authenticated student and opens a section', () => {
+  beforeEach(() => {
+    getRequiredContracts.mockReset();
+    // Unsigned current student agreement, so the Terms row stays on the card.
+    getRequiredContracts.mockResolvedValue([
+      { audience: 'customer', version: 1, html: '<p>Student terms</p>', contentHash: 'abc' },
+    ]);
+  });
+
+  it('renders from the authenticated student and opens a section', async () => {
     const onOpenSection = vi.fn();
     const store = configureStore({
       reducer: {
@@ -90,19 +106,26 @@ describe('StudentProfileCompletionCard', () => {
       </Provider>,
     );
 
+    await waitFor(() => {
+      expect(getRequiredContracts).toHaveBeenCalled();
+    });
+
     expect(screen.getByRole('progressbar', { name: 'Profile completion' })).toHaveAttribute(
       'aria-valuenow',
-      '20',
+      '18',
     );
     expect(screen.getByText('Finish your student profile')).toBeInTheDocument();
     expect(screen.getByText('3 of 6')).toBeInTheDocument();
-    expect(screen.getByText('0 of 3 complete')).toBeInTheDocument();
-    expect(screen.getAllByText('20%')).toHaveLength(1);
+    expect(screen.getByText('0 of 4 complete')).toBeInTheDocument();
+    expect(screen.getByText('Terms')).toBeInTheDocument();
+    expect(screen.getAllByText('18%')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Finish section: Academic background' }));
     expect(onOpenSection).toHaveBeenCalledWith('#profile-academic');
   });
 
-  it('hides automatically when the profile is fully complete', () => {
+  it('hides automatically when the profile is fully complete', async () => {
+    // No customer contract left to sign: the current student agreement is signed.
+    getRequiredContracts.mockResolvedValue([]);
     const store = configureStore({
       reducer: {
         auth: () => ({
@@ -128,7 +151,9 @@ describe('StudentProfileCompletionCard', () => {
       </Provider>,
     );
 
-    expect(container).toBeEmptyDOMElement();
+    await waitFor(() => {
+      expect(container).toBeEmptyDOMElement();
+    });
     expect(screen.queryByText('Complete your profile')).not.toBeInTheDocument();
   });
 });

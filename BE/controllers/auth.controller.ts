@@ -62,6 +62,12 @@ import {
     AUTH_EMAIL_NOT_FOUND,
 } from '../utils/authUserFacingCopy';
 import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
+const {
+    gateSignupAgreement,
+    assertPendingSignupCanCreateAccount,
+    recordSignupAcceptance,
+    requestClientMeta,
+} = require('../services/termsAgreement');
 
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -202,6 +208,11 @@ const getKeywordsAndServices = async (req: Request, res: Response) => {
 const register = async (req: Request, res: Response) => {
 
     try {
+        const gatedTerms = await gateSignupAgreement(req.body, requestClientMeta(req));
+        if (!gatedTerms.ok) {
+            return res.status(200).json({ status: 'FAIL', error: gatedTerms.error });
+        }
+
         const safeParse = (val) => {
             if (!val) return null;
             try {
@@ -311,7 +322,8 @@ const register = async (req: Request, res: Response) => {
             timeSlots,
             confirmCode,
             timeZone,
-            ...(specialNote && { specialNote })
+            ...(specialNote && { specialNote }),
+            ...(gatedTerms.acceptance ? { termsAcceptance: gatedTerms.acceptance } : {}),
         });
 
         // create user document and save in database
@@ -419,30 +431,64 @@ const verifyRegistration = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: AUTH_VERIFICATION_EXPIRED });
         }
 
+        const gatedTerms = await assertPendingSignupCanCreateAccount(pendingUser.termsAcceptance);
+        if (!gatedTerms.ok) {
+            return res.status(200).json({ status: 'FAIL', error: gatedTerms.error });
+        }
 
-
-        const newUser = new User({
-            username: pendingUser.username,
-            title: pendingUser.title,
-            description: pendingUser.description,
-            services: pendingUser.services,
-            keywords: pendingUser.keywords,
-            customKeywords: pendingUser.customKeywords,
-            country: pendingUser.country,
-            state: pendingUser.state,
-            city: pendingUser.city,
-            phoneNumber: pendingUser.phoneNumber,
-            email: email.toLowerCase(),
-            password: pendingUser.password,
-            resume: pendingUser.resume,
-            role: pendingUser.role,
-            timeSlots: pendingUser.timeSlots,
-            price: pendingUser.price,
-            timeZone: pendingUser.timeZone || 'UTC',
-            ...(pendingUser.specialNote && { specialNote: pendingUser.specialNote })
-        });
-
-        const user = await newUser.save()
+        const emailKey = email.toLowerCase();
+        // Only the user this pending signup already created may receive its signature.
+        // Another account that happens to use the same email (OAuth or ad hoc) must be left alone.
+        let user = null;
+        if (gatedTerms.acceptance && pendingUser.createdUserId) {
+            user = await User.findById(pendingUser.createdUserId);
+            if (!user) {
+                return res.status(500).send(HTTP_GENERIC_ERROR);
+            }
+        }
+        if (!user) {
+            const newUser = new User({
+                username: pendingUser.username,
+                title: pendingUser.title,
+                description: pendingUser.description,
+                services: pendingUser.services,
+                keywords: pendingUser.keywords,
+                customKeywords: pendingUser.customKeywords,
+                country: pendingUser.country,
+                state: pendingUser.state,
+                city: pendingUser.city,
+                phoneNumber: pendingUser.phoneNumber,
+                email: emailKey,
+                password: pendingUser.password,
+                resume: pendingUser.resume,
+                role: pendingUser.role,
+                timeSlots: pendingUser.timeSlots,
+                price: pendingUser.price,
+                timeZone: pendingUser.timeZone || 'UTC',
+                ...(pendingUser.specialNote && { specialNote: pendingUser.specialNote })
+            });
+            try {
+                user = await newUser.save();
+            } catch (saveErr: any) {
+                if (saveErr?.code === 11000) {
+                    console.error('[verifyRegistration] email already registered', emailKey);
+                    return res.status(500).send(HTTP_GENERIC_ERROR);
+                }
+                throw saveErr;
+            }
+            if (gatedTerms.acceptance) {
+                pendingUser.createdUserId = user._id;
+                await pendingUser.save();
+            }
+        }
+        if (gatedTerms.acceptance) {
+            try {
+                await recordSignupAcceptance(user._id, gatedTerms.acceptance);
+            } catch (acceptErr) {
+                console.error('[verifyRegistration] terms acceptance', acceptErr);
+                return res.status(500).send(HTTP_GENERIC_ERROR);
+            }
+        }
         await createGeneralChatAndJoinGlobalChat(user._id)
         await pendingUser.deleteOne()
 

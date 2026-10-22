@@ -68,6 +68,16 @@ const {
 } = require("../controllers/featuredExpert.controller");
 
 const { uploadsGeneral } = require("../middlewares/multerConfig");
+const {
+    previewTerms,
+    publishTerms,
+    listTermsVersions,
+    getTermsVersion,
+    downloadTermsDocx,
+    listVersionAcceptances,
+    searchTermsUsersHandler,
+    getUserTermsAcceptances,
+} = require("../controllers/terms.controller");
 
 router.post("/setStripeMode", adminAuth, setStripeMode)
 router.post("/setSeminarApprovalDeadline", adminAuth, setSeminarApprovalDeadline)
@@ -114,5 +124,14 @@ router.post("/experts/reorder", adminAuth, reorderFeaturedExpert)
 router.post("/experts", adminAuth, createFeaturedExpert)
 router.put("/experts/:id", adminAuth, updateFeaturedExpert)
 router.delete("/experts/:id", adminAuth, deleteFeaturedExpert)
+
+router.get("/terms/search", adminAuth, searchTermsUsersHandler);
+router.get("/terms/users/:userId/acceptances", adminAuth, getUserTermsAcceptances);
+router.post("/terms/:audience/preview", adminAuth, uploadsGeneral, previewTerms);
+router.post("/terms/:audience/publish", adminAuth, uploadsGeneral, publishTerms);
+router.get("/terms/:audience/versions", adminAuth, listTermsVersions);
+router.get("/terms/:audience/versions/:version/docx", adminAuth, downloadTermsDocx);
+router.get("/terms/:audience/versions/:version/acceptances", adminAuth, listVersionAcceptances);
+router.get("/terms/:audience/versions/:version", adminAuth, getTermsVersion);
 
 module.exports = router;
