@@ -46,10 +46,26 @@ function expertSchedulingPastStartError(sessionStart, now = Date.now()) {
   return startMs > now ? null : SCHEDULED_START_IN_PAST;
 }
 
+const SEMINAR_ALREADY_STARTED = "This seminar has already started, so registration is closed.";
+
+/**
+ * Seminars take no booking notice (that setting is for 1:1s): a student may register
+ * right up until the seminar starts. A missing or invalid start is treated as closed.
+ * @param { string | number | Date } sessionStart
+ * @param { number } [now]
+ * @returns { string | null }
+ */
+function seminarRegistrationClosedError(sessionStart, now = Date.now()) {
+  const startMs = new Date(sessionStart).getTime();
+  return startMs > now ? null : SEMINAR_ALREADY_STARTED;
+}
+
 module.exports = {
   ALLOWED_NOTICE_HOURS,
   SCHEDULED_START_IN_PAST,
+  SEMINAR_ALREADY_STARTED,
   normalizeBookingNoticeHours,
   assertBookingLeadTime,
   expertSchedulingPastStartError,
+  seminarRegistrationClosedError,
 };
