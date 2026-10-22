@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { askSite } from '../../api/api';
-import { isStaticFaq, STATIC_FAQS } from './faqData';
+import { STATIC_FAQS } from './faqData';
 import {
   HELP_BOT_STORAGE_KEY,
   clearHelpBotSession,
@@ -158,7 +158,6 @@ export function useHelpBot() {
 
     const userId = newId();
     const assistantId = newId();
-    const fromFaq = isStaticFaq(current);
 
     pendingRef.current = true;
     setPending(true);
@@ -172,7 +171,7 @@ export function useHelpBot() {
         content: '',
         pending: true,
         replyToId: userId,
-        source: fromFaq ? 'faq' : 'ai',
+        source: 'ai',
       },
     ]);
 
@@ -191,6 +190,7 @@ export function useHelpBot() {
             .filter((q) => q.question.trim())
         : [];
       setSimilarQuestions(similar.slice(0, 4));
+      const source = response?.source === 'faq' ? 'faq' : 'ai';
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
@@ -199,7 +199,7 @@ export function useHelpBot() {
                 content: answer || 'Answers are unavailable right now.',
                 pending: false,
                 error: false,
-                source: fromFaq ? 'faq' : 'ai',
+                source,
               }
             : m,
         ),
@@ -213,7 +213,7 @@ export function useHelpBot() {
                 content: 'Something went wrong.',
                 pending: false,
                 error: true,
-                source: fromFaq ? 'faq' : 'ai',
+                source: 'ai',
               }
             : m,
         ),

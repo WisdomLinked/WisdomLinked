@@ -61,7 +61,7 @@ export default function MessageBubble({
     );
   }
 
-  const sourceLabel = message.source === 'faq' ? 'From FAQ' : 'AI answer';
+  const sourceLabel = message.source === 'faq' ? 'From HelpBot Q&A' : 'AI answer';
 
   return (
     <div className={`flex justify-start gap-2 ${isFirstInGroup ? '' : 'mt-1'}`}>

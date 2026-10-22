@@ -54,6 +54,13 @@ export const normalizeQuestion = (value: unknown): string =>
 const tokens = (value: unknown): string[] =>
     normalizeQuestion(value).split(/[^a-z0-9]+/).filter(Boolean);
 
+const contentTokens = (value: unknown): string[] =>
+    tokens(value).filter((token) => !STOP_WORDS.has(token));
+
+const STRONG_MATCH_RATIO = 0.6;
+const STRONG_MATCH_MIN_SHARED = 2;
+const PENDING_FAQ_ANSWER = 'Pending answer...';
+
 export const isStopWordOnly = (value: unknown): boolean => {
     if (/[\u4e00-\u9fff]/.test(String(value ?? ''))) return false;
     const words = tokens(value);
@@ -130,9 +137,9 @@ export const qaRolesForCaller = (user: any): string[] => {
 
 export const hasRealAnswer = (row: any, pendingAnswer: string): boolean => {
     if (row?.answer == null) return false;
-    const answer = String(row.answer);
-    if (!answer.trim()) return false;
-    if (answer === pendingAnswer) return false;
+    const answer = String(row.answer).trim();
+    if (!answer) return false;
+    if (answer === String(pendingAnswer).trim()) return false;
     return true;
 };
 
@@ -263,6 +270,51 @@ export const selectSimilarQuestions = (rows: any[], question: unknown, limit = 4
             id: String(row._id),
             question: String(row.question ?? ''),
         }));
+};
+
+export type CuratedAnswer = { question: string; answer: string };
+
+/**
+ * Rank answered ChatBotQA rows against the asked question.
+ * A strong match (source faq) is an equal normalized question, or shared content
+ * tokens that cover most of the shorter question (overlap / min(token counts) >= 0.6)
+ * with at least two shared content tokens. Exact matches stay in the list.
+ */
+export const rankCuratedAnswers = (
+    rows: any[],
+    question: unknown,
+    limit = 4,
+): { matches: CuratedAnswer[]; source: 'faq' | 'ai' } => {
+    const current = normalizeQuestion(question);
+    const wanted = new Set(contentTokens(question));
+    const scored = (Array.isArray(rows) ? rows : [])
+        .filter((row) => hasRealAnswer(row, PENDING_FAQ_ANSWER))
+        .map((row) => {
+            const questionText = String(row?.question ?? '').trim();
+            const answerText = String(row?.answer ?? '').trim();
+            const exact = current.length > 0 && normalizeQuestion(questionText) === current;
+            const rowTokens = new Set(contentTokens(questionText));
+            const shared = [...wanted].filter((token) => rowTokens.has(token)).length;
+            const shorter = Math.min(wanted.size, rowTokens.size);
+            const ratio = shorter > 0 ? shared / shorter : 0;
+            const strong = exact || (shared >= STRONG_MATCH_MIN_SHARED && ratio >= STRONG_MATCH_RATIO);
+            return { questionText, answerText, exact, shared, ratio, strong };
+        })
+        .filter((item) => item.questionText && item.answerText && (item.exact || item.shared > 0))
+        .sort((a, b) => {
+            if (a.exact !== b.exact) return a.exact ? -1 : 1;
+            if (a.strong !== b.strong) return a.strong ? -1 : 1;
+            if (b.shared !== a.shared) return b.shared - a.shared;
+            if (b.ratio !== a.ratio) return b.ratio - a.ratio;
+            return a.questionText.localeCompare(b.questionText);
+        });
+    return {
+        matches: scored.slice(0, limit).map((item) => ({
+            question: item.questionText,
+            answer: item.answerText,
+        })),
+        source: scored.some((item) => item.strong) ? 'faq' : 'ai',
+    };
 };
 
 export const parseModelContent = (content: unknown): { answer: string; miss: boolean; citations: any[] } => {

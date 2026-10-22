@@ -668,6 +668,105 @@ describe('POST /api/ask', { concurrency: false }, () => {
             }
         });
 
+
+        test('response source is faq for a strong curated match and ai otherwise', async () => {
+            const curated = 'Open the calendar, then choose a time.';
+            seed = [
+                { _id: 'qa-book', role: 'user', question: 'How do I book a session?', answer: curated },
+                { _id: 'qa-refund', role: 'user', question: 'Where is the refund policy?', answer: 'Refunds are on the policy page.' },
+                { _id: 'qa-pending', role: 'user', question: 'How do I book a session?', answer: PENDING_ANSWER },
+                { _id: 'qa-blank', role: 'user', question: 'How do I book a session?', answer: '   ' },
+                { _id: 'qa-expert', role: 'expert', question: 'How do I book a session?', answer: 'Expert-only booking steps stay hidden.' },
+            ];
+            nextCompletion = { content: 'Use these calendar steps.' };
+            const before = fetchCalls.length;
+            const strong = makeRes();
+            await ask({
+                body: { question: 'How do I book a session?' },
+                user: { role: 'customer', userId: 'student-a' },
+            }, strong);
+            assert.equal(strong.statusCode, 200);
+            assert.equal(strong.body.source, 'faq');
+            assert.equal(strong.body.answer, 'Use these calendar steps.');
+            const strongCall = fetchCalls[fetchCalls.length - 1];
+            assert.equal(strongCall.url, INFERENCE_URL);
+            assert.ok(fetchCalls.length > before);
+            const strongPrompt = promptOf(strongCall);
+            assert.match(strongPrompt, /Open the calendar, then choose a time/);
+            assert.equal(strongPrompt.includes('Refunds are on the policy page.'), false);
+            assert.equal(strongPrompt.includes('Pending answer...'), false);
+            assert.equal(strongPrompt.includes('Expert-only booking steps stay hidden.'), false);
+            const strongBlock = strongPrompt.slice(strongPrompt.indexOf('Curated HelpBot Q&A'));
+            const strongQuestions = [...strongBlock.matchAll(/Question: (.+)/g)].map((match) => match[1]);
+            assert.equal(strongQuestions[0], 'How do I book a session?');
+            assert.equal(strongQuestions.includes('Where is the refund policy?'), false);
+
+            nextCompletion = { content: 'Use the same calendar steps for an expert session.' };
+            const overlap = makeRes();
+            await ask({
+                body: { question: 'How do I book a session with an expert?' },
+                user: { role: 'customer', userId: 'student-a' },
+            }, overlap);
+            assert.equal(overlap.body.source, 'faq');
+            assert.equal(overlap.body.answer, 'Use the same calendar steps for an expert session.');
+
+            nextCompletion = { content: 'Tell me which seminar you mean.' };
+            seed = [{
+                _id: 'qa-wide',
+                role: 'user',
+                question: 'How do I book a session for a seminar seat request?',
+                answer: 'Wide overlap answer.',
+            }];
+            const weak = makeRes();
+            await ask({
+                body: { question: 'How do I book a session with an expert on the calendar tomorrow morning?' },
+                user: { role: 'customer', userId: 'student-a' },
+            }, weak);
+            assert.equal(weak.body.source, 'ai');
+            assert.equal(weak.body.answer, 'Tell me which seminar you mean.');
+
+            nextCompletion = { content: 'I can help with WisdomLinked.' };
+            seed = [
+                { _id: 'qa-book', role: 'user', question: 'How do I book a session?', answer: curated },
+            ];
+            const unrelated = makeRes();
+            await ask({ body: { question: 'What is the weather today?' }, user: undefined }, unrelated);
+            assert.equal(unrelated.body.source, 'ai');
+            assert.equal(unrelated.body.answer, 'I can help with WisdomLinked.');
+
+            const empty = makeRes();
+            await ask({ body: { question: '   ' }, user: undefined }, empty);
+            assert.equal(empty.body.source, 'ai');
+            assert.equal(empty.body.answer, 'Answers are unavailable right now.');
+
+            delete process.env.GRADIENT_MODEL_ACCESS_KEY;
+            const missing = makeRes();
+            await ask({ body: { question: 'How do I book a session?' }, user: undefined }, missing);
+            assert.equal(missing.body.source, 'ai');
+            assert.equal(missing.body.answer, 'Answers are unavailable right now.');
+            process.env.GRADIENT_MODEL_ACCESS_KEY = MODEL_KEY;
+
+            const stubFetch = global.fetch;
+            global.fetch = (async (url: string, options: any) => {
+                fetchCalls.push({ url: String(url), options });
+                return { ok: false, status: 503, json: async () => ({}) };
+            }) as typeof fetch;
+            try {
+                const failed = makeRes();
+                await ask({ body: { question: 'How do I book a session?' }, user: undefined }, failed);
+                assert.equal(failed.body.source, 'ai');
+                assert.equal(failed.body.answer, 'Answers are unavailable right now.');
+            } finally {
+                global.fetch = stubFetch;
+            }
+
+            nextCompletion = { content: '$999' };
+            const stripped = makeRes();
+            await ask({ body: { question: 'How do I book a session?' }, user: undefined }, stripped);
+            assert.equal(stripped.body.source, 'ai');
+            assert.equal(stripped.body.answer, 'Answers are unavailable right now.');
+        });
+
         test('restores stubs', () => {
             chatBotQA.find = originalFind;
             chatBotQA.prototype.save = originalSave;
