@@ -511,6 +511,15 @@ function SeminarDetailPane({
   const { auth: { userDetails } } = useAppSelector((s) => s);
   const [showParticipants, setShowParticipants] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteApproved, setDeleteApproved] = useState(false);
+  const openDeleteConfirm = () => {
+    setDeleteApproved(false);
+    setConfirmDelete(true);
+  };
+  const closeDeleteConfirm = () => {
+    setConfirmDelete(false);
+    setDeleteApproved(false);
+  };
   const enterSeminarChat = () => {
     if (!seminar?._id) return;
     dispatch(
@@ -525,12 +534,17 @@ function SeminarDetailPane({
   const isRecurring = !!seminar?.isRecurring;
   const admin = seminar?.admin;
   const participants: any[] = Array.isArray(seminar?.participants) ? seminar.participants : [];
-  // Enrolled students = participants minus the host. A seminar with anyone
-  // enrolled can't be self-deleted; the host is told to contact an admin.
+  // Enrolled students = participants minus the host. With anyone enrolled, the
+  // host must confirm participant approval before deleting.
   const adminId = getRefId(admin);
   const enrolledParticipants = participants.filter((p) => getRefId(p) !== adminId);
   const enrolledCount = enrolledParticipants.length;
   const hasEnrolledStudents = enrolledCount > 0;
+  const deleteBlocked = hasEnrolledStudents && !deleteApproved;
+  const confirmDeleteScope = (scope: 'occurrence' | 'series') => {
+    if (deleteBlocked) return;
+    onDelete(scope);
+  };
   const maxAttendees = typeof seminar?.maxAttendees === 'number' ? seminar.maxAttendees : null;
   const start = seminar?.start ? new Date(seminar.start) : null;
   const end = seminar?.end ? new Date(seminar.end) : null;
@@ -598,7 +612,7 @@ function SeminarDetailPane({
           className="inline-flex items-center gap-2 rounded-md border border-[#E5E2DB] bg-white px-3 py-2 text-xs font-semibold text-[#1A3A4A] hover:bg-[#faf9f6]"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back to seminars
+          Back to my seminars
         </button>
       </div>
 
@@ -822,7 +836,7 @@ function SeminarDetailPane({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setConfirmDelete(true)}
+                  onClick={openDeleteConfirm}
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50"
                 >
                   <Trash2 className="h-4 w-4" aria-hidden />
@@ -841,32 +855,44 @@ function SeminarDetailPane({
               ) : null}
               {confirmDelete ? (
                   <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-3">
-                    <p className="text-xs text-rose-700">
-                      {hasEnrolledStudents
-                        ? 'I have approval from all the participants to delete this seminar.'
-                        : isRecurring
-                        ? 'This is a recurring seminar. Choose what to delete — it will be removed from everyone’s calendars. This cannot be undone.'
-                        : 'Delete this seminar? It will be removed from everyone’s calendars. This cannot be undone.'}
-                    </p>
+                    {hasEnrolledStudents ? (
+                      <label className="flex cursor-pointer items-start gap-2 text-xs text-rose-700">
+                        <input
+                          type="checkbox"
+                          checked={deleteApproved}
+                          onChange={(e) => setDeleteApproved(e.target.checked)}
+                          className="mt-px h-3.5 w-3.5 shrink-0 cursor-pointer accent-rose-600"
+                        />
+                        <span>I have approval from all the participants to delete this seminar.</span>
+                      </label>
+                    ) : (
+                      <p className="text-xs text-rose-700">
+                        {isRecurring
+                          ? 'This is a recurring seminar. Choose what to delete — it will be removed from everyone’s calendars. This cannot be undone.'
+                          : 'Delete this seminar? It will be removed from everyone’s calendars. This cannot be undone.'}
+                      </p>
+                    )}
                     {isRecurring ? (
                       <div className="mt-3 space-y-2">
                         <button
                           type="button"
-                          onClick={() => onDelete('occurrence')}
-                          className="w-full rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+                          onClick={() => confirmDeleteScope('occurrence')}
+                          disabled={deleteBlocked}
+                          className="w-full rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-rose-600"
                         >
                           Delete only this session
                         </button>
                         <button
                           type="button"
-                          onClick={() => onDelete('series')}
-                          className="w-full rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+                          onClick={() => confirmDeleteScope('series')}
+                          disabled={deleteBlocked}
+                          className="w-full rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-rose-600"
                         >
                           Delete all upcoming sessions
                         </button>
                         <button
                           type="button"
-                          onClick={() => setConfirmDelete(false)}
+                          onClick={closeDeleteConfirm}
                           className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                         >
                           Cancel
@@ -876,14 +902,15 @@ function SeminarDetailPane({
                       <div className="mt-3 flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => onDelete('series')}
-                          className="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+                          onClick={() => confirmDeleteScope('series')}
+                          disabled={deleteBlocked}
+                          className="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-rose-600"
                         >
                           Yes, delete
                         </button>
                         <button
                           type="button"
-                          onClick={() => setConfirmDelete(false)}
+                          onClick={closeDeleteConfirm}
                           className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                         >
                           Cancel
@@ -1092,7 +1119,7 @@ export default function ExpertSeminarHub() {
     <div className="min-h-full text-[#1A3A4A] px-4 py-6 md:px-8 pb-12">
       <header className="max-w-6xl mx-auto flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-8">
         <div>
-          <h1 className={DASHBOARD_PAGE_TITLE}>Seminars</h1>
+          <h1 className={DASHBOARD_PAGE_TITLE}>My Seminars</h1>
           <p className="mt-1 text-sm text-slate-600 max-w-xl">
             Discover sessions hosted by other experts, then manage your own seminars below.
           </p>

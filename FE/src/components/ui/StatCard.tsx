@@ -1,4 +1,5 @@
 import React from 'react';
+import MetricValue from '../dashboard/MetricValue';
 
 const colorMap = {
   primary: {
@@ -70,14 +71,10 @@ export default function StatCard({
       aria-label={onClick ? `Open ${label}` : undefined}
     >
       <div className={`flex min-w-0 flex-1 flex-col ${alignStart ? 'items-start' : ''}`}>
-        <span className={`font-sans font-semibold text-wl-ink ${labelClassName || 'text-[14px]'}`}>
+        <span className={labelClassName || 'font-sans font-semibold text-[14px] text-wl-ink'}>
           {label}
         </span>
-        <div
-          className={`mt-2 font-serif text-[32px] sm:text-[36px] font-bold leading-none tabular-nums ${colors.value}`}
-        >
-          {value}
-        </div>
+        <MetricValue size="lg">{value}</MetricValue>
         {subline && (
           <div className="mt-1 font-sans text-[13px] font-medium text-wl-muted">
             {subline}

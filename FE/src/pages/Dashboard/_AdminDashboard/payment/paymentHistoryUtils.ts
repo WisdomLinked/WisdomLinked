@@ -11,8 +11,8 @@ export type PaymentHistoryRow = {
   createdAt?: string;
   expert?: { username?: string; email?: string; role?: string } | null;
   customer?: { username?: string; email?: string; role?: string } | null;
-  groupChat?: { type?: string; name?: string; status?: string } | null;
-  event?: unknown;
+  groupChat?: { type?: string; name?: string; status?: string; start?: string; end?: string } | null;
+  event?: { start?: string; end?: string; title?: string; status?: string } | string | null;
 };
 
 export type HistoryFilters = {

@@ -57,40 +57,15 @@ describe('ProfileCompletionCard', () => {
       'aria-valuenow',
       '20',
     );
+    expect(screen.getByText('Finish your student profile')).toBeInTheDocument();
     expect(screen.getByText('3 of 6')).toBeInTheDocument();
     expect(screen.getByText('0 of 3 complete')).toBeInTheDocument();
+    // Percent appears once under the bar (not also as a large header figure).
+    expect(screen.getAllByText('20%')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Finish section: Academic background' }));
     expect(onSectionAction).toHaveBeenCalledWith('#profile-academic');
   });
 
-  it('shows dismiss when complete', () => {
-    const onDismiss = vi.fn();
-    render(
-      <ProfileCompletionCard
-        title="Your profile is complete"
-        helperText="Thanks"
-        percent={100}
-        complete
-        onDismiss={onDismiss}
-        onSectionAction={vi.fn()}
-        sections={[
-          {
-            id: 'resume',
-            label: 'Resume',
-            description: 'Done',
-            weight: 30,
-            filled: 1,
-            total: 1,
-            isComplete: true,
-            href: '#profile-resume',
-            actionLabel: 'Upload resume',
-          },
-        ]}
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss profile completion card' }));
-    expect(onDismiss).toHaveBeenCalled();
-  });
 });
 
 describe('StudentProfileCompletionCard', () => {
@@ -119,9 +94,41 @@ describe('StudentProfileCompletionCard', () => {
       'aria-valuenow',
       '20',
     );
+    expect(screen.getByText('Finish your student profile')).toBeInTheDocument();
     expect(screen.getByText('3 of 6')).toBeInTheDocument();
     expect(screen.getByText('0 of 3 complete')).toBeInTheDocument();
+    expect(screen.getAllByText('20%')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Finish section: Academic background' }));
     expect(onOpenSection).toHaveBeenCalledWith('#profile-academic');
+  });
+
+  it('hides automatically when the profile is fully complete', () => {
+    const store = configureStore({
+      reducer: {
+        auth: () => ({
+          userDetails: {
+            _id: 's1',
+            degreeSought: "Master's",
+            intendedIntake: 'Fall 2027',
+            currentUniversity: 'HUST',
+            gpa: '3.8',
+            targetUniversities: 'MIT',
+            country: 'China',
+            services: ['Study Abroad'],
+            keywords: ['Computer Science'],
+            resume: 'resumes/cv.pdf',
+          },
+        }),
+      },
+    });
+
+    const { container } = render(
+      <Provider store={store}>
+        <StudentProfileCompletionCard onOpenSection={vi.fn()} />
+      </Provider>,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText('Complete your profile')).not.toBeInTheDocument();
   });
 });
