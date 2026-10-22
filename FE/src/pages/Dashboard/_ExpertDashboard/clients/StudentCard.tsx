@@ -2,6 +2,7 @@ import React from 'react';
 import { MapPin } from 'lucide-react';
 import ClientAvatar from './ClientAvatar';
 import { formatLastSession, formatNextSession, isNewStudent, type ClientRow } from './clientModel';
+import { formatProfileLocation } from '../../../../utils/profileLocation';
 import { FOCUS_RING, MICRO_LABEL, OUTLINE_BUTTON, PRIMARY_BUTTON, type ClientActions } from './ui';
 
 const EMPTY = '—';
@@ -67,7 +68,7 @@ export default function StudentCard({
   imageUrl: string | null;
   actions: ClientActions;
 }) {
-  const location = [row.country, row.school].filter(Boolean).join(' · ');
+  const location = [formatProfileLocation(row.raw) || row.country, row.school].filter(Boolean).join(' · ');
   const standing = [row.gpa && `GPA ${row.gpa}`, row.ranking].filter(Boolean).join(' · ');
 
   const openProfileFromCard = (e: React.MouseEvent<HTMLElement>) => {

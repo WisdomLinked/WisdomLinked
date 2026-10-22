@@ -14,7 +14,7 @@ const SECTION_COPY: Record<
   { description: string; actionLabel: string }
 > = {
   academic: {
-    description: 'Degree, intake, school, GPA, targets, and country.',
+    description: 'Degree, intake, school, GPA, targets, and country (from Location).',
     actionLabel: 'Finish section',
   },
   preferences: {

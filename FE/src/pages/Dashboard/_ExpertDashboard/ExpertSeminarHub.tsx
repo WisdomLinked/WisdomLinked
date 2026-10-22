@@ -612,7 +612,7 @@ function SeminarDetailPane({
           className="inline-flex items-center gap-2 rounded-md border border-[#E5E2DB] bg-white px-3 py-2 text-xs font-semibold text-[#1A3A4A] hover:bg-[#faf9f6]"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back to seminars
+          Back to my seminars
         </button>
       </div>
 
@@ -1119,7 +1119,7 @@ export default function ExpertSeminarHub() {
     <div className="min-h-full text-[#1A3A4A] px-4 py-6 md:px-8 pb-12">
       <header className="max-w-6xl mx-auto flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-8">
         <div>
-          <h1 className={DASHBOARD_PAGE_TITLE}>Seminars</h1>
+          <h1 className={DASHBOARD_PAGE_TITLE}>My Seminars</h1>
           <p className="mt-1 text-sm text-slate-600 max-w-xl">
             Discover sessions hosted by other experts, then manage your own seminars below.
           </p>

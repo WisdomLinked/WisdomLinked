@@ -9,6 +9,7 @@ import {
     Mail,
     MapPin,
     Percent,
+    Phone,
     Star,
     type LucideIcon,
 } from "lucide-react";
@@ -16,6 +17,8 @@ import { profileImageFetch } from "../../api/api";
 import { getAvatarTitle } from "../../actions/common";
 import { resolveProfileImageSrc } from "../../utils/profileImage";
 import { hasResumeForPreview } from "../../utils/resumeUrl";
+import { formatProfileLocation } from "../../utils/profileLocation";
+import { toE164 } from "../../utils/phone";
 import { profileOptionLabel } from "../../utils/chatProfileModal";
 import { isBaselineMajor } from "../../constants/majorOptions";
 import {
@@ -205,7 +208,9 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     const leadLabel = bookingLeadLabel(person?.bookingNoticeHours);
 
     const selfDescription = String((isExpert ? person?.description : person?.specialNote) ?? "").trim();
-    const countryName = person?.country?.name ?? (typeof person?.country === "string" ? person.country : "") ?? "";
+    const locationLabel = formatProfileLocation(person);
+    const phoneDisplay = toE164(person?.phoneNumber) || String(person?.phoneNumber ?? "").trim();
+    const showPhone = Boolean(phoneDisplay) && (isExpert ? viewerRoleLc === "admin" : viewerCanSeeStudentPrivate);
     const hasResume = hasResumeForPreview(person?.resume);
     const showResume = hasResume && (!isExpert || viewerIsStudent || !viewerRole);
 
@@ -471,7 +476,14 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 
             {/* ---------- About (info rows) ---------- */}
             <div className="flex flex-col gap-2.5 px-6 pb-6">
-                <InfoRow isLight={isLight} icon={MapPin} label="Country" value={countryName || "Not specified"} />
+                {locationLabel ? (
+                    <InfoRow isLight={isLight} icon={MapPin} label="Location" value={locationLabel} />
+                ) : (
+                    <InfoRow isLight={isLight} icon={MapPin} label="Country" value="Not specified" />
+                )}
+                {showPhone ? (
+                    <InfoRow isLight={isLight} icon={Phone} label="Phone" value={phoneDisplay} mono />
+                ) : null}
                 <InfoRow isLight={isLight} icon={Mail} label="Email" value={maskEmailForPrivacy(person?.email)} mono />
                 {isExpert ? (
                     leadLabel ? <InfoRow isLight={isLight} icon={CalendarClock} label="Booking lead time" value={leadLabel} /> : null

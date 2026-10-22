@@ -1,4 +1,46 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&family=Manrope:wght@500;600;700&display=swap');
+
+.font-numeric {
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: 'lnum' 1, 'tnum' 1;
+}
+
+:root {
+  --audit-canvas: #f7f8fa;
+  --audit-surface: #ffffff;
+  --audit-sunken: #f1f3f5;
+  --audit-line: #e2e6ea;
+  --audit-ink: #16212b;
+  --audit-muted: #5b6773;
+  --audit-brand: #1d4f73;
+  --audit-on-brand: #ffffff;
+  --audit-brand-soft: #e6eff6;
+  --audit-ok: #17785a;
+  --audit-ok-soft: #e4f3ee;
+  --audit-warn: #9a6200;
+  --audit-warn-soft: #f7eed8;
+  --audit-bad: #b4372f;
+  --audit-bad-soft: #f8e7e5;
+}
+
+.dark,
+[data-theme="dark"] {
+  --audit-canvas: #10161c;
+  --audit-surface: #16212b;
+  --audit-sunken: #121920;
+  --audit-line: #2c3944;
+  --audit-ink: #e8eef3;
+  --audit-muted: #9aa6b0;
+  --audit-brand: #8ebbd6;
+  --audit-on-brand: #10202c;
+  --audit-brand-soft: #1c3344;
+  --audit-ok: #3dba93;
+  --audit-ok-soft: #16352d;
+  --audit-warn: #e0b15a;
+  --audit-warn-soft: #3a2e14;
+  --audit-bad: #e07a73;
+  --audit-bad-soft: #3a1e1c;
+}
 
 html {
   overflow-x: hidden;
