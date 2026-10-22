@@ -53,9 +53,16 @@ const loadSimilarQuestions = async (user: any, question: string) => {
     return selectSimilarQuestions(rows, question, 4);
 };
 
-const respond = (res, answer: string, cards: any, similarQuestions: any[] = []) =>
+const respond = (
+    res,
+    answer: string,
+    cards: any,
+    similarQuestions: any[] = [],
+    source: 'faq' | 'ai' = 'ai',
+) =>
     res.status(200).json({
         answer,
+        source,
         citations: [],
         similarQuestions: similarQuestions.slice(0, 4),
         experts: cards.experts,
@@ -81,7 +88,7 @@ const ask = async (req, res) => {
             return respond(res, ANSWERS_UNAVAILABLE, cards, similarQuestions);
         }
 
-        let result: { answer: string; toolResultsText: string };
+        let result: { answer: string; toolResultsText: string; source?: 'faq' | 'ai' };
         try {
             result = await runAskAgent({
                 messages,
@@ -90,14 +97,15 @@ const ask = async (req, res) => {
             });
         } catch (_err) {
             console.error('[ask] inference failed');
-            return respond(res, ANSWERS_UNAVAILABLE, cards, similarQuestions);
+            return respond(res, ANSWERS_UNAVAILABLE, cards, similarQuestions, 'ai');
         }
 
         const filtered = postFilterAnswer(result.answer, result.toolResultsText);
         if (!filtered) {
-            return respond(res, ANSWERS_UNAVAILABLE, cards, similarQuestions);
+            return respond(res, ANSWERS_UNAVAILABLE, cards, similarQuestions, 'ai');
         }
-        return respond(res, filtered, cards, similarQuestions);
+        const source = result.source === 'faq' ? 'faq' : 'ai';
+        return respond(res, filtered, cards, similarQuestions, source);
     } catch (err) {
         console.error(err);
         return res.status(500).send(safeErrorMessage(err));
