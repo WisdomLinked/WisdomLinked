@@ -1,58 +1,148 @@
-import React, { useEffect, useState } from "react";
-import CloseIcon from '@mui/icons-material/Close';
-import { doGetFullUserDataByEmail } from "../../../../api/api";
-import ChatHistory from "./chatHistory";
-import PaymentHistory from "./paymentHistory";
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { doGetFullUserDataByEmail, doFilterPaymentHistories } from '../../../../api/api';
+import ChatHistory from './chatHistory';
+import PaymentHistory from './paymentHistory';
+import AuditHeader from './audit/AuditHeader';
+import SummaryStrip from './audit/SummaryStrip';
+import AuditTabs from './audit/AuditTabs';
+import {
+  buildConversations,
+  buildExportPayload,
+  lastActiveFromAccount,
+  paymentSummary,
+  type AuditTab,
+} from './audit/auditModel';
+import type { PaymentHistoryRow } from '../payment/paymentHistoryUtils';
 
 const AuditModal = ({
-    selectedUser,
-    closeModal
-}: any) => {
+  selectedUser,
+  closeModal,
+}: {
+  selectedUser?: any;
+  closeModal: () => void;
+}) => {
+  const titleId = useId();
+  const [userDetails, set_userDetails] = useState<any>();
+  const [selectedTab, set_selectedTab] = useState<AuditTab>('chat');
+  const [paymentRows, setPaymentRows] = useState<PaymentHistoryRow[]>([]);
+  const [paymentCount, setPaymentCount] = useState(0);
 
-    const [userDetails, set_userDetails] = useState<any>()
-    const [selectedTab, set_selectedTab] = useState(0)
-
-    const getFullUserData = async (email: any) => {
-        const res = await doGetFullUserDataByEmail(email)
-        if (res) {
-            set_userDetails(res.result)
-        }
+  const getFullUserData = useCallback(async (email: string) => {
+    const res = await doGetFullUserDataByEmail(email);
+    if (res) {
+      set_userDetails(res.result);
     }
+  }, []);
 
-    useEffect(() => {
-        getFullUserData(selectedUser?.email)
-    }, [selectedUser])
+  useEffect(() => {
+    if (selectedUser?.email) {
+      void getFullUserData(selectedUser.email);
+    }
+  }, [selectedUser?.email, getFullUserData]);
 
-    return (
-        <div className={`absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 p-2 sm:p-8`}>
-            <div
-                className="absolute top-0 left-0 w-full h-full cursor-pointer"
-                onClick={closeModal}
-            />
-            <div className="relative w-full h-full  mx-auto pb-3 py-6 sm:py-6 bg-wl-card rounded-2xl border border-wl-line text-wl-ink shadow-xl">
-                <button
-                    className="absolute right-2 top-2 rounded-md p-1 text-wl-muted hover:bg-wl-pageAlt hover:text-wl-ink"
-                    onClick={closeModal}
-                >
-                    <CloseIcon />
-                </button>
-                <div className="text-center text-wl-brand text-2xl font-semibold mb-2 mt-3 sm:mt-0">Audit {userDetails?.role?.toUpperCase()} Account ({userDetails?.username})</div>
-                <div className="w-full h-[calc(100%-50px)] sm:h-[calc(100%-40px)] p-3 sm:px-6">
-                    <div className="flex space-x-6 border-0 border-b-[1px] border-lightgrey py-3">
-                        <div className={`${selectedTab === 0 ? "text-wl-brand font-bold" : 'text-wl-muted'} cursor-pointer text-sm`} onClick={() => set_selectedTab(0)}>Chat History</div>
-                        <div className={`${selectedTab === 1 ? "text-wl-brand font-bold" : 'text-wl-muted'} cursor-pointer text-sm`} onClick={() => set_selectedTab(1)}>Payment History</div>
-                    </div>
-                    <div className="w-full h-[calc(100%-50px)]">
-                        {
-                            selectedTab === 0 ?
-                                <ChatHistory userDetails={userDetails} /> :
-                                <PaymentHistory userDetails={userDetails} />
-                        }
-                    </div>
-                </div>
-            </div>
+  useEffect(() => {
+    const email = selectedUser?.email || userDetails?.email;
+    if (!email) return;
+    let cancelled = false;
+    (async () => {
+      const pageSize = 100;
+      const first = await doFilterPaymentHistories({
+        email,
+        currentPage: 0,
+        numPerPage: pageSize,
+        sortBy: 'createdAt',
+        sort: 'DESC',
+      });
+      if (!first || cancelled) return;
+      let rows: PaymentHistoryRow[] = [...(first.result || [])];
+      const total = first.totalCount || rows.length;
+      setPaymentCount(total);
+      const pages = Math.ceil(total / pageSize);
+      for (let page = 1; page < pages; page += 1) {
+        const next = await doFilterPaymentHistories({
+          email,
+          currentPage: page,
+          numPerPage: pageSize,
+          sortBy: 'createdAt',
+          sort: 'DESC',
+        });
+        if (cancelled) return;
+        if (next?.result) rows = rows.concat(next.result);
+      }
+      if (!cancelled) setPaymentRows(rows);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedUser?.email, userDetails?.email]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeModal();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [closeModal]);
+
+  const conversations = useMemo(() => buildConversations(userDetails), [userDetails]);
+  const paySummary = useMemo(() => paymentSummary(paymentRows), [paymentRows]);
+  const lastActive = lastActiveFromAccount(userDetails, conversations.all);
+
+  const onExport = () => {
+    const payload = buildExportPayload({
+      userDetails,
+      conversations: conversations.all,
+      payments: paymentRows,
+      summary: paySummary,
+    });
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `audit-${userDetails?.email || 'account'}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="absolute inset-0 z-10 flex items-stretch justify-center bg-black/25 sm:items-center sm:p-6">
+      <div className="absolute inset-0 cursor-pointer" onClick={closeModal} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative flex h-full w-full max-w-6xl flex-col overflow-hidden bg-audit-surface sm:h-auto sm:max-h-full sm:rounded-2xl sm:border sm:border-audit-line sm:shadow-xl"
+      >
+        <AuditHeader userDetails={userDetails || selectedUser} titleId={titleId} onExport={onExport} onClose={closeModal} />
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 sm:px-8">
+          <SummaryStrip
+            conversationCount={conversations.group.length + conversations.privateChats.length}
+            seminarCount={conversations.seminars.length}
+            netEarningsCents={paySummary.net}
+            lastActive={lastActive}
+          />
+          <AuditTabs
+            selected={selectedTab}
+            onSelect={set_selectedTab}
+            chatCount={conversations.all.length}
+            paymentCount={paymentCount}
+          />
+          <div
+            role="tabpanel"
+            id={`audit-panel-${selectedTab}`}
+            aria-labelledby={`audit-tab-${selectedTab}`}
+            className="min-h-0 flex-1"
+          >
+            {selectedTab === 'chat' ? (
+              <ChatHistory userDetails={userDetails} />
+            ) : (
+              <PaymentHistory userDetails={userDetails} />
+            )}
+          </div>
         </div>
-    );
+      </div>
+    </div>
+  );
 };
 
 export default AuditModal;

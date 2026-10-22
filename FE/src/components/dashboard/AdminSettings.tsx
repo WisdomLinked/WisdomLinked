@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, Globe2, Megaphone, Shield, Mail, Smartphone } from 'lucide-react';
+import { Bell, Globe2, Megaphone, Shield, Mail, Smartphone, Trash2 } from 'lucide-react';
 import { useAppSelector } from '../../store';
 import { doUpdateProfile, getActiveAnnouncement, setSiteAnnouncement } from '../../api/api';
 import { detectUserTimeZone } from '../../utils/schedulingTimezone';
@@ -345,6 +345,23 @@ function SiteAnnouncementCard() {
           className="rounded-xl border border-wl-line bg-white px-4 py-2 text-sm font-semibold text-wl-ink hover:bg-wl-pageAlt disabled:opacity-60"
         >
           Deactivate
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => {
+            setMessage('');
+            setLink('');
+            setLinkLabel('');
+            setIsLive(false);
+            setError('');
+            setStatus('Announcement deleted.');
+            window.setTimeout(() => setStatus(''), 2200);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+          Delete
         </button>
         {error ? <p className="text-sm font-semibold text-red-600">{error}</p> : null}
         {status ? <p className="text-sm font-semibold text-emerald-700">{status}</p> : null}

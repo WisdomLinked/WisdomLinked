@@ -2,6 +2,24 @@ import { Request, Response } from 'express';
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { resolveFeedbackMeetingKind, toLookupIds, isLookupId } from '../utils/feedbackMeetingKind';
 import {
+    createdAtFilter,
+    clampPage,
+    clampPageSize,
+    emptyPeriodCounts,
+    heldStartFilter,
+    parseDateParam,
+    periodChange,
+    resolveSnapshotRange,
+    seminarBaseFilter,
+    startInRangeFilter,
+    upcomingStartFilter,
+} from '../utils/adminSnapshot';
+import {
+    computeMonthlyBreakdown,
+    computePeriodSnapshot,
+    computeSnapshotExtras,
+} from '../utils/adminSnapshotStats';
+import {
     checkSeat,
     summarizeVerdicts,
     recordCountsByStatus,
@@ -101,7 +119,7 @@ const bcrypt = require("bcryptjs");
 
 const filterUsers = async (req, res) => {
     try {
-        const { username, email, role, status, sortBy, sortOrder, numPerPage, currentPage, includeAdmins } = req.body
+        const { username, email, role, status, sortBy, sortOrder, numPerPage, currentPage, includeAdmins, dateFrom, dateTo, q } = req.body
         const roleFilter = role ? String(role) : "";
         const allowAdmins = Boolean(includeAdmins) || roleFilter === "admin";
         const baseFilter = allowAdmins ? {} : { role: { $ne: "admin" } };
@@ -125,12 +143,28 @@ const filterUsers = async (req, res) => {
             countQuery.where({ status: String(status) })
         }
 
+        const search = String(q || "").trim();
+        if (search) {
+            const rx = { $regex: escapeRegExp(search), $options: "i" };
+            const searchOr = { $or: [{ username: rx }, { email: rx }, { title: rx }] };
+            query.where(searchOr);
+            countQuery.where(searchOr);
+        }
+
+        if (dateFrom || dateTo) {
+            const createdRange = createdAtFilter(parseDateParam(dateFrom), parseDateParam(dateTo));
+            query.where(createdRange);
+            countQuery.where(createdRange);
+        }
+
         // Dynamic sorting based on `sortBy` and `sortOrder`
         const sortField = sortBy || "createdAt";
         const sortOrderValue = sortOrder === "DESC" ? -1 : 1;
         query.sort({ [sortField]: sortOrderValue });
 
-        query.skip(numPerPage * currentPage).limit(numPerPage)
+        const pageSize = clampPageSize(numPerPage);
+        const page = clampPage(currentPage);
+        query.skip(pageSize * page).limit(pageSize)
         const totalCount = await countQuery.exec()
         const users = await query.exec();
         return res.status(200).json({
@@ -145,7 +179,7 @@ const filterUsers = async (req, res) => {
 
 const filterPaymentHistories = async (req, res) => {
     try {
-        const { email, sortBy, stripeMode, paymentType, status, dateFrom, dateTo, numPerPage, currentPage } = req.body
+        const { email, stripeMode, paymentType, status, dateFrom, dateTo, numPerPage, currentPage, q, bookingScope, excludeRefunds } = req.body
         const query = PaymentHistory.find()
         const countQuery = PaymentHistory.countDocuments()
 
@@ -164,7 +198,8 @@ const filterPaymentHistories = async (req, res) => {
         query.populate([
             { path: 'expert', select: 'username email role' },
             { path: 'customer', select: 'username email role' },
-            { path: 'groupChat', select: 'type name status' },
+            { path: 'groupChat', select: 'type name status start end' },
+            { path: 'event', select: 'start end title status' },
         ])
 
         if (stripeMode) {
@@ -175,11 +210,73 @@ const filterPaymentHistories = async (req, res) => {
         if (paymentType) {
             query.where({ paymentType: String(paymentType) })
             countQuery.where({ paymentType: String(paymentType) })
+        } else if (excludeRefunds) {
+            query.where({ paymentType: { $ne: 'refund' } })
+            countQuery.where({ paymentType: { $ne: 'refund' } })
         }
 
         if (status) {
             query.where({ status: String(status) })
             countQuery.where({ status: String(status) })
+        }
+
+        const search = String(q || "").trim();
+        if (search) {
+            const rx = { $regex: escapeRegExp(search), $options: "i" };
+            query.where({ description: rx });
+            countQuery.where({ description: rx });
+        }
+
+        const scope = String(bookingScope || "");
+        const now = new Date();
+        const pageSize = clampPageSize(numPerPage);
+        const page = clampPage(currentPage);
+
+        if (scope === "past" || scope === "upcoming") {
+            const startMatch = scope === "upcoming"
+                ? upcomingStartFilter(now)
+                : heldStartFilter(parseDateParam(dateFrom), parseDateParam(dateTo), now);
+            const [gcDocs, evDocs] = await Promise.all([
+                GroupChat.find(startMatch).select("_id start").lean(),
+                Event.find(startMatch).select("_id start").lean(),
+            ]);
+            const startByGc = new Map(gcDocs.map((g: any) => [String(g._id), g.start]));
+            const startByEv = new Map(evDocs.map((e: any) => [String(e._id), e.start]));
+            const bookingOr = {
+                $or: [
+                    { groupChat: { $in: [...startByGc.keys()] } },
+                    { event: { $in: [...startByEv.keys()] } },
+                ],
+            };
+            query.where(bookingOr);
+            const leanRows = await PaymentHistory.find(query.getFilter())
+                .select("groupChat event")
+                .lean();
+            const dir = scope === "upcoming" ? 1 : -1;
+            leanRows.sort((a: any, b: any) => {
+                const ta = new Date(
+                    startByGc.get(String(a.groupChat)) || startByEv.get(String(a.event)) || 0,
+                ).getTime();
+                const tb = new Date(
+                    startByGc.get(String(b.groupChat)) || startByEv.get(String(b.event)) || 0,
+                ).getTime();
+                return dir * (ta - tb);
+            });
+            const totalCount = leanRows.length;
+            const pageIds = leanRows.slice(pageSize * page, pageSize * page + pageSize).map((row: any) => row._id);
+            const histories = pageIds.length
+                ? await PaymentHistory.find({ _id: { $in: pageIds } }).populate([
+                    { path: "expert", select: "username email role" },
+                    { path: "customer", select: "username email role" },
+                    { path: "groupChat", select: "type name status start end" },
+                    { path: "event", select: "start end title status" },
+                ])
+                : [];
+            const byId = new Map(histories.map((row: any) => [String(row._id), row]));
+            return res.status(200).json({
+                result: pageIds.map((id: any) => byId.get(String(id))).filter(Boolean),
+                totalCount,
+            });
         }
 
         if (dateFrom) {
@@ -193,7 +290,7 @@ const filterPaymentHistories = async (req, res) => {
         }
 
         query.sort({ createdAt: -1 })
-        query.skip(numPerPage * currentPage).limit(numPerPage)
+        query.skip(pageSize * page).limit(pageSize)
         const totalCount = await countQuery.exec()
         const histories = await query.exec();
         return res.status(200).json({
@@ -654,7 +751,9 @@ const sendEmailToUser = async (req, res) => {
 
 const getDashboardStats = async (req: Request, res: Response) => {
     try {
-        const SYSTEM_CHAT_NAMES = ["Global Chat", "Admin"];
+        const now = new Date();
+        const snapshotRange = resolveSnapshotRange(req.query.dateFrom, req.query.dateTo, now);
+        const models = { User, Event, GroupChat, PaymentHistory };
         const [
             pendingApprovals,
             pendingEmailVerify,
@@ -667,6 +766,10 @@ const getDashboardStats = async (req: Request, res: Response) => {
             totalPaymentRecords,
             refundRecords,
             todayUpcomingEvents,
+            rangeCounts,
+            previousCounts,
+            monthly,
+            extras,
         ] = await Promise.all([
             User.countDocuments({ status: "review", role: { $ne: "admin" } }),
             PendingUser.countDocuments(),
@@ -681,13 +784,21 @@ const getDashboardStats = async (req: Request, res: Response) => {
             User.countDocuments({ role: "expert" }),
             User.countDocuments({ role: "customer" }),
             Event.countDocuments(),
-            GroupChat.countDocuments({
-                type: "seminar",
-                name: { $nin: SYSTEM_CHAT_NAMES },
-            }),
+            GroupChat.countDocuments(seminarBaseFilter()),
             PaymentHistory.countDocuments({ paymentType: { $ne: "refund" } }),
             PaymentHistory.countDocuments({ paymentType: "refund" }),
             countTodayUpcomingEvents(),
+            computePeriodSnapshot(models, snapshotRange.from, snapshotRange.to, now),
+            snapshotRange.isAllTime
+                ? Promise.resolve(emptyPeriodCounts())
+                : computePeriodSnapshot(
+                    models,
+                    snapshotRange.previousFrom,
+                    snapshotRange.previousTo,
+                    now,
+                ),
+            computeMonthlyBreakdown(models, snapshotRange.from, snapshotRange.to, now),
+            computeSnapshotExtras(models, now),
         ]);
 
         return res.status(200).json({
@@ -704,6 +815,14 @@ const getDashboardStats = async (req: Request, res: Response) => {
                 totalPayments: totalPaymentRecords,
                 refundCount: refundRecords,
                 todayUpcomingEvents,
+                expertReviewCount: extras.expertReviewCount,
+                customerBlockedCount: extras.customerBlockedCount,
+                upcomingSessions: extras.upcomingSessions,
+                upcomingSeminars: extras.upcomingSeminars,
+                range: rangeCounts,
+                previousRange: snapshotRange.isAllTime ? null : previousCounts,
+                change: snapshotRange.isAllTime ? null : periodChange(rangeCounts, previousCounts),
+                monthly,
             },
         });
     } catch (err: any) {
@@ -711,6 +830,70 @@ const getDashboardStats = async (req: Request, res: Response) => {
         return res.status(500).json({ status: "FAILED", message: safeErrorMessage(err) });
     }
 };
+
+function andFilters(parts: unknown[]): Record<string, unknown> {
+    const cleaned = parts.filter((p) => p && typeof p === "object" && Object.keys(p as object).length);
+    if (!cleaned.length) return {};
+    if (cleaned.length === 1) return cleaned[0] as Record<string, unknown>;
+    return { $and: cleaned };
+}
+
+function mapEventPlatformItem(ev: any) {
+    return {
+        kind: "booking" as const,
+        id: String(ev._id),
+        title: ev.title || "1:1 booking",
+        start: ev.start,
+        end: ev.end,
+        status: ev.status,
+        expert: ev.expert
+            ? {
+                id: String(ev.expert._id),
+                username: ev.expert.username,
+                email: ev.expert.email,
+            }
+            : null,
+        customer: ev.customer
+            ? {
+                id: String(ev.customer._id),
+                username: ev.customer.username,
+                email: ev.customer.email,
+            }
+            : null,
+    };
+}
+
+function mapGroupChatPlatformItem(g: any) {
+    const isSeminar = g.type === "seminar";
+    const adminUser = g.admin || g.createdBy;
+    return {
+        kind: isSeminar ? "seminar" as const : "groupOneToOne" as const,
+        id: String(g._id),
+        title: isSeminar ? `(S) ${g.name || "Seminar"}` : g.name || "1:1 session",
+        start: g.start,
+        end: g.end,
+        status: g.status,
+        expert: adminUser
+            ? {
+                id: String(adminUser._id),
+                username: adminUser.username,
+                email: adminUser.email,
+            }
+            : null,
+        customer: null,
+        groupChatType: g.type,
+        participantCount: Array.isArray(g.participants) ? g.participants.length : 0,
+    };
+}
+
+function groupChatTypeFilter(includeSeminar: boolean, includeOneToOne: boolean) {
+    if (includeSeminar && includeOneToOne) {
+        return { $or: [seminarBaseFilter(), { type: "individual" }] };
+    }
+    if (includeSeminar) return seminarBaseFilter();
+    if (includeOneToOne) return { type: "individual" };
+    return null;
+}
 
 const getAdminPlatformEvents = async (req: Request, res: Response) => {
     try {
@@ -725,91 +908,110 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
 
         const timeFilter = buildScopeTimeFilter(scope);
         const sortOrder = scope === "past" ? -1 : 1;
-        const limit = scope === "all" ? 400 : 500;
-
-        const items: any[] = [];
+        const page = clampPage(req.query.page);
+        const limit = clampPageSize(req.query.limit);
+        const skip = page * limit;
 
         const includeEvent = types.includes("event");
         const includeSeminar = types.includes("seminar");
         const includeOneToOne = types.includes("oneToOne");
 
-        if (includeEvent) {
-            const q = timeFilter || {};
-            const events = await Event.find(q)
+        const applyDateRange = scope === "past" || scope === "all";
+        const dateFrom = applyDateRange ? parseDateParam(req.query.dateFrom) : null;
+        const dateTo = applyDateRange ? parseDateParam(req.query.dateTo) : null;
+        const startRange = applyDateRange && (dateFrom || dateTo)
+            ? startInRangeFilter(dateFrom, dateTo)
+            : null;
+        const status = req.query.status ? String(req.query.status) : "";
+        const statusFilter = status ? { status } : null;
+        const search = String(req.query.q || "").trim();
+        let eventSearch: Record<string, unknown> | null = null;
+        let gcSearch: Record<string, unknown> | null = null;
+        if (search) {
+            const rx = { $regex: escapeRegExp(search), $options: "i" };
+            const people = await User.find({
+                $or: [{ username: rx }, { email: rx }],
+            }).select("_id");
+            const ids = people.map((u: { _id: unknown }) => u._id);
+            eventSearch = {
+                $or: [{ title: rx }, { expert: { $in: ids } }, { customer: { $in: ids } }],
+            };
+            gcSearch = {
+                $or: [{ name: rx }, { admin: { $in: ids } }, { createdBy: { $in: ids } }],
+            };
+        }
+
+        const eventQuery = includeEvent
+            ? andFilters([timeFilter, startRange, statusFilter, eventSearch])
+            : null;
+        const gcType = groupChatTypeFilter(includeSeminar, includeOneToOne);
+        const gcQuery = gcType
+            ? andFilters([timeFilter, startRange, statusFilter, gcSearch, gcType])
+            : null;
+
+        const items: any[] = [];
+        let totalCount = 0;
+
+        if (eventQuery && !gcQuery) {
+            totalCount = await Event.countDocuments(eventQuery);
+            const events = await Event.find(eventQuery)
                 .populate("expert", "username email")
                 .populate("customer", "username email")
                 .sort({ start: sortOrder })
+                .skip(skip)
                 .limit(limit);
-            for (const ev of events) {
-                items.push({
-                    kind: "booking",
-                    id: String(ev._id),
-                    title: ev.title || "1:1 booking",
-                    start: ev.start,
-                    end: ev.end,
-                    status: ev.status,
-                    expert: ev.expert
-                        ? {
-                            id: String(ev.expert._id),
-                            username: ev.expert.username,
-                            email: ev.expert.email,
-                        }
-                        : null,
-                    customer: ev.customer
-                        ? {
-                            id: String(ev.customer._id),
-                            username: ev.customer.username,
-                            email: ev.customer.email,
-                        }
-                        : null,
-                });
-            }
-        }
-
-        const gcTypes: string[] = [];
-        if (includeSeminar) gcTypes.push("seminar");
-        if (includeOneToOne) gcTypes.push("individual");
-
-        if (gcTypes.length) {
-            const gcQuery = timeFilter
-                ? { $and: [timeFilter, { type: { $in: gcTypes } }] }
-                : { type: { $in: gcTypes } };
+            for (const ev of events) items.push(mapEventPlatformItem(ev));
+        } else if (gcQuery && !eventQuery) {
+            totalCount = await GroupChat.countDocuments(gcQuery);
             const gcs = await GroupChat.find(gcQuery)
                 .populate("createdBy", "username email")
                 .populate("admin", "username email")
                 .sort({ start: sortOrder })
+                .skip(skip)
                 .limit(limit);
-            for (const g of gcs) {
-                const isSeminar = g.type === "seminar";
-                const adminUser = g.admin || g.createdBy;
-                items.push({
-                    kind: isSeminar ? "seminar" : "groupOneToOne",
-                    id: String(g._id),
-                    title: isSeminar ? `(S) ${g.name || "Seminar"}` : g.name || "1:1 session",
-                    start: g.start,
-                    end: g.end,
-                    status: g.status,
-                    expert: adminUser
-                        ? {
-                            id: String(adminUser._id),
-                            username: adminUser.username,
-                            email: adminUser.email,
-                        }
-                        : null,
-                    customer: null,
-                    groupChatType: g.type,
-                    participantCount: Array.isArray(g.participants) ? g.participants.length : 0,
-                });
+            for (const g of gcs) items.push(mapGroupChatPlatformItem(g));
+        } else if (eventQuery && gcQuery) {
+            const [eventHeads, gcHeads] = await Promise.all([
+                Event.find(eventQuery).select("start").lean(),
+                GroupChat.find(gcQuery).select("start type").lean(),
+            ]);
+            const heads = [
+                ...eventHeads.map((e: any) => ({ id: String(e._id), source: "event" as const, start: e.start })),
+                ...gcHeads.map((g: any) => ({ id: String(g._id), source: "gc" as const, start: g.start })),
+            ];
+            heads.sort((a, b) => {
+                const ta = new Date(a.start).getTime();
+                const tb = new Date(b.start).getTime();
+                const na = Number.isNaN(ta) ? 0 : ta;
+                const nb = Number.isNaN(tb) ? 0 : tb;
+                return sortOrder === 1 ? na - nb : nb - na;
+            });
+            totalCount = heads.length;
+            const pageHeads = heads.slice(skip, skip + limit);
+            const eventIds = pageHeads.filter((h) => h.source === "event").map((h) => h.id);
+            const gcIds = pageHeads.filter((h) => h.source === "gc").map((h) => h.id);
+            const [events, gcs] = await Promise.all([
+                eventIds.length
+                    ? Event.find({ _id: { $in: eventIds } })
+                        .populate("expert", "username email")
+                        .populate("customer", "username email")
+                    : [],
+                gcIds.length
+                    ? GroupChat.find({ _id: { $in: gcIds } })
+                        .populate("createdBy", "username email")
+                        .populate("admin", "username email")
+                    : [],
+            ]);
+            const byId = new Map<string, any>();
+            for (const ev of events) byId.set(String(ev._id), mapEventPlatformItem(ev));
+            for (const g of gcs) byId.set(String(g._id), mapGroupChatPlatformItem(g));
+            for (const head of pageHeads) {
+                const item = byId.get(head.id);
+                if (item) items.push(item);
             }
         }
 
-        items.sort((a, b) => {
-            const ta = new Date(a.start).getTime();
-            const tb = new Date(b.start).getTime();
-            return sortOrder === 1 ? ta - tb : tb - ta;
-        });
-
-        return res.status(200).json({ status: "SUCCESS", items });
+        return res.status(200).json({ status: "SUCCESS", items, totalCount, page, limit });
     } catch (err: any) {
         console.error(err);
         return res.status(500).json({ status: "FAILED", message: safeErrorMessage(err) });

@@ -1382,6 +1382,39 @@ export const doGetCustomerPaymentHistory = async () => {
 
 // ADMIN APIS ------------------
 
+export type AmountByCurrency = Record<string, number>;
+
+export type AdminSnapshotPeriodCounts = {
+    expertsJoined: number;
+    customersJoined: number;
+    sessionsHeld: number;
+    seminarsHeld: number;
+    paymentsCount: number;
+    refundsCount: number;
+    paymentsAmountByCurrency: AmountByCurrency;
+    refundsAmountByCurrency: AmountByCurrency;
+    sessionsCancelled: number;
+    seminarsAttendees: number;
+    refundsUnlinked: number;
+};
+
+export type AdminSnapshotMonthlyPoint = {
+    month: string;
+    count: number;
+    amountsByCurrency?: AmountByCurrency;
+};
+
+export type AdminSnapshotChange = {
+    expertsJoined: number;
+    customersJoined: number;
+    sessionsHeld: number;
+    seminarsHeld: number;
+    paymentsCount: number;
+    refundsCount: number;
+    paymentsAmountByCurrency: AmountByCurrency;
+    refundsAmountByCurrency: AmountByCurrency;
+};
+
 export type AdminDashboardStatsData = {
     pendingApprovals: number;
     /** Email-verify PendingUser queue (separate from status:review approvals). */
@@ -1395,6 +1428,21 @@ export type AdminDashboardStatsData = {
     totalPayments: number;
     refundCount: number;
     todayUpcomingEvents: number;
+    expertReviewCount?: number;
+    customerBlockedCount?: number;
+    upcomingSessions?: number;
+    upcomingSeminars?: number;
+    range?: AdminSnapshotPeriodCounts;
+    previousRange?: AdminSnapshotPeriodCounts | null;
+    change?: AdminSnapshotChange | null;
+    monthly?: {
+        experts: AdminSnapshotMonthlyPoint[];
+        customers: AdminSnapshotMonthlyPoint[];
+        sessions: AdminSnapshotMonthlyPoint[];
+        seminars: AdminSnapshotMonthlyPoint[];
+        payments: AdminSnapshotMonthlyPoint[];
+        refunds: AdminSnapshotMonthlyPoint[];
+    };
 };
 
 export type AdminPlatformEventItem = {
@@ -1570,12 +1618,19 @@ export const reorderFeaturedExpert = async (
     }
 };
 
-export const doGetAdminDashboardStats = async (): Promise<{
+export const doGetAdminDashboardStats = async (params?: {
+    dateFrom?: string;
+    dateTo?: string;
+}): Promise<{
     status: string;
     data?: AdminDashboardStatsData;
 } | null> => {
     try {
-        const res = await api.get("admin/dashboardStats");
+        const search = new URLSearchParams();
+        if (params?.dateFrom) search.set("dateFrom", params.dateFrom);
+        if (params?.dateTo) search.set("dateTo", params.dateTo);
+        const q = search.toString();
+        const res = await api.get(`admin/dashboardStats${q ? `?${q}` : ""}`);
         return res.data;
     } catch (err: any) {
         return checkForAuthorization(err);
@@ -1585,14 +1640,32 @@ export const doGetAdminDashboardStats = async (): Promise<{
 export const doGetAdminPlatformEvents = async (params: {
     scope?: "today" | "upcoming" | "past" | "all";
     types?: string[];
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+    q?: string;
+    status?: string;
 }) => {
     try {
         const search = new URLSearchParams();
         if (params.scope) search.set("scope", params.scope);
         if (params.types?.length) search.set("types", params.types.join(","));
+        if (params.dateFrom) search.set("dateFrom", params.dateFrom);
+        if (params.dateTo) search.set("dateTo", params.dateTo);
+        if (params.page != null) search.set("page", String(params.page));
+        if (params.limit != null) search.set("limit", String(params.limit));
+        if (params.q) search.set("q", params.q);
+        if (params.status) search.set("status", params.status);
         const q = search.toString();
         const res = await api.get(`admin/platformEvents${q ? `?${q}` : ""}`);
-        return res.data as { status: string; items: AdminPlatformEventItem[] };
+        return res.data as {
+            status: string;
+            items: AdminPlatformEventItem[];
+            totalCount?: number;
+            page?: number;
+            limit?: number;
+        };
     } catch (err: any) {
         return checkForAuthorization(err);
     }
@@ -1634,21 +1707,21 @@ export const doUpdateProfileByAdmin = async (updates: any) => {
     }
 };
 
-export const doGetDirectChatHistory = async (filter: any) => {
+export const doGetDirectChatHistory = async (filter: any, options?: HandleApiFailureOptions) => {
     try {
         const res = await api.post("admin/getDirectChatHistory", filter);
         return res.data
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleApiFailure(err, options ?? { notify: true });
     }
 };
 
-export const doGetGroupChatHistory = async (filter: any) => {
+export const doGetGroupChatHistory = async (filter: any, options?: HandleApiFailureOptions) => {
     try {
         const res = await api.post("admin/getGroupChatHistory", filter);
         return res.data
     } catch (err: any) {
-        return checkForAuthorization(err);
+        return handleApiFailure(err, options ?? { notify: true });
     }
 };
 

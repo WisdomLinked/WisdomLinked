@@ -8,7 +8,9 @@ import {
   Save,
   GraduationCap,
   FileText,
+  MapPin,
 } from 'lucide-react';
+import { Country, type ICountry, type IState, type ICity } from 'country-state-city';
 import { useAppSelector } from '../../store';
 import { useDispatch } from 'react-redux';
 import { notify } from '../../utils/notify';
@@ -27,6 +29,16 @@ import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
 import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
 import ShowFieldError from '../ShowFieldError';
 import FieldLabel from '../ui/FieldLabel';
+import CountrySelect from '../CountrySelection';
+import PhoneField from '../ui/PhoneField';
+import {
+  PHONE_INVALID_MESSAGE,
+  initialPhoneCountry,
+  isPhoneValid,
+  phoneDigits,
+  toE164,
+  toStoredPhone,
+} from '../../utils/phone';
 
 const PREFERENCE_OPTIONS = SERVICE_OPTIONS.map((o) => ({ id: o.value, label: o.label }));
 
@@ -86,8 +98,20 @@ function academicFromUser(userDetails: any) {
     gpa: coerceProfileString(userDetails?.gpa),
     rankingPercentile: coerceProfileString(userDetails?.rankingPercentile),
     targetUniversities: coerceProfileString(userDetails?.targetUniversities),
-    country: coerceProfileString(userDetails?.country),
   };
+}
+
+/** Hydrate CountrySelect from a stored ICountry object or a legacy free-text country. */
+function resolveCountry(value: unknown): ICountry | null {
+  if (value && typeof value === 'object' && typeof (value as ICountry).isoCode === 'string') {
+    return value as ICountry;
+  }
+  const name = coerceProfileString(value);
+  if (!name) return null;
+  const match = Country.getAllCountries().find(
+    (c) => c.name.toLowerCase() === name.toLowerCase() || c.isoCode.toLowerCase() === name.toLowerCase(),
+  );
+  return match ?? null;
 }
 
 
@@ -146,6 +170,22 @@ export default function StudentProfile({
     setAcademicDirty(true);
   };
 
+  const [country, setCountry] = useState<ICountry | null>(() => resolveCountry(userDetails?.country));
+  const [state, setState] = useState<IState | { name: string } | null>(() => userDetails?.state || null);
+  const [city, setCity] = useState<ICity | null>(() => userDetails?.city || null);
+  const [stateAvailable, setStateAvailable] = useState(false);
+  const [cityAvailable, setCityAvailable] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState(() => toE164(userDetails?.phoneNumber) ?? '');
+  const [phoneCountry, setPhoneCountry] = useState<string>(() =>
+    initialPhoneCountry(userDetails?.phoneNumber, resolveCountry(userDetails?.country)?.isoCode),
+  );
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const [locationDirty, setLocationDirty] = useState(false);
+  const [locationSaving, setLocationSaving] = useState(false);
+  const [locationSaveAttempted, setLocationSaveAttempted] = useState(false);
+
+  const markLocationDirty = () => setLocationDirty(true);
+
   // Keep profile header fields in sync with the authenticated user.
   // Avoid overwriting while the user is editing the personal section.
   useEffect(() => {
@@ -183,7 +223,23 @@ export default function StudentProfile({
     (userDetails as any)?.gpa,
     (userDetails as any)?.rankingPercentile,
     (userDetails as any)?.targetUniversities,
-    (userDetails as any)?.country,
+  ]);
+
+  useEffect(() => {
+    if (locationDirty) return;
+    setCountry(resolveCountry(userDetails?.country));
+    setState(userDetails?.state || null);
+    setCity(userDetails?.city || null);
+    setPhoneNumber(toE164(userDetails?.phoneNumber) ?? '');
+    setPhoneCountry(initialPhoneCountry(userDetails?.phoneNumber, resolveCountry(userDetails?.country)?.isoCode));
+    setPhoneTouched(false);
+    setLocationSaveAttempted(false);
+  }, [
+    locationDirty,
+    userDetails?.country,
+    userDetails?.state,
+    userDetails?.city,
+    userDetails?.phoneNumber,
   ]);
 
   // Load saved preferences (services) / interests (keywords) from the account.
@@ -267,7 +323,11 @@ export default function StudentProfile({
     email.trim() !== (userDetails?.email ?? '').trim();
 
   const profileHasUnsavedChanges =
-    hasPersonalTextChanges || preferencesDirty || interestsDirty || academicDirty;
+    hasPersonalTextChanges ||
+    preferencesDirty ||
+    interestsDirty ||
+    academicDirty ||
+    locationDirty;
 
   const handleSavePhoto = async () => {
     if (!photoFile) return;
@@ -326,6 +386,45 @@ export default function StudentProfile({
     if (preferencesDirty) await handleSavePreferences();
     if (interestsDirty) await handleSaveInterests();
     if (academicDirty) await handleSaveAcademic();
+    if (locationDirty) await handleSaveLocation();
+  };
+
+  const isLocationFormValid = () =>
+    !!country &&
+    (!stateAvailable || !!state) &&
+    (!cityAvailable || !!city) &&
+    isPhoneValid(phoneNumber);
+
+  const handleSaveLocation = async () => {
+    setLocationSaveAttempted(true);
+    if (!isLocationFormValid()) {
+      notify.error('Please complete location and a valid phone number before saving.');
+      return;
+    }
+    setLocationSaving(true);
+    try {
+      const ok = await doUpdateProfile({
+        country,
+        state,
+        city,
+        phoneNumber:
+          phoneDigits(phoneNumber) === phoneDigits(userDetails?.phoneNumber)
+            ? userDetails?.phoneNumber
+            : toStoredPhone(phoneNumber),
+      });
+      if (ok) {
+        setLocationDirty(false);
+        setLocationSaveAttempted(false);
+        await dispatch(updateMe() as any);
+        notify.success('Location and contact saved');
+      } else {
+        notify.error('Could not save location and contact');
+      }
+    } catch (err: unknown) {
+      notify.error(err instanceof Error ? err.message : 'Could not save location and contact');
+    } finally {
+      setLocationSaving(false);
+    }
   };
 
   // Academic background is optional; persist the fields the student filled in.
@@ -339,7 +438,6 @@ export default function StudentProfile({
         gpa: academic.gpa.trim(),
         rankingPercentile: academic.rankingPercentile.trim(),
         targetUniversities: academic.targetUniversities.trim(),
-        country: academic.country.trim(),
       });
       if (ok) {
         setAcademicDirty(false);
@@ -630,14 +728,74 @@ export default function StudentProfile({
               className={inputNormal}
             />
           </div>
+        </div>
+      </section>
+
+      <section id="profile-contact" className={`${cardClass} ${sectionAnchorClass} mb-6`}>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-[#234C6A]" aria-hidden />
+            Location &amp; Contact
+          </h2>
+          {locationDirty && (
+            <button
+              type="button"
+              onClick={() => void handleSaveLocation()}
+              disabled={locationSaving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+            >
+              {locationSaving && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+              {locationSaving ? 'Saving…' : 'Save'}
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-slate-600 mb-4">Where you&apos;re based and how to reach you.</p>
+        <div className="space-y-5">
+          <CountrySelect
+            selectedCountry={country}
+            set_selectedCountry={next => {
+              setCountry(next);
+              markLocationDirty();
+            }}
+            selectedState={state}
+            set_selectedState={next => {
+              setState(next);
+              markLocationDirty();
+            }}
+            selectedCity={city}
+            set_selectedCity={next => {
+              setCity(next);
+              markLocationDirty();
+            }}
+            stateAvailable={stateAvailable}
+            set_stateAvailable={setStateAvailable}
+            cityAvailable={cityAvailable}
+            set_cityAvailable={setCityAvailable}
+            forceShow={locationSaveAttempted}
+          />
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Country</label>
-            <input
-              type="text"
-              value={academic.country}
-              onChange={e => setAcademicField('country', e.target.value)}
-              placeholder="e.g. China"
-              className={inputNormal}
+            <FieldLabel required>Phone number</FieldLabel>
+            <div
+              onBlur={e => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setPhoneTouched(true);
+                }
+              }}
+            >
+              <PhoneField
+                value={phoneNumber}
+                onChange={next => {
+                  setPhoneNumber(next);
+                  markLocationDirty();
+                }}
+                country={phoneCountry}
+                onCountryChange={setPhoneCountry}
+                invalid={(phoneTouched || locationSaveAttempted) && !isPhoneValid(phoneNumber)}
+              />
+            </div>
+            <ShowFieldError
+              show={(phoneTouched || locationSaveAttempted) && !isPhoneValid(phoneNumber)}
+              label={PHONE_INVALID_MESSAGE}
             />
           </div>
         </div>
