@@ -131,9 +131,9 @@ const STATUS_OPTIONS: Record<SnapshotListType, { value: string; label: string }[
   sessions: [
     { value: '', label: 'All statuses' },
     { value: 'pending', label: 'Pending' },
-    { value: 'accepted', label: 'Accepted' },
-    { value: 'declined', label: 'Declined' },
-    { value: 'cancelled', label: 'Cancelled' },
+    // Older 1:1s are "accepted" once confirmed, today's are "active".
+    { value: 'accepted,active', label: 'Confirmed' },
+    { value: 'cancelled,canceled,declined', label: 'Cancelled / declined' },
   ],
   seminars: [
     { value: '', label: 'All statuses' },
@@ -151,15 +151,7 @@ const STATUS_OPTIONS: Record<SnapshotListType, { value: string; label: string }[
     { value: 'withheld', label: 'Withheld' },
     { value: 'released', label: 'Released' },
   ],
-  refunds: [
-    { value: '', label: 'All statuses' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'completed', label: 'Completed' },
-    { value: 'failed', label: 'Failed' },
-    { value: 'refunded', label: 'Refunded' },
-    { value: 'withheld', label: 'Withheld' },
-    { value: 'released', label: 'Released' },
-  ],
+  refunds: [],
 };
 
 type WhenMode = 'all' | 'past' | 'upcoming';
@@ -526,12 +518,8 @@ function countLabel(n: number, singular: string, plural: string) {
   return `${n.toLocaleString()} ${n === 1 ? singular : plural}`;
 }
 
-function hasWhenToggle(type: SnapshotListType, rows: ListRow[]) {
-  if (type === 'sessions' || type === 'seminars') return true;
-  if (type === 'payments') {
-    return rows.some(row => row.kind === 'payment' && isValidRecordDate(row.bookingStart));
-  }
-  return false;
+function hasWhenToggle(type: SnapshotListType) {
+  return type === 'sessions' || type === 'seminars' || type === 'payments';
 }
 
 function listSummary(
@@ -621,7 +609,7 @@ async function fetchPage(
     const scope = args.whenMode === 'upcoming' ? 'upcoming' : 'past';
     const res = await doGetAdminPlatformEvents({
       scope,
-      types: type === 'sessions' ? ['event'] : ['seminar'],
+      types: type === 'sessions' ? ['event', 'oneToOne'] : ['seminar'],
       page: args.page,
       limit: PAGE_SIZE,
       q: args.q || undefined,
@@ -1128,12 +1116,8 @@ export default function AdminSnapshotMetricView() {
 
   const chart = monthlyFor(listType, stats);
   const kpis = kpisFor(listType, stats);
-  const showWhen = hasWhenToggle(listType, rows);
-  const refundStatuses = useMemo(() => {
-    if (listType !== 'refunds') return new Set<string>();
-    return new Set(rows.map(row => String(row.status || '').toLowerCase()).filter(Boolean));
-  }, [listType, rows]);
-  const showStatusFilter = listType !== 'refunds' || refundStatuses.size > 1;
+  const showWhen = hasWhenToggle(listType);
+  const showStatusFilter = STATUS_OPTIONS[listType].length > 0;
   const paymentsHaveBooking = rows.some(
     row => row.kind === 'payment' && isValidRecordDate(row.bookingStart),
   );
