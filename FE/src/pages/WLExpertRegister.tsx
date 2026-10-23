@@ -15,7 +15,7 @@ import type { ICountry } from 'country-state-city';
 import CountryField, { COUNTRY_REQUIRED_MESSAGE } from '../components/ui/CountryField';
 import PhoneField from '../components/ui/PhoneField';
 import { PHONE_INVALID_MESSAGE, isPhoneValid, toStoredPhone } from '../utils/phone';
-import { SignupSignatureFields, SignupTermsModal, useSharedSignupContract } from '../components/terms/SignupTerms';
+import { SignupTermsModal, useSharedSignupContract } from '../components/terms/SignupTerms';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -454,18 +454,19 @@ export default function WLExpertRegister() {
                             <div>
                                 <label className="flex items-start gap-3 cursor-pointer">
                                     <input type="checkbox" checked={form.terms}
-                                        onChange={(e) => { handleChange('terms', e.target.checked); handleBlur('terms'); }}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setShowTermsModal(true);
+                                                return;
+                                            }
+                                            handleChange('terms', false);
+                                            setTouched(prev => ({ ...prev, terms: true }));
+                                            setErrors(prev => ({ ...prev, terms: 'You must accept the terms and conditions' }));
+                                        }}
                                         className={`mt-1 w-4 h-4 rounded border-slate-300 text-[#234C6A] focus:ring-[#234C6A] ${(touched.terms && errors.terms) ? 'ring-2 ring-red-400 outline-none' : ''}`} />
                                     <span className="text-sm text-slate-600">I agree to the <button type="button" onClick={(e) => { e.preventDefault(); setShowTermsModal(true); }} className="text-[#234C6A] font-semibold hover:underline">Terms and Conditions</button></span>
                                 </label>
                                 {(touched.terms && errors.terms) && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.terms}</p>}
-                                {signupTerms.published ? (
-                                    <SignupSignatureFields
-                                        typedName={signupTerms.typedName}
-                                        onTypedName={signupTerms.setTypedName}
-                                        onSignature={signupTerms.setSignaturePng}
-                                    />
-                                ) : null}
                                 {errors.signature ? <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.signature}</p> : null}
                             </div>
                         </div>
@@ -489,19 +490,21 @@ export default function WLExpertRegister() {
                 loadError={signupTerms.error}
                 contract={signupTerms.contract}
                 typedName={signupTerms.typedName}
+                signaturePng={signupTerms.signaturePng}
                 onTypedName={signupTerms.setTypedName}
                 onSignature={signupTerms.setSignaturePng}
+                signatureError={errors.signature}
                 onAgree={() => {
                     if (signupTerms.published) {
                         const signatureErr = signupTerms.signatureError();
                         if (signatureErr) {
                             setErrors((prev) => ({ ...prev, signature: signatureErr }));
-                            setTouched((prev) => ({ ...prev, terms: true }));
                             return;
                         }
                     }
-                    handleChange('terms', true);
-                    handleBlur('terms');
+                    setForm(prev => ({ ...prev, terms: true }));
+                    setTouched(prev => ({ ...prev, terms: true }));
+                    setErrors(prev => ({ ...prev, terms: '', signature: '' }));
                     setShowTermsModal(false);
                 }}
             />

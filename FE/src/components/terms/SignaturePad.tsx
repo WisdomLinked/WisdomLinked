@@ -14,10 +14,12 @@ function safeContext(canvas: HTMLCanvasElement | null) {
 
 type Props = {
     onChange: (dataUrl: string | null) => void;
+    /** Saved PNG to redraw when the pad is opened again. */
+    value?: string | null;
 };
 
 /** Mouse and touch drawing. Exports a PNG data URL, capped around 500KB. */
-export default function SignaturePad({ onChange }: Props) {
+export default function SignaturePad({ onChange, value }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const drawing = useRef(false);
 
@@ -31,7 +33,13 @@ export default function SignaturePad({ onChange }: Props) {
         ctx.lineWidth = 2.2;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-    }, []);
+        if (!value || !value.startsWith('data:image/')) return;
+        const image = new Image();
+        image.onload = () => {
+            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        };
+        image.src = value;
+    }, [value]);
 
     const point = (event: PointerEvent<HTMLCanvasElement>) => {
         const canvas = event.currentTarget;

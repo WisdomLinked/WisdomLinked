@@ -335,10 +335,19 @@ async function getVisibleCurrent(user: any, audienceRaw: unknown) {
         audience,
         version: latest.version,
     }).lean();
-    return {
+    const current = {
         published: true,
         alreadySigned: !!signed,
         ...publicContract(latest),
+    };
+    if (!signed) return current;
+    const signedAt = signed.signedAt ? new Date(signed.signedAt) : null;
+    return {
+        ...current,
+        alreadySigned: true,
+        signedAt: signedAt && !Number.isNaN(signedAt.getTime()) ? signedAt.toISOString() : "",
+        typedName: String(signed.typedName || ""),
+        signaturePng: String(signed.signaturePng || ""),
     };
 }
 

@@ -100,6 +100,8 @@ describe('Terms & Agreement admin page', () => {
         expect(await screen.findByText('Preview text')).toBeInTheDocument();
 
         await user.click(screen.getByRole('button', { name: 'Publish Shared' }));
+        expect(screen.getByRole('dialog', { name: 'Confirm publish' })).toHaveTextContent('sign this new version');
+        await user.click(screen.getByRole('button', { name: 'Publish and require signatures' }));
         expect(await screen.findAllByText('Version 2')).not.toHaveLength(0);
         expect(screen.getAllByText('Version 1').length).toBeGreaterThan(0);
     });

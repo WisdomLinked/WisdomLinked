@@ -75,7 +75,15 @@ export async function getRequiredContracts(): Promise<TermsContract[]> {
 
 export async function getCurrentTerms(audience: TermsAudience) {
     const res = await apiClient.get(`terms/current/${audience}`);
-    return res.data as { published: false; audience: TermsAudience } | ({ published: true; alreadySigned: boolean } & TermsContract);
+    return res.data as
+        | { published: false; audience: TermsAudience }
+        | ({
+            published: true;
+            alreadySigned: boolean;
+            signedAt?: string;
+            typedName?: string;
+            signaturePng?: string;
+        } & TermsContract);
 }
 
 export async function acceptTerms(payload: TermsAgreementPayload & { audience: TermsAudience }) {

@@ -64,10 +64,12 @@ export function useSharedSignupContract() {
 export function SignupSignatureFields({
     typedName,
     onTypedName,
+    signaturePng,
     onSignature,
 }: {
     typedName: string;
     onTypedName: (value: string) => void;
+    signaturePng?: string | null;
     onSignature: (value: string | null) => void;
 }) {
     return (
@@ -83,9 +85,9 @@ export function SignupSignatureFields({
             </label>
             <div>
                 <p className="mb-1 text-xs font-semibold text-slate-600">Draw your signature</p>
-                <SignaturePad onChange={onSignature} />
+                <SignaturePad value={signaturePng} onChange={onSignature} />
             </div>
-            <p className="text-xs text-slate-500">Check I agree and provide your legal name, a drawn signature, or both.</p>
+            <p className="text-xs text-slate-500">Enter your full legal name, draw your signature, or both.</p>
         </div>
     );
 }
@@ -121,8 +123,10 @@ export function SignupTermsModal({
     contract,
     typedName,
     onTypedName,
+    signaturePng,
     onSignature,
     onAgree,
+    signatureError,
 }: {
     open: boolean;
     onClose: () => void;
@@ -131,12 +135,14 @@ export function SignupTermsModal({
     contract: TermsContract | null;
     typedName: string;
     onTypedName: (value: string) => void;
+    signaturePng?: string | null;
     onSignature: (value: string | null) => void;
     onAgree: () => void;
+    signatureError?: string;
 }) {
     if (!open) return null;
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)' }} onClick={onClose}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={onClose}>
             <div className="flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 shadow-2xl" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' }} onClick={(event) => event.stopPropagation()}>
                 <div className="h-1 w-full" style={{ background: 'linear-gradient(90deg, #234C6A, #456882)' }} />
                 <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -149,8 +155,9 @@ export function SignupTermsModal({
                     {loaded && !loadError && contract ? <TermsHtml html={contract.html} /> : null}
                     {loaded && !loadError && !contract ? <LegacyTermsCopy /> : null}
                     {contract ? (
-                        <SignupSignatureFields typedName={typedName} onTypedName={onTypedName} onSignature={onSignature} />
+                        <SignupSignatureFields typedName={typedName} onTypedName={onTypedName} signaturePng={signaturePng} onSignature={onSignature} />
                     ) : null}
+                    {signatureError ? <p className="text-xs text-red-500">{signatureError}</p> : null}
                 </div>
                 <div className="flex gap-3 border-t border-slate-100 px-6 py-4">
                     <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Close</button>

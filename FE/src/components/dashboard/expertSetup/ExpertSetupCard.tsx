@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { useAppSelector } from '../../../store';
 import { doSetExpertBookingNoticeHours, doUpdateProfile } from '../../../api/api';
 import { getRequiredContracts } from '../../../api/termsApi';
@@ -189,11 +189,35 @@ export default function ExpertSetupCard({ onOpenAvailability }: { onOpenAvailabi
           {includeTerms ? (
             <li className={`rounded-xl px-3 py-3 sm:px-4 ${!termsDone && currentIndex === -1 ? 'bg-[#e8f0f8]' : ''}`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-semibold text-gray-800">Terms</h3>
-                  <p className="mt-0.5 text-sm text-gray-500">
-                    {termsDone ? 'Current agreement signed' : 'Sign the current expert agreement.'}
-                  </p>
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <span
+                    className={[
+                      'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+                      termsDone ? 'bg-emerald-600 text-white' : 'border border-gray-300 bg-white text-gray-500',
+                    ].join(' ')}
+                  >
+                    {termsDone ? (
+                      <>
+                        <Check className="h-4 w-4" aria-hidden />
+                        <span className="sr-only">Done:</span>
+                      </>
+                    ) : (
+                      <span aria-hidden>{SETUP_STEPS.length + 1}</span>
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm font-semibold text-gray-800">Terms</h3>
+                      {termsDone ? (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                          Done
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-0.5 text-sm text-gray-500">
+                      {termsDone ? 'Current agreement signed' : 'Sign the current expert agreement.'}
+                    </p>
+                  </div>
                 </div>
                 <button
                   type="button"

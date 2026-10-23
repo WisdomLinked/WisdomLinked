@@ -13,6 +13,7 @@ const {
     publishTermsVersion,
     acceptTermsForUser,
     listRequiredContracts,
+    getVisibleCurrent,
     searchTermsUsers,
     gateSignupAgreement,
 } = require('../services/termsAgreement');
@@ -284,6 +285,64 @@ test('gate payload lists shared then role when both are unsigned, and is empty w
         assert.deepEqual(pending.map((row: any) => row.audience), ['shared', 'customer']);
         assert.equal(pending[0].contentHash, 'hash-shared');
         assert.equal(pending[1].version, 3);
+    } finally {
+        restoreMemory();
+    }
+});
+
+test('current agreement returns the stored signature and omits the client address', async () => {
+    installMemory();
+    try {
+        versions.push({
+            audience: 'customer',
+            version: 2,
+            html: '<p>Student terms</p>',
+            contentHash: 'hash-customer',
+            originalFilename: 'student.docx',
+        });
+        const unsigned = await getVisibleCurrent({ userId: 'student1', role: 'customer' }, 'customer');
+        assert.equal(unsigned.published, true);
+        assert.equal(unsigned.alreadySigned, false);
+        assert.equal(unsigned.signedAt, undefined);
+        assert.equal(unsigned.typedName, undefined);
+        assert.equal(unsigned.signaturePng, undefined);
+
+        acceptances.push({
+            user: 'student1',
+            audience: 'customer',
+            version: 1,
+            signedAt: new Date('2026-01-01T00:00:00.000Z'),
+            ip: '203.0.113.9',
+            userAgent: 'OldBrowser/1',
+            typedName: 'Older Name',
+            signaturePng: 'data:image/png;base64,old',
+        });
+        const older = await getVisibleCurrent({ userId: 'student1', role: 'customer' }, 'customer');
+        assert.equal(older.alreadySigned, false);
+        assert.equal(older.typedName, undefined);
+
+        acceptances.push({
+            user: 'student1',
+            audience: 'customer',
+            version: 2,
+            signedAt: new Date('2026-03-15T18:45:00.000Z'),
+            ip: '203.0.113.10',
+            userAgent: 'SecretBrowser/1',
+            typedName: 'Ada Lovelace',
+            signaturePng: 'data:image/png;base64,abc',
+        });
+        const current = await getVisibleCurrent({ userId: 'student1', role: 'customer' }, 'customer');
+        assert.equal(current.alreadySigned, true);
+        assert.equal(current.signedAt, '2026-03-15T18:45:00.000Z');
+        assert.equal(current.typedName, 'Ada Lovelace');
+        assert.equal(current.signaturePng, 'data:image/png;base64,abc');
+        assert.equal(current.html, '<p>Student terms</p>');
+        assert.equal(current.version, 2);
+        const payload = JSON.stringify(current);
+        assert.equal(payload.includes('203.0.113.10'), false);
+        assert.equal(payload.includes('SecretBrowser'), false);
+        assert.equal(Object.hasOwn(current, 'ip'), false);
+        assert.equal(Object.hasOwn(current, 'userAgent'), false);
     } finally {
         restoreMemory();
     }

@@ -27,6 +27,16 @@ const AUDIENCE_LABEL: Record<TermsAudience, string> = {
     customer: 'Student',
 };
 
+function publishWarning(audience: TermsAudience) {
+    if (audience === 'shared') {
+        return 'Every student and expert will have to sign this new version before they can keep using WisdomLinked.';
+    }
+    if (audience === 'expert') {
+        return 'Every expert will have to sign this new version before they can keep using WisdomLinked.';
+    }
+    return 'Every student will have to sign this new version before they can keep using WisdomLinked.';
+}
+
 function when(value: string) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value || '';
@@ -48,6 +58,7 @@ export default function TermsAgreementPage() {
     const [previews, setPreviews] = useState<Partial<Record<TermsAudience, string>>>({});
     const [status, setStatus] = useState<Partial<Record<TermsAudience, string>>>({});
     const [publishing, setPublishing] = useState<TermsAudience | null>(null);
+    const [confirmPublish, setConfirmPublish] = useState<TermsAudience | null>(null);
     const [htmlView, setHtmlView] = useState<{ title: string; html: string } | null>(null);
     const [signers, setSigners] = useState<{ title: string; rows: TermsAcceptanceRow[] } | null>(null);
     const [query, setQuery] = useState('');
@@ -175,8 +186,8 @@ export default function TermsAgreementPage() {
                         ) : null}
                         <button
                             type="button"
-                            onClick={() => void onPublish(item.id)}
-                            disabled={publishing === item.id}
+                            onClick={() => setConfirmPublish(item.id)}
+                            disabled={publishing === item.id || !files[item.id]}
                             className="mt-3 rounded-xl bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
                         >
                             {publishing === item.id ? 'Publishing…' : `Publish ${item.label}`}
@@ -288,6 +299,31 @@ export default function TermsAgreementPage() {
                                 Download docx
                             </button>
                         ) : null}
+                    </div>
+                </div>
+            ) : null}
+
+            {confirmPublish ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" role="dialog" aria-label="Confirm publish">
+                    <div className="w-full max-w-md rounded-2xl bg-white p-5">
+                        <h3 className="text-lg font-semibold text-[#1A3A4A]">Publish {AUDIENCE_LABEL[confirmPublish]} agreement?</h3>
+                        <p className="mt-2 text-sm text-slate-600">{publishWarning(confirmPublish)} This cannot be undone. The previous version stays on file.</p>
+                        <div className="mt-4 flex justify-end gap-2">
+                            <button type="button" onClick={() => setConfirmPublish(null)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700">
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const audience = confirmPublish;
+                                    setConfirmPublish(null);
+                                    void onPublish(audience);
+                                }}
+                                className="rounded-xl bg-[#234C6A] px-3 py-2 text-sm font-semibold text-white"
+                            >
+                                Publish and require signatures
+                            </button>
+                        </div>
                     </div>
                 </div>
             ) : null}
