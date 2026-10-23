@@ -309,9 +309,41 @@ const listExpertPayroll = async (req, res) => {
     }
 };
 
+const chequeTime = (value: unknown) => {
+    const time = new Date(value as any).getTime();
+    return Number.isFinite(time) ? time : 0;
+};
+
+const listPayrollCheques = async (req, res) => {
+    try {
+        const cheques = await PayrollCheque.find({}).lean();
+        const expertIds = [...new Set((cheques || []).map((cheque: any) => expertIdOf(cheque.expert)).filter(Boolean))];
+        const users = await usersById(expertIds);
+        const rows = (cheques || [])
+            .map((cheque: any) => {
+                const user = users.get(expertIdOf(cheque.expert));
+                return {
+                    ...chequeFields(cheque),
+                    expertName: user?.username || user?.email || 'Expert',
+                    expertEmail: user?.email || '',
+                };
+            })
+            .sort((a: any, b: any) => {
+                if (Number(b.year) !== Number(a.year)) return Number(b.year) - Number(a.year);
+                if (Number(b.month) !== Number(a.month)) return Number(b.month) - Number(a.month);
+                return chequeTime(b.chequeDate) - chequeTime(a.chequeDate);
+            });
+        return res.send({ cheques: rows });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send({ error: 'Something went wrong. Please try again.' });
+    }
+};
+
 module.exports = {
     listPayroll,
     recordPayrollCheque,
     updatePayrollCheque,
     listExpertPayroll,
+    listPayrollCheques,
 };

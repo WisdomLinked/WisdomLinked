@@ -13,10 +13,45 @@ import {
   paymentToneClass,
   paymentTransactionId,
   DEFAULT_AUDIT_RATES,
+  type AuditCheque,
   type AuditCommissionRates,
   type PaymentSummary,
 } from './auditModel';
 import type { PaymentHistoryRow } from '../../payment/paymentHistoryUtils';
+
+const UTC_MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+function payrollMonthLabel(year?: number, month?: number): string {
+  const name = month ? UTC_MONTHS[month - 1] : '';
+  if (!name || typeof year !== 'number' || !Number.isFinite(year)) return '—';
+  return `${name} ${year}`;
+}
+
+function formatChequeDate(value?: string | Date | null): string {
+  if (!value) return '—';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return format(new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()), 'MMM d, yyyy');
+}
+
+function chequeSort(a: AuditCheque, b: AuditCheque): number {
+  if (Number(b.year) !== Number(a.year)) return Number(b.year) - Number(a.year);
+  if (Number(b.month) !== Number(a.month)) return Number(b.month) - Number(a.month);
+  return (parseDate(b.chequeDate)?.getTime() ?? 0) - (parseDate(a.chequeDate)?.getTime() ?? 0);
+}
 
 function Tile({ label, value }: { label: string; value: string }) {
   return (
@@ -92,6 +127,7 @@ function PaymentCard({ row, expert, rates }: { row: PaymentHistoryRow; expert: b
 export default function PaymentHistory({
   rows,
   summary,
+  cheques = [],
   rates = DEFAULT_AUDIT_RATES,
   totalCount,
   currentPage,
@@ -102,6 +138,7 @@ export default function PaymentHistory({
 }: {
   rows: PaymentHistoryRow[];
   summary: PaymentSummary;
+  cheques?: AuditCheque[];
   rates?: AuditCommissionRates;
   totalCount: number;
   currentPage: number;
@@ -111,6 +148,7 @@ export default function PaymentHistory({
   loading: boolean;
 }) {
   const expert = summary.role === 'expert';
+  const paidCheques = expert ? [...cheques].sort(chequeSort) : [];
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pt-4">
       <div className={`grid grid-cols-2 gap-3 ${expert ? 'lg:grid-cols-5' : 'lg:grid-cols-3'}`}>
@@ -130,6 +168,40 @@ export default function PaymentHistory({
           </>
         )}
       </div>
+
+      {paidCheques.length > 0 ? (
+        <section aria-label="Paid out cheques">
+          <h3 className="mb-2 text-sm font-semibold text-audit-ink">Paid out</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-audit-line text-xs uppercase tracking-wider text-audit-muted">
+                  <th className="px-3 py-2 font-medium">Month</th>
+                  <th className="px-3 py-2 font-medium">Amount</th>
+                  <th className="px-3 py-2 font-medium">Cheque number</th>
+                  <th className="px-3 py-2 font-medium">Cheque date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paidCheques.map(cheque => (
+                  <tr key={`${cheque.year}-${cheque.month}-${cheque.chequeNumber || ''}`} className="border-b border-audit-line">
+                    <td className="whitespace-nowrap px-3 py-3 text-audit-ink">
+                      {payrollMonthLabel(cheque.year, cheque.month)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-ink">
+                      {formatUsdFromCents(cheque.amountCents)}
+                    </td>
+                    <td className="px-3 py-3 text-audit-ink">{cheque.chequeNumber || '—'}</td>
+                    <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-ink">
+                      {formatChequeDate(cheque.chequeDate)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       {loading && rows.length === 0 ? (
         <EmptyState title="Loading payments" />
