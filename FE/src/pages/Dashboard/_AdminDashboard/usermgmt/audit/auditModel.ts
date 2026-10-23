@@ -43,13 +43,41 @@ export type PaymentDisplayStatus = {
   tone: 'ok' | 'warn' | 'bad' | 'muted';
 };
 
+export type AuditMoneyRole = 'expert' | 'student';
+
+export type AuditCommissionRates = {
+  seminarCommissionPercent: number;
+  oneToOneCommissionPercent: number;
+};
+
+export const DEFAULT_AUDIT_RATES: AuditCommissionRates = {
+  seminarCommissionPercent: 20,
+  oneToOneCommissionPercent: 20,
+};
+
+export type PaymentBreakdown = {
+  advertisedCents: number;
+  platformFeeCents: number;
+  taxCents: number;
+  commissionCents: number;
+  expertNetCents: number;
+  paidCents: number;
+};
+
 export type PaymentSummary = {
+  role: AuditMoneyRole;
   gross: number;
   fees: number;
   paidOut: number;
   pending: number;
   net: number;
+  priceCollected: number;
+  tax: number;
 };
+
+export function auditMoneyRole(role?: string): AuditMoneyRole {
+  return String(role || '').toLowerCase() === 'expert' ? 'expert' : 'student';
+}
 
 const SKIP_GENERAL_CHAT_NAMES = new Set(['Global Chat', 'Admin']);
 
@@ -315,22 +343,91 @@ export function isRefundedRow(row: PaymentHistoryRow): boolean {
   return row?.status === 'refunded' || row?.paymentType === 'refund';
 }
 
-export function paymentSummary(rows: PaymentHistoryRow[]): PaymentSummary {
+function isSeminarRow(row: PaymentHistoryRow): boolean {
+  return row.sessionType === 'seminar' || row.groupChat?.type === 'seminar';
+}
+
+/** New charges carry a snapshot. Old rows only have `amount`. */
+export function explainPaymentRow(
+  row: PaymentHistoryRow,
+  rates: AuditCommissionRates = DEFAULT_AUDIT_RATES,
+): PaymentBreakdown {
+  const paid = typeof row.amount === 'number' && Number.isFinite(row.amount) ? row.amount : 0;
+  if (typeof row.advertisedCents === 'number') {
+    return {
+      advertisedCents: row.advertisedCents,
+      platformFeeCents: typeof row.platformFeeCents === 'number' ? row.platformFeeCents : 0,
+      taxCents: typeof row.taxCents === 'number' ? row.taxCents : 0,
+      commissionCents: typeof row.commissionCents === 'number' ? row.commissionCents : 0,
+      expertNetCents: typeof row.expertNetCents === 'number' ? row.expertNetCents : 0,
+      paidCents: paid,
+    };
+  }
+  const percent = isSeminarRow(row) ? rates.seminarCommissionPercent : rates.oneToOneCommissionPercent;
+  const commission = paid === 0 ? 0 : Math.round((paid * percent) / 100);
+  return {
+    advertisedCents: paid,
+    platformFeeCents: 0,
+    taxCents: 0,
+    commissionCents: commission,
+    expertNetCents: paid === 0 ? 0 : paid - commission,
+    paidCents: paid,
+  };
+}
+
+export function paymentSummary(
+  rows: PaymentHistoryRow[],
+  role: AuditMoneyRole = 'expert',
+  rates: AuditCommissionRates = DEFAULT_AUDIT_RATES,
+): PaymentSummary {
   let gross = 0;
   let fees = 0;
   let paidOut = 0;
   let pending = 0;
+  let priceCollected = 0;
+  let tax = 0;
+  let studentPaid = 0;
 
   for (const row of rows) {
     if (isRefundedRow(row)) continue;
-    const amount = typeof row.amount === 'number' ? row.amount : 0;
     if (row.status === 'failed' || row.status === 'released') continue;
-    gross += amount;
-    if (row.status === 'completed') paidOut += amount;
-    if (row.status === 'pending' || row.status === 'withheld') pending += amount;
+    const money = explainPaymentRow(row, rates);
+    if (role === 'expert') {
+      gross += money.advertisedCents;
+      fees += money.commissionCents;
+      if (row.status === 'completed') paidOut += money.expertNetCents;
+      if (row.status === 'pending' || row.status === 'withheld') pending += money.expertNetCents;
+    } else {
+      priceCollected += money.advertisedCents;
+      fees += money.platformFeeCents;
+      tax += money.taxCents;
+      if (row.status === 'completed') studentPaid += money.paidCents;
+    }
   }
 
-  return { gross, fees, paidOut, pending, net: paidOut - fees };
+  if (role === 'student') {
+    return {
+      role,
+      gross: priceCollected,
+      fees,
+      paidOut: studentPaid,
+      pending: 0,
+      net: studentPaid,
+      priceCollected,
+      tax,
+    };
+  }
+
+  return {
+    role: 'expert',
+    gross,
+    fees,
+    paidOut,
+    pending,
+    net: paidOut,
+    priceCollected: gross,
+    tax: 0,
+  };
 }
 
 export function paymentDisplayStatus(row: PaymentHistoryRow): PaymentDisplayStatus {

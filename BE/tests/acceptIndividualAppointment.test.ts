@@ -14,8 +14,10 @@ const record = (name: string, args: any[]) => {
 };
 
 stripeController.refundPaymentIntent = async () => ({ payment_intent: "pi" });
-stripeController.checkPaymentIntentAuthorized = async () => false;
-stripeController.checkPaymentIntentSucceeded = async () => false;
+let authorizedResult: any = false;
+stripeController.checkPaymentIntentAuthorized = async () => authorizedResult;
+let succeededResult: any = false;
+stripeController.checkPaymentIntentSucceeded = async () => succeededResult;
 let captureResult: any = false;
 stripeController.capturePaymentIntent = async (pi: string) => {
   record("capture", [pi]);
@@ -54,6 +56,7 @@ paymentController.appendPaymentHistory = async (data: any) => {
 const groupController = require("../controllers/groupChat.controller");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
+const AppState = require("../models/AppState");
 const PaymentHistory = require("../models/PaymentHistory");
 
 const STUDENT_ID = "aaaaaaaaaaaaaaaaaaaaaaa1";
@@ -115,10 +118,13 @@ const withModels = ({ chat, paid = true, activateWins = true, parked = null }: a
     groupUpdateOne: GroupChat.updateOne,
     userFindById: User.findById,
     historyExists: PaymentHistory.exists,
+    historyFind: PaymentHistory.find,
     historyFindOne: PaymentHistory.findOne,
     historyFindByIdAndUpdate: PaymentHistory.findByIdAndUpdate,
+    appStateFindOne: AppState.findOne,
   };
 
+  PaymentHistory.find = () => ({ select: async () => [] });
   PaymentHistory.findOne = async () => parked;
   PaymentHistory.findByIdAndUpdate = async (id: any, update: any) => {
     record("historyUpdate", [String(id), update]);
@@ -140,6 +146,7 @@ const withModels = ({ chat, paid = true, activateWins = true, parked = null }: a
     username: String(id) === EXPERT_ID ? "Expert" : "Student",
   });
   PaymentHistory.exists = async () => (paid ? { _id: "charge-row" } : null);
+  AppState.findOne = async () => ({ stripeMode: "test" });
 
   return () => {
     GroupChat.findOne = original.groupFindOne;
@@ -147,8 +154,10 @@ const withModels = ({ chat, paid = true, activateWins = true, parked = null }: a
     GroupChat.updateOne = original.groupUpdateOne;
     User.findById = original.userFindById;
     PaymentHistory.exists = original.historyExists;
+    PaymentHistory.find = original.historyFind;
     PaymentHistory.findOne = original.historyFindOne;
     PaymentHistory.findByIdAndUpdate = original.historyFindByIdAndUpdate;
+    AppState.findOne = original.appStateFindOne;
   };
 };
 
@@ -349,14 +358,82 @@ test("an expert who has not finished profile setup cannot accept, and nothing is
 test("a student paying for an expert's offer is not checked against the expert's setup", async () => {
   resetCalls();
   const restore = withModels({ chat: studentRequest({ price: 0, createdBy: EXPERT_ID }), paid: false });
+  const previousCapture = captureResult;
+  const previousSave = PaymentHistory.prototype.save;
+  // A $0 offer still owes the platform fee. The student pays that $1; the
+  // expert's unfinished setup must not block them.
+  authorizedResult = {
+    amount: 100,
+    currency: "usd",
+    latest_charge: null,
+    metadata: { bookingType: "groupChat", groupChatId: CHAT_ID, userId: STUDENT_ID },
+  };
+  captureResult = { id: "pi_offer", amount: 100, currency: "usd", status: "succeeded" };
+  PaymentHistory.prototype.save = async function save(this: any) {
+    return this;
+  };
   try {
-    const req: any = { user: { userId: STUDENT_ID, role: "customer" }, body: { groupChatId: CHAT_ID } };
+    const req: any = {
+      user: { userId: STUDENT_ID, role: "customer" },
+      body: { groupChatId: CHAT_ID, payment_intent: "pi_offer" },
+    };
     const res = createRes();
     await groupController.acceptIndividualAppointment(req, res);
 
     assert.equal(res.statusCode, 200);
     assert.equal(activatedStatus(), "active");
   } finally {
+    authorizedResult = false;
+    captureResult = previousCapture;
+    PaymentHistory.prototype.save = previousSave;
+    restore();
+  }
+});
+
+test("a captured wallet payment stores expert net from the advertised price", async () => {
+  resetCalls();
+  const restore = withModels({
+    chat: studentRequest({
+      price: 100,
+      paymentMode: "wallet",
+      paymentDeadline: new Date(Date.now() + 60 * 60 * 1000),
+    }),
+    paid: false,
+  });
+  // Student total is $103. Expert net is 80% of the $100 advertised price.
+  succeededResult = {
+    amount: 10300,
+    currency: "usd",
+    status: "succeeded",
+    latest_charge: { receipt_url: "https://receipt", receipt_number: "R-1" },
+    metadata: {
+      bookingType: "groupChat",
+      groupChatId: CHAT_ID,
+      userId: STUDENT_ID,
+      sessionType: "oneToOne",
+      advertisedCents: "10000",
+      platformFeeCents: "300",
+      taxCents: "0",
+      commissionCents: "2000",
+      expertNetCents: "8000",
+      expertCommissionPercent: "20",
+      studentFeePercent: "3",
+      studentFeeCapDollars: "5",
+      taxPercent: "0",
+      freeSessionPlatformFeeDollars: "1",
+    },
+  };
+  try {
+    const res = await acceptAs(STUDENT_ID, "customer", { payment_intent: "pi_wallet" });
+    const row = calls.appendPaymentHistory?.[0]?.[0];
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(row?.amount, 10300);
+    assert.equal(row?.advertisedCents, 10000);
+    assert.equal(row?.expertNetCents, 8000);
+    assert.equal(row?.platformFeeCents, 300);
+  } finally {
+    succeededResult = false;
     restore();
   }
 });

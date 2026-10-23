@@ -1,7 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { doFilterPaymentHistories } from '../../../../api/api';
+import { doFilterPaymentHistories, getPricingSettings } from '../../../../api/api';
 import PaymentHistoryView from './audit/PaymentHistory';
-import { paymentSummary } from './audit/auditModel';
+import {
+  auditMoneyRole,
+  paymentSummary,
+  DEFAULT_AUDIT_RATES,
+  type AuditCommissionRates,
+} from './audit/auditModel';
 import type { PaymentHistoryRow } from '../payment/paymentHistoryUtils';
 
 const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
@@ -11,6 +16,23 @@ const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
   const [histories, set_histories] = useState<PaymentHistoryRow[]>([]);
   const [allRows, set_allRows] = useState<PaymentHistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [rates, setRates] = useState<AuditCommissionRates>(DEFAULT_AUDIT_RATES);
+
+  useEffect(() => {
+    if (typeof getPricingSettings !== 'function') return;
+    let cancelled = false;
+    (async () => {
+      const settings = await getPricingSettings();
+      if (cancelled || !settings?.seminar || !settings?.oneToOne) return;
+      setRates({
+        seminarCommissionPercent: Number(settings.seminar.expertCommissionPercent) || 20,
+        oneToOneCommissionPercent: Number(settings.oneToOne.expertCommissionPercent) || 20,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filterHistories = useCallback(
     async (pageNum: number) => {
@@ -68,12 +90,16 @@ const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
     void loadSummary();
   }, [filterHistories, loadSummary]);
 
-  const summary = useMemo(() => paymentSummary(allRows.length ? allRows : histories), [allRows, histories]);
+  const summary = useMemo(
+    () => paymentSummary(allRows.length ? allRows : histories, auditMoneyRole(userDetails?.role), rates),
+    [allRows, histories, userDetails?.role, rates],
+  );
 
   return (
     <PaymentHistoryView
       rows={histories}
       summary={summary}
+      rates={rates}
       totalCount={totalCount}
       currentPage={currentPage}
       pageSize={numPerPage}

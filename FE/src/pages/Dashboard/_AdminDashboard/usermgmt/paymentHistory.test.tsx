@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('../../../../api/api', () => ({
   doFilterPaymentHistories: vi.fn(),
+  getPricingSettings: vi.fn(async () => null),
 }));
 
 import { doFilterPaymentHistories } from '../../../../api/api';
@@ -48,10 +49,11 @@ describe('PaymentHistory audit tab', () => {
       totalCount: 2,
     });
 
-    render(<PaymentHistory userDetails={{ email: 'ada@x.com' }} />);
+    render(<PaymentHistory userDetails={{ email: 'ada@x.com', role: 'expert' }} />);
 
     await waitFor(() => expect(screen.getAllByText('Seminar seat').length).toBeGreaterThan(0));
     expect(screen.getAllByText('$100.00').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$80.00').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Paid out').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Refunded').length).toBeGreaterThan(0);
     expect(screen.getAllByText('pi_live_123456789').length).toBeGreaterThan(0);

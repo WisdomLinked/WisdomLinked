@@ -19,6 +19,7 @@ vi.mock('../../api/api', () => ({
   registerForSeminar: vi.fn(),
   requestSeminarSeat: vi.fn(),
   paySeminarSeatRequest: vi.fn(),
+  quoteBookingCharge: vi.fn(async () => null),
 }));
 
 vi.mock('../../api/chatApi', () => ({

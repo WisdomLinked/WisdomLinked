@@ -17,6 +17,7 @@ vi.mock('../../api/api', () => ({
   profileImageFetch: vi.fn(async () => null),
   getMySeatRequests: vi.fn(async () => ({ result: [] })),
   registerForSeminar: vi.fn(),
+  quoteBookingCharge: vi.fn(async () => null),
 }));
 
 
@@ -117,6 +118,13 @@ vi.mock('./StudentBookingCheckout', () => ({
     </div>
 
   ),
+
+  quoteRequestBody: (details: any, priceDollars = 0) => ({
+    groupChatId: details?.groupChatId,
+    expertId: details?.expert ? String(details.expert) : undefined,
+    duration: details?.duration,
+    advertisedCents: Math.max(0, Math.round(Number(priceDollars) * 100)),
+  }),
 
   completeStudentBookingFromStorage: vi.fn(),
 

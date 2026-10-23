@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { HTTP_GENERIC_ERROR, safeHttp500Message } from '../utils/httpUserFacingCopy';
-import { computeBookingPriceCents, extractHourlyRate, assertPaymentMatchesExpected, assertIntentMatchesBooking } from '../utils/bookingPrice';
+import { computeBookingPriceCents, extractHourlyRate, assertPaymentMatchesExpected, assertIntentMatchesBooking, historyPricing, settlementMatchCents, snapshotChargeCents } from '../utils/bookingPrice';
+import { chargeForAdvertised } from '../utils/pricingSettings';
 import { isExpertSetupComplete, EXPERT_SETUP_INCOMPLETE_FOR_EXPERT } from '../utils/expertSetup';
 import { bookingEmailTo } from '../utils/emailPreferences';
 const AppState = require("../models/AppState");
@@ -138,7 +139,23 @@ const appendEvent = async (req, res) => {
                 .send("Sorry, the user you are trying to invite doesn't exist. Please check the email address");
         }
         
-        const expectedCents = computeBookingPriceCents(Number(duration), extractHourlyRate(expertUser.price));
+        assertBookingLeadTime(expertUser, start);
+        assertDurationAllowed(expertUser, duration);
+
+        let eventExists
+        if (eventId) {
+            eventExists = await Event.findById(String(eventId))
+            if (!eventExists) {
+                return res.status(404).send("Sorry, the invitation you are trying to accept doesn't exist")
+            }
+        }
+
+        await assertBookingSlotValid(expertUser, start, end, {
+            excludeEventId: eventExists?._id?.toString(),
+        });
+
+        const advertisedCents = computeBookingPriceCents(Number(duration), extractHourlyRate(expertUser.price));
+        const expectedCents = (await chargeForAdvertised('oneToOne', advertisedCents)).chargeCents;
 
         let paymentIntentSucceeded_test: any = false;
         let paymentIntentSucceeded_live: any = false;
@@ -168,22 +185,11 @@ const appendEvent = async (req, res) => {
                 });
             }
         }
-        const charge = assertPaymentMatchesExpected(expectedCents, payment_intent, paymentIntentSucceeded_test, paymentIntentSucceeded_live);
-
-        assertBookingLeadTime(expertUser, start);
-        assertDurationAllowed(expertUser, duration);
-
-        let eventExists
-        if (eventId) {
-            eventExists = await Event.findById(String(eventId))
-            if (!eventExists) {
-                return res.status(404).send("Sorry, the invitation you are trying to accept doesn't exist")
-            }
-        }
-
-        await assertBookingSlotValid(expertUser, start, end, {
-            excludeEventId: eventExists?._id?.toString(),
-        });
+        const succeededIntent = paymentIntentSucceeded_test || paymentIntentSucceeded_live;
+        const matchCents = succeededIntent
+            ? settlementMatchCents(succeededIntent.amount, expectedCents, advertisedCents, snapshotChargeCents(succeededIntent.metadata))
+            : expectedCents;
+        const charge = assertPaymentMatchesExpected(matchCents, payment_intent, paymentIntentSucceeded_test, paymentIntentSucceeded_live);
 
         console.log('[checkEvent]', eventId, eventExists)
         if (eventExists) {
@@ -214,6 +220,7 @@ const appendEvent = async (req, res) => {
                     customer: customerUser._id.toString(),
                     expert: expertUser._id.toString(),
                     event: eventExists._id.toString(),
+                    ...historyPricing(charge),
                 });
 
                 await sendBookingReceiptAndConfirmation({
@@ -258,13 +265,13 @@ const appendEvent = async (req, res) => {
                 newEvent: eventExists
             });
         } else {
-            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, title, start, duration, expectedCents / 100, true, expertUser.timeZone, charge ? 'paid' : undefined, { studentName: customerUser.username })
+            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, title, start, duration, advertisedCents / 100, true, expertUser.timeZone, charge ? 'paid' : undefined, { studentName: customerUser.username })
             const newEvent = new Event({
                 title: title,
                 start: start,
                 end: end,
                 duration: duration,
-                price: expectedCents / 100,
+                price: advertisedCents / 100,
                 paidBy: charge ? charge.paidBy : undefined,
                 expert: expertUser._id,
                 customer: customerUser._id,
@@ -289,6 +296,7 @@ const appendEvent = async (req, res) => {
                     customer: customerUser._id.toString(),
                     expert: expertUser._id.toString(),
                     event: event._id.toString(),
+                    ...historyPricing(charge),
                 });
 
                 await sendBookingReceiptAndConfirmation({

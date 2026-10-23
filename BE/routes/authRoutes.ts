@@ -46,6 +46,7 @@ const { mapChatUploadMulterError } = require("../middlewares/multerConfig");
 const {
     stripePay,
     createStripePaymentIntent,
+    quoteBookingCharge,
     getStripeMode
 } = require('../controllers/stripe.controller')
 
@@ -94,6 +95,7 @@ router.post("/submit", uploadsGeneral, handleSubmit)
 router.post("/leaveFeedback", requireAuth(false), leaveFeedback)
 router.post("/stripePay", requireAuth(true), sensitiveLimiter, stripePay)
 router.post("/createStripePaymentIntent", requireAuth(true), sensitiveLimiter, createStripePaymentIntent)
+router.post("/quoteBookingCharge", requireAuth(true), sensitiveLimiter, quoteBookingCharge)
 router.post("/getStripeMode", requireAuth(false), sensitiveLimiter, getStripeMode)
 router.get("/healthCheck", healthCheck)
 router.get("/getTimezone",getTimeZone)

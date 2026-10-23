@@ -5,6 +5,8 @@ const groupController = require("../controllers/groupChat.controller");
 const User = require("../models/User");
 const Event = require("../models/Event");
 const GroupChat = require("../models/GroupChat");
+const AppState = require("../models/AppState");
+const PaymentHistory = require("../models/PaymentHistory");
 
 const createRes = () => {
   const res: any = {
@@ -67,6 +69,7 @@ test("createGroupChatByUser rejects blocked booking date", async () => {
   const originalFindById = User.findById;
   const originalEventFind = Event.find;
   const originalGroupFind = GroupChat.find;
+  const originalAppState = AppState.findOne;
 
   try {
     User.findById = async () => ({
@@ -77,6 +80,7 @@ test("createGroupChatByUser rejects blocked booking date", async () => {
     });
     Event.find = () => ({ select: async () => [] });
     GroupChat.find = () => ({ select: async () => [] });
+    AppState.findOne = async () => ({ stripeMode: "test" });
 
     const req: any = {
       user: { userId: "customer-1" },
@@ -92,6 +96,7 @@ test("createGroupChatByUser rejects blocked booking date", async () => {
     User.findById = originalFindById;
     Event.find = originalEventFind;
     GroupChat.find = originalGroupFind;
+    AppState.findOne = originalAppState;
   }
 });
 
@@ -99,6 +104,7 @@ test("createGroupChatByUser rejects slot outside availability", async () => {
   const originalFindById = User.findById;
   const originalEventFind = Event.find;
   const originalGroupFind = GroupChat.find;
+  const originalAppState = AppState.findOne;
 
   try {
     User.findById = async () => ({
@@ -107,6 +113,7 @@ test("createGroupChatByUser rejects slot outside availability", async () => {
     });
     Event.find = () => ({ select: async () => [] });
     GroupChat.find = () => ({ select: async () => [] });
+    AppState.findOne = async () => ({ stripeMode: "test" });
 
     const req: any = {
       user: { userId: "customer-1" },
@@ -122,13 +129,18 @@ test("createGroupChatByUser rejects slot outside availability", async () => {
     User.findById = originalFindById;
     Event.find = originalEventFind;
     GroupChat.find = originalGroupFind;
+    AppState.findOne = originalAppState;
   }
 });
 
 test("createGroupChatByUser rejects a too-short title", async () => {
   const originalFindById = User.findById;
+  const originalHistoryFind = PaymentHistory.find;
+  const originalAppState = AppState.findOne;
   try {
     User.findById = async () => ({ ...expertDoc });
+    PaymentHistory.find = () => ({ select: async () => [] });
+    AppState.findOne = async () => ({ stripeMode: "test" });
 
     const req: any = {
       user: { userId: "customer-1" },
@@ -142,13 +154,19 @@ test("createGroupChatByUser rejects a too-short title", async () => {
     assert.match(String(res.body), /title must be between 10 and 60/i);
   } finally {
     User.findById = originalFindById;
+    PaymentHistory.find = originalHistoryFind;
+    AppState.findOne = originalAppState;
   }
 });
 
 test("createGroupChatByUser rejects a too-long note", async () => {
   const originalFindById = User.findById;
+  const originalHistoryFind = PaymentHistory.find;
+  const originalAppState = AppState.findOne;
   try {
     User.findById = async () => ({ ...expertDoc });
+    PaymentHistory.find = () => ({ select: async () => [] });
+    AppState.findOne = async () => ({ stripeMode: "test" });
 
     const req: any = {
       user: { userId: "customer-1" },
@@ -162,5 +180,7 @@ test("createGroupChatByUser rejects a too-long note", async () => {
     assert.match(String(res.body), /note must be between 50 and 500/i);
   } finally {
     User.findById = originalFindById;
+    PaymentHistory.find = originalHistoryFind;
+    AppState.findOne = originalAppState;
   }
 });

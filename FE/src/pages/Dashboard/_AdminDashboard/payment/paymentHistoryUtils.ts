@@ -1,6 +1,12 @@
 export type PaymentHistoryRow = {
   _id?: string;
   amount?: number;
+  sessionType?: string;
+  advertisedCents?: number;
+  platformFeeCents?: number;
+  taxCents?: number;
+  commissionCents?: number;
+  expertNetCents?: number;
   currency?: string;
   description?: string;
   paymentIntent?: string | null;
