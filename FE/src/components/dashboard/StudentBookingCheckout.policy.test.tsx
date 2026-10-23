@@ -3,10 +3,16 @@ import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 
 import StudentBookingCheckout from './StudentBookingCheckout';
+import { computeSessionCharge, DEFAULT_PRICING_RATES } from '../../utils/bookingPrice';
+
+const quoteBookingCharge = vi.fn(async (body: any) =>
+  computeSessionCharge(Number(body?.advertisedCents) || 0, DEFAULT_PRICING_RATES, 'oneToOne'),
+);
 
 vi.mock('../../api/api', () => ({
   getStripeMode: vi.fn(async () => ({ stripeMode: 'test' })),
   createStripePaymentIntent: vi.fn(),
+  quoteBookingCharge: (...args: any[]) => quoteBookingCharge(...args),
 }));
 
 vi.mock('../../actions/appActions', () => ({
@@ -52,7 +58,7 @@ describe('StudentBookingCheckout cancellation notice', () => {
       },
     });
 
-    const payButton = await screen.findByRole('button', { name: /pay \$40/i });
+    const payButton = await screen.findByRole('button', { name: /pay \$41\.20/i });
     expect(screen.getByText(/cannot be cancelled/i)).toBeTruthy();
     expect(payButton).toBeDisabled();
 
@@ -64,7 +70,7 @@ describe('StudentBookingCheckout cancellation notice', () => {
   it('leaves payment open when no notice is configured', async () => {
     renderCheckout();
 
-    const payButton = await screen.findByRole('button', { name: /pay \$40/i });
+    const payButton = await screen.findByRole('button', { name: /pay \$41\.20/i });
     expect(screen.queryByRole('checkbox')).toBeNull();
     expect(payButton).not.toBeDisabled();
   });

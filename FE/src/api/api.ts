@@ -878,6 +878,33 @@ export const stopImpersonation = async () => {
     }
 };
 
+export const quoteBookingCharge = async (data: any) => {
+    try {
+        const res = await api.post("auth/quoteBookingCharge", data);
+        return res.data;
+    } catch (err: any) {
+        return handleAuthApiFailure(err);
+    }
+}
+
+export const getPricingSettings = async () => {
+    try {
+        const res = await api.get("admin/pricingSettings");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const savePricingSettings = async (pricing: any) => {
+    try {
+        const res = await api.post("admin/pricingSettings", pricing);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
 export const createStripePaymentIntent = async (data: any) => {
     try {
         const res = await api.post("auth/createStripePaymentIntent", data);

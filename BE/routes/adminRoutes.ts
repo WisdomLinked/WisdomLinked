@@ -9,6 +9,8 @@ const {
     setStripeMode,
     setSeminarApprovalDeadline,
     setPaymentWindow,
+    getPricingSettings,
+    setPricingSettings,
     sendPaymentLinkToUser,
     processRefund,
     sendAdHocPaymentLink
@@ -80,6 +82,8 @@ const {
 } = require("../controllers/terms.controller");
 
 router.post("/setStripeMode", adminAuth, setStripeMode)
+router.get("/pricingSettings", adminAuth, getPricingSettings)
+router.post("/pricingSettings", adminAuth, setPricingSettings)
 router.post("/setSeminarApprovalDeadline", adminAuth, setSeminarApprovalDeadline)
 router.post("/setPaymentWindow", adminAuth, setPaymentWindow)
 router.post("/sendPaymentLinkToUser", adminAuth, sendPaymentLinkToUser)

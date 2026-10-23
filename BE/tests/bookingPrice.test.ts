@@ -10,6 +10,14 @@ import {
   assertIntentMatchesBooking,
   voluntaryCancellationRefundCents,
   capturedAmountCents,
+  settlementMatchCents,
+  computeSessionCharge,
+  validatePricingRates,
+  validatePricingSettings,
+  cancellationRefundCents,
+  defaultCancellationRefund,
+  normalizePricingRates,
+  DEFAULT_PRICING_RATES,
 } from "../utils/bookingPrice";
 
 describe("computeBookingPriceCents", () => {
@@ -312,5 +320,134 @@ describe("balanceTransactionId", () => {
     assert.equal(balanceTransactionId({ balance_transaction: null }), null);
     assert.equal(balanceTransactionId({}), null);
     assert.equal(balanceTransactionId(null), null);
+  });
+});
+
+const defaults = DEFAULT_PRICING_RATES;
+
+describe("computeSessionCharge", () => {
+  // Math.round, half up. These cases are the contract for Stripe and wallet.
+  it("charges 3% on $100, capped later, with a 20% expert commission", () => {
+    const quote = computeSessionCharge(10000, defaults, "oneToOne");
+    assert.equal(quote.platformFeeCents, 300);
+    assert.equal(quote.taxCents, 0);
+    assert.equal(quote.chargeCents, 10300);
+    assert.equal(quote.commissionCents, 2000);
+    assert.equal(quote.expertNetCents, 8000);
+  });
+
+  it("caps the student fee at $5 on a $200 session", () => {
+    const quote = computeSessionCharge(20000, defaults, "seminar");
+    assert.equal(quote.platformFeeCents, 500);
+    assert.equal(quote.chargeCents, 20500);
+    assert.equal(quote.expertNetCents, 16000);
+  });
+
+  it("taxes the advertised price and the platform fee", () => {
+    const quote = computeSessionCharge(10000, { ...defaults, taxPercent: 8 }, "oneToOne");
+    assert.equal(quote.taxCents, 824);
+    assert.equal(quote.chargeCents, 11124);
+    assert.equal(quote.expertNetCents, 8000);
+  });
+
+  it("charges the flat free-session fee and no commission", () => {
+    const quote = computeSessionCharge(0, defaults, "seminar");
+    assert.equal(quote.platformFeeCents, 100);
+    assert.equal(quote.taxCents, 0);
+    assert.equal(quote.chargeCents, 100);
+    assert.equal(quote.expertNetCents, 0);
+    assert.equal(quote.commissionCents, 0);
+  });
+
+  it("taxes the free-session fee", () => {
+    const quote = computeSessionCharge(0, { ...defaults, taxPercent: 8 }, "seminar");
+    assert.equal(quote.taxCents, 8);
+    assert.equal(quote.chargeCents, 108);
+    assert.equal(quote.expertNetCents, 0);
+  });
+
+  it("is truly free when the free-session fee is 0", () => {
+    const quote = computeSessionCharge(0, { ...defaults, freeSessionPlatformFeeDollars: 0, taxPercent: 8 }, "oneToOne");
+    assert.equal(quote.chargeCents, 0);
+    assert.equal(quote.taxCents, 0);
+    assert.equal(quote.platformFeeCents, 0);
+  });
+
+  it("does not let seminar rates change a 1:1 charge", () => {
+    const seminarRates = { ...defaults, studentFeePercent: 10, studentFeeCapDollars: 20, expertCommissionPercent: 40 };
+    const seminar = computeSessionCharge(10000, seminarRates, "seminar");
+    const oneToOne = computeSessionCharge(10000, defaults, "oneToOne");
+    assert.equal(seminar.chargeCents, 11000);
+    assert.equal(seminar.expertNetCents, 6000);
+    assert.equal(oneToOne.chargeCents, 10300);
+    assert.equal(oneToOne.expertNetCents, 8000);
+  });
+});
+
+describe("settlementMatchCents", () => {
+  it("captures an authorization from a previous fee-inclusive total", () => {
+    // Advertised $100. Yesterday's rates charged $111.24. Today's total is $103.00.
+    assert.equal(settlementMatchCents(11124, 10300, 10000, 11124), 11124);
+  });
+
+  it("still accepts today's total and a legacy hold at the advertised price", () => {
+    assert.equal(settlementMatchCents(10300, 10300, 10000, 10300), 10300);
+    assert.equal(settlementMatchCents(10000, 10300, 10000), 10000);
+  });
+
+  it("rejects an amount that is not the authorization on the intent", () => {
+    // $1 is neither today's total, the advertised price, nor the stored authorization.
+    assert.equal(settlementMatchCents(100, 10300, 10000, 11124), 10300);
+    assert.equal(settlementMatchCents(100, 10300, 10000), 10300);
+  });
+});
+
+describe("pricing settings validation", () => {
+  it("rejects negatives and percents outside 0 to 100", () => {
+    assert.equal(validatePricingRates({ ...defaults, studentFeePercent: -1 }).ok, false);
+    assert.equal(validatePricingRates({ ...defaults, taxPercent: 101 }).ok, false);
+    assert.equal(validatePricingRates({ ...defaults, freeSessionPlatformFeeDollars: -0.01 }).ok, false);
+    assert.equal(validatePricingRates({ ...defaults, expertCommissionPercent: 0 }).ok, true);
+    assert.equal(validatePricingRates({ ...defaults, taxPercent: 100 }).ok, true);
+  });
+
+  it("requires both groups and reports which one failed", () => {
+    const bad = validatePricingSettings({ seminar: defaults, oneToOne: { ...defaults, studentFeeCapDollars: -1 } });
+    assert.equal(bad.ok, false);
+    if (!bad.ok) assert.match(bad.error, /1:1/);
+    const good = validatePricingSettings({ seminar: defaults, oneToOne: defaults });
+    assert.equal(good.ok, true);
+    if (good.ok) {
+      assert.equal(good.seminar.cancellationRefund, "processing_fee");
+      assert.equal(good.oneToOne.cancellationRefund, "full");
+    }
+    assert.equal(validatePricingRates({ ...defaults, cancellationRefund: "nope" }).ok, false);
+  });
+});
+
+describe("cancellation refund rules", () => {
+  const paid = { amount: 10300, advertisedCents: 10000, platformFeeCents: 300, taxCents: 0 };
+
+  it("refunds a $103 charge by the selected rule", () => {
+    assert.equal(cancellationRefundCents("full", paid), 10300);
+    assert.equal(cancellationRefundCents("keep_platform_fee", paid), 10000);
+    assert.equal(cancellationRefundCents("processing_fee", paid), voluntaryCancellationRefundCents(10300));
+  });
+
+  it("keeps the platform fee on a free-session charge and refunds it in full otherwise", () => {
+    const free = { amount: 100, advertisedCents: 0, platformFeeCents: 100, taxCents: 0 };
+    assert.equal(cancellationRefundCents("keep_platform_fee", free), 0);
+    assert.equal(cancellationRefundCents("full", free), 100);
+  });
+
+  it("treats an old row with only an amount as fee 0 and tax 0", () => {
+    assert.equal(cancellationRefundCents("keep_platform_fee", { amount: 10000 }), 10000);
+  });
+
+  it("defaults seminars to the card fee and 1:1 sessions to a full refund", () => {
+    assert.equal(defaultCancellationRefund("seminar"), "processing_fee");
+    assert.equal(defaultCancellationRefund("oneToOne"), "full");
+    assert.equal(normalizePricingRates({}, "seminar").cancellationRefund, "processing_fee");
+    assert.equal(normalizePricingRates({}, "oneToOne").cancellationRefund, "full");
   });
 });

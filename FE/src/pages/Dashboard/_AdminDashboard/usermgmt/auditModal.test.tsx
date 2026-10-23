@@ -7,6 +7,7 @@ vi.mock('../../../../api/api', () => ({
   doFilterPaymentHistories: vi.fn(),
   doGetDirectChatHistory: vi.fn(),
   doGetGroupChatHistory: vi.fn(),
+  getPricingSettings: vi.fn(async () => null),
 }));
 
 import {

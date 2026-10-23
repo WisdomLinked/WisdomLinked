@@ -4,6 +4,7 @@ import Pagination from '../../../../../components/Pagination';
 import EmptyState from './EmptyState';
 import { AUDIT_PILL } from './auditUi';
 import {
+  explainPaymentRow,
   formatUsdFromCents,
   paidByLabel,
   parseDate,
@@ -11,6 +12,8 @@ import {
   paymentDisplayStatus,
   paymentToneClass,
   paymentTransactionId,
+  DEFAULT_AUDIT_RATES,
+  type AuditCommissionRates,
   type PaymentSummary,
 } from './auditModel';
 import type { PaymentHistoryRow } from '../../payment/paymentHistoryUtils';
@@ -29,8 +32,9 @@ function StatusPill({ row }: { row: PaymentHistoryRow }) {
   return <span className={`${AUDIT_PILL} ${paymentToneClass(status.tone)}`}>{status.label}</span>;
 }
 
-function PaymentCard({ row }: { row: PaymentHistoryRow }) {
+function PaymentCard({ row, expert, rates }: { row: PaymentHistoryRow; expert: boolean; rates: AuditCommissionRates }) {
   const when = parseDate(row.createdAt);
+  const money = explainPaymentRow(row, rates);
   return (
     <article className="space-y-2 rounded-xl border border-audit-line bg-audit-surface p-4">
       <div className="flex items-start justify-between gap-3">
@@ -49,14 +53,37 @@ function PaymentCard({ row }: { row: PaymentHistoryRow }) {
           <dt className="text-xs uppercase tracking-wider text-audit-muted">Paid by</dt>
           <dd className="truncate text-audit-ink">{paidByLabel(row)}</dd>
         </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-audit-muted">Amount</dt>
-          <dd className="tabular-nums text-audit-ink">{formatUsdFromCents(row.amount)}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wider text-audit-muted">Fee</dt>
-          <dd className="tabular-nums text-audit-ink">—</dd>
-        </div>
+        {expert ? (
+          <>
+            <div>
+              <dt className="text-xs uppercase tracking-wider text-audit-muted">Amount</dt>
+              <dd className="tabular-nums text-audit-ink">{formatUsdFromCents(money.advertisedCents)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wider text-audit-muted">Fee</dt>
+              <dd className="tabular-nums text-audit-ink">{formatUsdFromCents(money.commissionCents)}</dd>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <dt className="text-xs uppercase tracking-wider text-audit-muted">Price</dt>
+              <dd className="tabular-nums text-audit-ink">{formatUsdFromCents(money.advertisedCents)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wider text-audit-muted">Platform fee</dt>
+              <dd className="tabular-nums text-audit-ink">{formatUsdFromCents(money.platformFeeCents)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wider text-audit-muted">Tax</dt>
+              <dd className="tabular-nums text-audit-ink">{formatUsdFromCents(money.taxCents)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wider text-audit-muted">Amount</dt>
+              <dd className="tabular-nums text-audit-ink">{formatUsdFromCents(money.paidCents)}</dd>
+            </div>
+          </>
+        )}
       </dl>
     </article>
   );
@@ -65,6 +92,7 @@ function PaymentCard({ row }: { row: PaymentHistoryRow }) {
 export default function PaymentHistory({
   rows,
   summary,
+  rates = DEFAULT_AUDIT_RATES,
   totalCount,
   currentPage,
   pageSize,
@@ -74,6 +102,7 @@ export default function PaymentHistory({
 }: {
   rows: PaymentHistoryRow[];
   summary: PaymentSummary;
+  rates?: AuditCommissionRates;
   totalCount: number;
   currentPage: number;
   pageSize: number;
@@ -81,13 +110,24 @@ export default function PaymentHistory({
   onPageSize: (size: number) => void;
   loading: boolean;
 }) {
+  const expert = summary.role === 'expert';
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pt-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile label="Gross earnings" value={formatUsdFromCents(summary.gross)} />
-        <Tile label="Platform fees" value={formatUsdFromCents(summary.fees)} />
-        <Tile label="Paid out" value={formatUsdFromCents(summary.paidOut)} />
-        <Tile label="Pending payout" value={formatUsdFromCents(summary.pending)} />
+      <div className={`grid grid-cols-2 gap-3 ${expert ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+        {expert ? (
+          <>
+            <Tile label="Gross earnings" value={formatUsdFromCents(summary.gross)} />
+            <Tile label="Platform fees" value={formatUsdFromCents(summary.fees)} />
+            <Tile label="Paid out" value={formatUsdFromCents(summary.paidOut)} />
+            <Tile label="Pending payout" value={formatUsdFromCents(summary.pending)} />
+          </>
+        ) : (
+          <>
+            <Tile label="Price collected" value={formatUsdFromCents(summary.priceCollected)} />
+            <Tile label="Platform fees" value={formatUsdFromCents(summary.fees)} />
+            <Tile label="Tax" value={formatUsdFromCents(summary.tax)} />
+          </>
+        )}
       </div>
 
       {loading && rows.length === 0 ? (
@@ -103,14 +143,26 @@ export default function PaymentHistory({
                   <th className="px-3 py-2 font-medium">Date</th>
                   <th className="px-3 py-2 font-medium">Description</th>
                   <th className="px-3 py-2 font-medium">Paid by</th>
-                  <th className="px-3 py-2 font-medium">Amount</th>
-                  <th className="px-3 py-2 font-medium">Fee</th>
+                  {expert ? (
+                    <>
+                      <th className="px-3 py-2 font-medium">Amount</th>
+                      <th className="px-3 py-2 font-medium">Fee</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-3 py-2 font-medium">Price</th>
+                      <th className="px-3 py-2 font-medium">Platform fee</th>
+                      <th className="px-3 py-2 font-medium">Tax</th>
+                      <th className="px-3 py-2 font-medium">Amount</th>
+                    </>
+                  )}
                   <th className="px-3 py-2 font-medium">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map(row => {
                   const when = parseDate(row.createdAt);
+                  const money = explainPaymentRow(row, rates);
                   return (
                     <tr key={row._id || paymentTransactionId(row)} className="border-b border-audit-line">
                       <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-ink">
@@ -121,10 +173,31 @@ export default function PaymentHistory({
                         <p className="truncate text-xs text-audit-muted">{paymentTransactionId(row) || '—'}</p>
                       </td>
                       <td className="max-w-[160px] truncate px-3 py-3 text-audit-ink">{paidByLabel(row)}</td>
-                      <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-ink">
-                        {formatUsdFromCents(row.amount)}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-muted">—</td>
+                      {expert ? (
+                        <>
+                          <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-ink">
+                            {formatUsdFromCents(money.advertisedCents)}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-ink">
+                            {formatUsdFromCents(money.commissionCents)}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-ink">
+                            {formatUsdFromCents(money.advertisedCents)}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-ink">
+                            {formatUsdFromCents(money.platformFeeCents)}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-ink">
+                            {formatUsdFromCents(money.taxCents)}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-ink">
+                            {formatUsdFromCents(money.paidCents)}
+                          </td>
+                        </>
+                      )}
                       <td className="px-3 py-3">
                         <StatusPill row={row} />
                       </td>
@@ -136,7 +209,7 @@ export default function PaymentHistory({
           </div>
           <div className="space-y-3 md:hidden">
             {rows.map(row => (
-              <PaymentCard key={row._id || paymentTransactionId(row)} row={row} />
+              <PaymentCard key={row._id || paymentTransactionId(row)} row={row} expert={expert} rates={rates} />
             ))}
           </div>
           <Pagination

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { doGetFullUserDataByEmail, doFilterPaymentHistories } from '../../../../api/api';
+import { doGetFullUserDataByEmail, doFilterPaymentHistories, getPricingSettings } from '../../../../api/api';
 import ChatHistory from './chatHistory';
 import PaymentHistory from './paymentHistory';
 import AuditHeader from './audit/AuditHeader';
@@ -10,6 +10,9 @@ import {
   buildExportPayload,
   lastActiveFromAccount,
   paymentSummary,
+  auditMoneyRole,
+  DEFAULT_AUDIT_RATES,
+  type AuditCommissionRates,
   type AuditTab,
 } from './audit/auditModel';
 import type { PaymentHistoryRow } from '../payment/paymentHistoryUtils';
@@ -26,6 +29,23 @@ const AuditModal = ({
   const [selectedTab, set_selectedTab] = useState<AuditTab>('chat');
   const [paymentRows, setPaymentRows] = useState<PaymentHistoryRow[]>([]);
   const [paymentCount, setPaymentCount] = useState(0);
+  const [rates, setRates] = useState<AuditCommissionRates>(DEFAULT_AUDIT_RATES);
+
+  useEffect(() => {
+    if (typeof getPricingSettings !== 'function') return;
+    let cancelled = false;
+    (async () => {
+      const settings = await getPricingSettings();
+      if (cancelled || !settings?.seminar || !settings?.oneToOne) return;
+      setRates({
+        seminarCommissionPercent: Number(settings.seminar.expertCommissionPercent) || 20,
+        oneToOneCommissionPercent: Number(settings.oneToOne.expertCommissionPercent) || 20,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const getFullUserData = useCallback(async (email: string) => {
     const res = await doGetFullUserDataByEmail(email);
@@ -85,7 +105,10 @@ const AuditModal = ({
   }, [closeModal]);
 
   const conversations = useMemo(() => buildConversations(userDetails), [userDetails]);
-  const paySummary = useMemo(() => paymentSummary(paymentRows), [paymentRows]);
+  const paySummary = useMemo(
+    () => paymentSummary(paymentRows, auditMoneyRole(userDetails?.role || selectedUser?.role), rates),
+    [paymentRows, userDetails?.role, selectedUser?.role, rates],
+  );
   const lastActive = lastActiveFromAccount(userDetails, conversations.all);
 
   const onExport = () => {
@@ -119,6 +142,7 @@ const AuditModal = ({
             conversationCount={conversations.group.length + conversations.privateChats.length}
             seminarCount={conversations.seminars.length}
             netEarningsCents={paySummary.net}
+            earningsLabel={paySummary.role === 'expert' ? 'Expert net' : 'Paid'}
             lastActive={lastActive}
           />
           <AuditTabs

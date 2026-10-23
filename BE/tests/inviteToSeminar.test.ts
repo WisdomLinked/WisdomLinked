@@ -145,18 +145,27 @@ test("an invitation is marked host-origin so the student is not told they asked 
     await invite({ groupChatId: "seminar-1", followerIds: ["student-1"] });
     assert.equal(created[0].origin, "host");
     assert.equal(created[0].status, "awaiting_payment");
-    assert.equal(created[0].amount, 4900, "the price is snapshotted in cents");
+    assert.equal(created[0].amount, 5047, "the price is snapshotted in cents");
     assert.ok(created[0].paymentDeadline, "a paid invitation carries a deadline");
   });
   SeminarSeatRequest.create = originalCreate;
 });
 
-test("a free seminar enrols the follower instead of asking them to accept", async () => {
+test("a $0 seminar still asks the student to pay the platform fee", async () => {
+  const created: any[] = [];
+  const originalCreate = SeminarSeatRequest.create;
   await withStubs(seminar({ price: 0 }), async () => {
+    SeminarSeatRequest.create = async (doc: any) => {
+      created.push(doc);
+      return { ...doc, _id: "req-free" };
+    };
     const res = await invite({ groupChatId: "seminar-1", followerIds: ["student-1"] });
-    assert.equal(res.body.free, true);
-    assert.equal(res.body.results[0].outcome, "enrolled");
+    assert.equal(res.body.free, false);
+    assert.equal(res.body.results[0].outcome, "invited");
+    assert.equal(created[0].amount, 100, "the student owes the $1 platform fee");
+    assert.equal(created[0].status, "awaiting_payment");
   });
+  SeminarSeatRequest.create = originalCreate;
 });
 
 test("only the host of the seminar may invite to it", async () => {
@@ -275,14 +284,12 @@ test("a paid seminar that already started can no longer be shared", async () => 
   });
 });
 
-test("a free seminar can still add people after it has started", async () => {
+test("a $0 seminar that has started cannot add a student without the platform fee", async () => {
   await withStubs(
     seminar({ price: 0, start: new Date(Date.now() - 10 * 60_000), duration: 90 }),
     async () => {
       const res = await invite({ groupChatId: "seminar-1", followerIds: ["student-1"] });
-      assert.equal(res.statusCode, 200);
-      assert.equal(res.body.free, true);
-      assert.equal(res.body.results[0].outcome, "enrolled");
+      assert.equal(res.statusCode, 409);
     },
   );
 });

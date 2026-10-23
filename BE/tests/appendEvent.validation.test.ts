@@ -5,6 +5,7 @@ const eventController = require("../controllers/event.controller");
 const User = require("../models/User");
 const Event = require("../models/Event");
 const GroupChat = require("../models/GroupChat");
+const AppState = require("../models/AppState");
 
 const createRes = () => {
   const res: any = {
@@ -36,6 +37,7 @@ test("appendEvent rejects outside expert availability", async () => {
   const originalFindOne = User.findOne;
   const originalEventFind = Event.find;
   const originalGroupFind = GroupChat.find;
+  const originalAppState = AppState.findOne;
 
   const start = futureUtcDate(14, 9);
   const end = new Date(start.getTime() + 60 * 60 * 1000);
@@ -58,6 +60,7 @@ test("appendEvent rejects outside expert availability", async () => {
     };
     Event.find = () => ({ select: async () => [] });
     GroupChat.find = () => ({ select: async () => [] });
+    AppState.findOne = async () => ({ stripeMode: "test" });
 
     const req: any = {
       body: {
@@ -82,5 +85,6 @@ test("appendEvent rejects outside expert availability", async () => {
     User.findOne = originalFindOne;
     Event.find = originalEventFind;
     GroupChat.find = originalGroupFind;
+    AppState.findOne = originalAppState;
   }
 });

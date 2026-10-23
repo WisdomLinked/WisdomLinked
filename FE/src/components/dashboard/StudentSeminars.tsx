@@ -3,7 +3,7 @@ import { useDispatch } from 'react-redux';
 import { Search, CalendarDays, Clock, MapPin, ArrowLeft, User, Users, Repeat, Check, MessageSquare } from 'lucide-react';
 import FilterDropdown, { type FilterOption } from '../ui/FilterDropdown';
 import { useAppSelector } from '../../store';
-import { registerForSeminar, requestSeminarSeat, paySeminarSeatRequest, getMySeatRequests, doFilterSeminars, profileImageFetch, doGetKeywordsAndServices, getExpertById } from '../../api/api';
+import { registerForSeminar, requestSeminarSeat, paySeminarSeatRequest, getMySeatRequests, doFilterSeminars, profileImageFetch, doGetKeywordsAndServices, getExpertById, quoteBookingCharge } from '../../api/api';
 import {
   emptySeatRequestIndex,
   indexSeatRequests,
@@ -25,7 +25,8 @@ import { SetLoadingStatus } from '../../actions/appActions';
 import { notify } from '../../utils/notify';
 import { paymentBannerMessage, stripeTransactionId } from '../../utils/paymentBanner';
 import { updateMe } from '../../actions/authActions';
-import StudentBookingCheckout from './StudentBookingCheckout';
+import StudentBookingCheckout, { quoteRequestBody } from './StudentBookingCheckout';
+import { formatDollarsFromCents } from '../../utils/bookingPrice';
 import { usePeerProfileModal } from '../../hooks/usePeerProfileModal';
 import seminarFallbackImg from '../../assets/images/dashboard_img1.png';
 import { recurrenceLabel } from '../../utils/recurrenceLabel';
@@ -182,6 +183,8 @@ export default function StudentSeminars({
   );
   const [seatPaying, setSeatPaying] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [reviewQuote, setReviewQuote] = useState<{ chargeCents: number } | null>(null);
+  const [reviewQuoteFailed, setReviewQuoteFailed] = useState(false);
   const dispatch = useDispatch();
   const { openPeerProfile, peerProfileModal } = usePeerProfileModal(userDetails?.role);
 
@@ -209,9 +212,39 @@ export default function StudentSeminars({
     }
   }, []);
 
-  // Register the student for the seminar once Stripe confirms (or immediately
-  // for free seminars, where the checkout calls back with '0'). Enrollment is
-  // immediate and covers the whole recurring series. Full seminars use joinWaitlist.
+  // The review total is the server charge. A $0 advertised price can still owe
+  // the free-session platform fee, so it must not be shown or enrolled as $0.
+  useEffect(() => {
+    if (checkout !== 'review' || !selectedSeminar) {
+      setReviewQuote(null);
+      setReviewQuoteFailed(false);
+      return;
+    }
+    let cancelled = false;
+    const seminar = selectedSeminar;
+    setReviewQuote(null);
+    setReviewQuoteFailed(false);
+    (async () => {
+      const response = await quoteBookingCharge(
+        quoteRequestBody(
+          { groupChatId: seminar.id, price: seminar.price, name: seminar.title },
+          seminar.price,
+        ),
+      );
+      if (cancelled) return;
+      if (!response || typeof response.chargeCents !== 'number') {
+        setReviewQuoteFailed(true);
+        return;
+      }
+      setReviewQuote({ chargeCents: Number(response.chargeCents) || 0 });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [checkout, selectedSeminar]);
+
+  // Register the student once checkout confirms. A quote of 0 is the only case
+  // that enrolls with payment intent 0. Full seminars use joinWaitlist.
   const joinSeminar = async (paymentIntentId: string) => {
     if (!selectedSeminar) return;
     SetLoadingStatus(true);
@@ -966,21 +999,38 @@ export default function StudentSeminars({
                   </div>
                   <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">
                     <dt className="text-[#7A7A72]">Total</dt>
-                    <dd className="font-serif text-lg font-semibold">${s.price.toFixed(2)}</dd>
+                    <dd className="font-serif text-lg font-semibold">
+                      {reviewQuote
+                        ? formatDollarsFromCents(reviewQuote.chargeCents)
+                        : s.price > 0
+                          ? `$${s.price.toFixed(2)}`
+                          : '…'}
+                    </dd>
                   </div>
                 </dl>
+                {reviewQuoteFailed ? (
+                  <p className="text-xs font-medium text-rose-700">
+                    Could not load the amount due. Please try again.
+                  </p>
+                ) : null}
                 <button
                   type="button"
+                  disabled={!s.price && !reviewQuote}
                   onClick={() => {
-                    if (s.price > 0) {
+                    const due = reviewQuote?.chargeCents ?? (s.price > 0 ? 1 : 0);
+                    if (due > 0) {
                       setCheckout('pay');
                       return;
                     }
-                    void joinSeminar('0');
+                    if (reviewQuote && reviewQuote.chargeCents <= 0) {
+                      void joinSeminar('0');
+                    }
                   }}
-                  className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
+                  className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635] disabled:opacity-60"
                 >
-                  {s.price > 0 ? 'Continue to payment' : 'Confirm booking'}
+                  {(reviewQuote ? reviewQuote.chargeCents > 0 : s.price > 0)
+                    ? 'Continue to payment'
+                    : 'Confirm booking'}
                 </button>
               </div>
             </div>

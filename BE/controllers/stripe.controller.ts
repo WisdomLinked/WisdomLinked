@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
 import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
-import { expectedBookingIntentCents, extractHourlyRate, balanceTransactionId } from '../utils/bookingPrice';
+import { expectedBookingIntentCents, extractHourlyRate, balanceTransactionId, dollarsToCents, pricingMetadata, type ChargeBreakdown } from '../utils/bookingPrice';
+import { chargeForAdvertised, loadPricingSettings, savePricingSettings } from '../utils/pricingSettings';
 import { seminarIsFull, firstFullFutureOccurrence, seatRequestUnavailableMessage } from '../utils/seminarCapacity';
 const SeminarSeatRequest = require("../models/SeminarSeatRequest");
 import { checkoutPaymentMetadata, retryLinkExpiry } from '../utils/retryPaymentLink';
@@ -63,6 +64,7 @@ const createStripePaymentIntent = async (req, res) => {
         let wallet = paymentMode === 'wallet';
 
         let expectedCents: number;
+        let pricingMeta: Record<string, string> = {};
         let metadata: Record<string, string>;
         let manualCapture = false;
         let requiresApproval = false;
@@ -88,7 +90,16 @@ const createStripePaymentIntent = async (req, res) => {
                 paymentMode = pinnedSettlementMode(request.paymentMode);
                 wallet = paymentMode === 'wallet';
             }
-            expectedCents = Number(request.amount) || 0;
+            const seatSeminar = await GroupChat.findById(request.groupChat);
+            const seatQuote = await chargeForAdvertised('seminar', dollarsToCents(seatSeminar?.price));
+            expectedCents = seatQuote.chargeCents;
+            pricingMeta = pricingMetadata(seatQuote);
+            // The pay confirmation reads this stored total, so it has to be the quote
+            // the new PaymentIntent is created for.
+            if (expectedCents > 0 && Number(request.amount) !== expectedCents) {
+                request.amount = expectedCents;
+                await request.save();
+            }
             metadata = {
                 bookingType: 'groupChat',
                 groupChatId: String(request.groupChat),
@@ -100,7 +111,12 @@ const createStripePaymentIntent = async (req, res) => {
             if (!groupChat) {
                 return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
             }
-            expectedCents = expectedBookingIntentCents({ kind: 'groupChat', priceDollars: groupChat.price });
+            const seminarQuote = await chargeForAdvertised(
+                groupChat.type === 'seminar' ? 'seminar' : 'oneToOne',
+                expectedBookingIntentCents({ kind: 'groupChat', priceDollars: groupChat.price }),
+            );
+            expectedCents = seminarQuote.chargeCents;
+            pricingMeta = pricingMetadata(seminarQuote);
             metadata = { bookingType: 'groupChat', groupChatId: String(groupChat._id), userId: payerId };
 
             if (groupChat.type !== 'seminar') {
@@ -210,12 +226,21 @@ const createStripePaymentIntent = async (req, res) => {
             if (wallet) {
                 return res.status(409).send({ error: WALLET_NEEDS_APPROVAL_MESSAGE });
             }
-            expectedCents = expectedBookingIntentCents({ kind: 'oneToOne', durationMinutes: Number(duration), hourlyRateDollars: extractHourlyRate(expertUser.price) });
+            const oneToOneQuote = await chargeForAdvertised(
+                'oneToOne',
+                expectedBookingIntentCents({ kind: 'oneToOne', durationMinutes: Number(duration), hourlyRateDollars: extractHourlyRate(expertUser.price) }),
+            );
+            expectedCents = oneToOneQuote.chargeCents;
+            pricingMeta = pricingMetadata(oneToOneQuote);
             metadata = { bookingType: 'oneToOne', expertId: String(expertUser._id), duration: String(duration), userId: payerId };
             manualCapture = true;
         }
 
         if (!(expectedCents > 0)) {
+            return res.status(400).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+        }
+        const clientAmount = req.body?.amount ?? req.body?.chargeCents;
+        if (clientAmount != null && clientAmount !== '' && Math.round(Number(clientAmount)) !== expectedCents) {
             return res.status(400).send(BOOKING_PAYMENT_AMOUNT_INVALID);
         }
 
@@ -230,7 +255,7 @@ const createStripePaymentIntent = async (req, res) => {
                 }
                 : { payment_method_types: CARD_PAYMENT_METHOD_TYPES }),
             ...(manualCapture ? { capture_method: 'manual' } : {}),
-            metadata: { ...metadata, paymentMode },
+            metadata: { ...metadata, paymentMode, ...pricingMeta },
         });
         res.send({
             client_secret: paymentIntent.client_secret,
@@ -1420,9 +1445,83 @@ const sendAdHocPaymentLink = async (req, res) => {
     }
 };
 
+const resolveCheckoutBreakdown = async (body: any): Promise<ChargeBreakdown | null> => {
+    const { groupChatId, expertId, duration, seatRequestId } = body || {};
+    if (seatRequestId) {
+        const request = await SeminarSeatRequest.findById(String(seatRequestId));
+        if (!request) return null;
+        const groupChat = await GroupChat.findById(request.groupChat);
+        if (!groupChat) return null;
+        return chargeForAdvertised('seminar', dollarsToCents(groupChat.price));
+    }
+    if (groupChatId) {
+        const groupChat = await GroupChat.findById(String(groupChatId));
+        if (!groupChat) return null;
+        const sessionType = groupChat.type === 'seminar' ? 'seminar' : 'oneToOne';
+        return chargeForAdvertised(sessionType, dollarsToCents(groupChat.price));
+    }
+    if (expertId) {
+        const expertUser = await User.findById(String(expertId));
+        if (!expertUser) return null;
+        const advertised = expectedBookingIntentCents({
+            kind: 'oneToOne',
+            durationMinutes: Number(duration),
+            hourlyRateDollars: extractHourlyRate(expertUser.price),
+        });
+        return chargeForAdvertised('oneToOne', advertised);
+    }
+    return null;
+};
+
+const quoteBookingCharge = async (req, res) => {
+    try {
+        const breakdown = await resolveCheckoutBreakdown(req.body);
+        if (!breakdown) return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+        res.send({
+            sessionType: breakdown.sessionType,
+            advertisedCents: breakdown.advertisedCents,
+            platformFeeCents: breakdown.platformFeeCents,
+            taxCents: breakdown.taxCents,
+            chargeCents: breakdown.chargeCents,
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const getPricingSettings = async (req, res) => {
+    try {
+        res.send(await loadPricingSettings());
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const setPricingSettings = async (req, res) => {
+    try {
+        const settings = await savePricingSettings(req.body);
+        logAdminAction({
+            actor: req.user,
+            action: 'set_pricing_settings',
+            targetType: 'appState',
+            meta: settings as unknown as Record<string, unknown>,
+        });
+        res.send({ result: 'SUCCESS', ...settings });
+    } catch (err: any) {
+        if (err?.status === 400) return res.status(400).send({ error: err.message });
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
 module.exports = {
     stripePay,
     createStripePaymentIntent,
+    quoteBookingCharge,
+    getPricingSettings,
+    setPricingSettings,
     getStripeMode,
     checkPaymentIntentSucceeded,
     checkPaymentIntentAuthorized,
