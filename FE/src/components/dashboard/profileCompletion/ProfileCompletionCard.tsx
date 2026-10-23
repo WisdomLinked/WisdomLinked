@@ -17,6 +17,8 @@ export type ProfileCompletionSectionView = {
   actionLabel: string;
   /** Shown when partially filled (e.g. "3 of 6"). */
   progressBadge?: string;
+  /** Lets a finished row stay openable, used by Terms. */
+  reviewLabel?: string;
 };
 
 type Props = {
@@ -130,17 +132,21 @@ export default function ProfileCompletionCard({
                     </p>
                   </div>
                 </div>
-                {section.isComplete ? null : (
-                  <button
-                    type="button"
-                    onClick={() => onSectionAction(section.href)}
-                    className={`ml-10 self-start sm:ml-0 sm:self-auto ${buttonClass}`}
-                    aria-label={`${section.actionLabel}: ${section.label}`}
-                  >
-                    {section.actionLabel}
-                    <ArrowRight className="h-4 w-4" aria-hidden />
-                  </button>
-                )}
+                {(() => {
+                  const label = section.isComplete ? section.reviewLabel : section.actionLabel;
+                  if (!label) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => onSectionAction(section.href)}
+                      className={`ml-10 self-start sm:ml-0 sm:self-auto ${buttonClass}`}
+                      aria-label={`${label}: ${section.label}`}
+                    >
+                      {label}
+                      <ArrowRight className="h-4 w-4" aria-hidden />
+                    </button>
+                  );
+                })()}
               </div>
             </li>
           );

@@ -52,6 +52,10 @@ const PendingUser = require("../models/PendingUser");
 const PendingLogin = require("../models/PendingLogin");
 const chatBotQA = require("../models/chatBotQA");
 const { logAdminAction } = require("../utils/adminAudit");
+const {
+    assertPendingSignupCanCreateAccount,
+    recordSignupAcceptance,
+} = require("../services/termsAgreement");
 const { authCookieOptions, clearAuthCookieOptions } = require("../config/authCookie");
 const { readAccessToken } = require("../middlewares/requireAuth");
 const jwt = require("jsonwebtoken");
@@ -1083,26 +1087,62 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
             return res.status(404).json({ message: "Pending User not found" });
         }
 
-        const newUser = new User({
-            username: pendingUser.username,
-            title: pendingUser.title,
-            description: pendingUser.description,
-            services: pendingUser.services,
-            keywords: pendingUser.keywords,
-            country: pendingUser.country,
-            state: pendingUser.state,
-            city: pendingUser.city,
-            phoneNumber: pendingUser.phoneNumber,
-            email: pendingUser.email.toLowerCase(),
-            password: pendingUser.password,
-            resume: pendingUser.resume,
-            role: pendingUser.role,
-            timeSlots: pendingUser.timeSlots,
-            price: pendingUser.price,
-            status: "active"
-        });
+        const emailKey = pendingUser.email.toLowerCase();
+        const gatedTerms = await assertPendingSignupCanCreateAccount(pendingUser.termsAcceptance);
+        if (!gatedTerms.ok) {
+            return res.status(400).json({ message: gatedTerms.error });
+        }
+        // Retry only the user this conversion already created. Do not stamp the
+        // signature onto a different account that shares the email.
+        let user = null;
+        if (gatedTerms.acceptance && pendingUser.createdUserId) {
+            user = await User.findById(pendingUser.createdUserId);
+            if (!user) {
+                return res.status(500).json({ message: safeErrorMessage(new Error('created user missing')) });
+            }
+        }
+        if (!user) {
+            const newUser = new User({
+                username: pendingUser.username,
+                title: pendingUser.title,
+                description: pendingUser.description,
+                services: pendingUser.services,
+                keywords: pendingUser.keywords,
+                country: pendingUser.country,
+                state: pendingUser.state,
+                city: pendingUser.city,
+                phoneNumber: pendingUser.phoneNumber,
+                email: emailKey,
+                password: pendingUser.password,
+                resume: pendingUser.resume,
+                role: pendingUser.role,
+                timeSlots: pendingUser.timeSlots,
+                price: pendingUser.price,
+                status: "active"
+            });
+            try {
+                user = await newUser.save();
+            } catch (saveErr: any) {
+                if (saveErr?.code === 11000) {
+                    console.error('[convertPendingUserToUserByAdmin] email already registered', emailKey);
+                    return res.status(500).json({ message: safeErrorMessage(saveErr) });
+                }
+                throw saveErr;
+            }
+            if (gatedTerms.acceptance) {
+                pendingUser.createdUserId = user._id;
+                await pendingUser.save();
+            }
+        }
 
-        await newUser.save();
+        if (gatedTerms.acceptance) {
+            try {
+                await recordSignupAcceptance(user._id, gatedTerms.acceptance);
+            } catch (acceptErr) {
+                console.error('[convertPendingUserToUserByAdmin] terms acceptance', acceptErr);
+                return res.status(500).json({ message: safeErrorMessage(acceptErr) });
+            }
+        }
 
         await PendingUser.findByIdAndDelete(String(pendingUserId));
 
@@ -1110,9 +1150,9 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
             actor: req.user,
             action: "convert_pending_user",
             targetType: "user",
-            targetId: newUser._id,
-            targetEmail: newUser.email,
-            meta: { pendingUserId, role: newUser.role },
+            targetId: user._id,
+            targetEmail: user.email,
+            meta: { pendingUserId, role: user.role },
         });
 
         return res.status(200).json({ message: "Pending User converted to a regular User successfully" });

@@ -2,9 +2,10 @@ import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOpti
 
 /** Weights sum to 100 so `percent` is a direct weighted sum of section fill ratios. */
 export const STUDENT_PROFILE_SECTION_WEIGHTS = {
-  academic: 40,
-  preferences: 30,
-  resume: 30,
+  academic: 35,
+  preferences: 25,
+  resume: 25,
+  terms: 15,
 } as const;
 
 export type StudentProfileSectionId = keyof typeof STUDENT_PROFILE_SECTION_WEIGHTS;
@@ -13,6 +14,7 @@ export const STUDENT_PROFILE_SECTION_HREFS: Record<StudentProfileSectionId, stri
   academic: '#profile-academic',
   preferences: '#profile-preferences',
   resume: '#profile-resume',
+  terms: '#terms-agreement',
 };
 
 export type StudentProfileCompletionInput = {
@@ -26,6 +28,8 @@ export type StudentProfileCompletionInput = {
   keywords?: unknown;
   customKeywords?: unknown;
   resume?: unknown;
+  /** True only when the current student contract is signed, or none is published. */
+  roleTermsSigned?: boolean;
 };
 
 export type StudentProfileSectionCompletion = {
@@ -103,6 +107,9 @@ export function getStudentProfileCompletion(
   const resumeTotal = 1;
   const resumeRatio = resumeFilled / resumeTotal;
 
+  const termsDone = source.roleTermsSigned === true;
+  const termsRatio = termsDone ? 1 : 0;
+
   const sections: StudentProfileSectionCompletion[] = [
     {
       id: 'academic',
@@ -131,12 +138,22 @@ export function getStudentProfileCompletion(
       isComplete: hasResume,
       href: STUDENT_PROFILE_SECTION_HREFS.resume,
     },
+    {
+      id: 'terms',
+      label: 'Terms',
+      weight: STUDENT_PROFILE_SECTION_WEIGHTS.terms,
+      filled: termsDone ? 1 : 0,
+      total: 1,
+      isComplete: termsDone,
+      href: STUDENT_PROFILE_SECTION_HREFS.terms,
+    },
   ];
 
   const percent = Math.round(
     STUDENT_PROFILE_SECTION_WEIGHTS.academic * academicRatio +
       STUDENT_PROFILE_SECTION_WEIGHTS.preferences * preferencesRatio +
-      STUDENT_PROFILE_SECTION_WEIGHTS.resume * resumeRatio,
+      STUDENT_PROFILE_SECTION_WEIGHTS.resume * resumeRatio +
+      STUDENT_PROFILE_SECTION_WEIGHTS.terms * termsRatio,
   );
 
   return { percent, sections };
