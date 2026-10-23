@@ -12,6 +12,7 @@ const mongoose = require('mongoose');
 const PaymentHistory = require('../models/PaymentHistory');
 const PayrollCheque = require('../models/PayrollCheque');
 const User = require('../models/User');
+const { sendPayrollChequeEmail } = require('../services/notifications');
 
 const expertIdOf = (value: any) => {
     if (!value) return '';
@@ -107,6 +108,29 @@ const chequeFields = (cheque: any) => ({
     chequeDate: cheque.chequeDate,
     recordedBy: expertIdOf(cheque.recordedBy),
 });
+
+const payoutEmailResult = async (cheque: any, expertId: string) => {
+    try {
+        const users = await usersById([expertId]);
+        const expert = users.get(String(expertId));
+        const targetEmail = String(expert?.email || '').trim();
+        if (!targetEmail) return { emailSent: false, emailStatus: 'no_email' };
+        const userName = String(expert?.username || '').trim() || targetEmail;
+        await sendPayrollChequeEmail({
+            targetEmail,
+            userName,
+            year: cheque.year,
+            month: cheque.month,
+            amountCents: cheque.amountCents,
+            chequeNumber: cheque.chequeNumber,
+            chequeDate: cheque.chequeDate,
+        });
+        return { emailSent: true, emailStatus: 'sent' };
+    } catch (err: any) {
+        console.error('[payroll] payout email failed:', err?.message || err);
+        return { emailSent: false, emailStatus: 'failed' };
+    }
+};
 
 const readChequeDetails = (body: any) => {
     const chequeNumber = normalizeChequeNumber(body?.chequeNumber);
@@ -223,11 +247,14 @@ const recordPayrollCheque = async (req, res) => {
             throw err;
         }
 
+        const email = await payoutEmailResult(created, expertId);
         return res.status(201).send({
             ...chequeFields(created),
             liveNetCents,
             status: 'paid',
             differenceCents: 0,
+            emailSent: email.emailSent,
+            emailStatus: email.emailStatus,
         });
     } catch (err) {
         console.log(err);
