@@ -8,6 +8,7 @@ vi.mock('../../../../api/api', () => ({
   doGetDirectChatHistory: vi.fn(),
   doGetGroupChatHistory: vi.fn(),
   getPricingSettings: vi.fn(async () => null),
+  listExpertPayroll: vi.fn(async () => ({ cheques: [] })),
 }));
 
 import {

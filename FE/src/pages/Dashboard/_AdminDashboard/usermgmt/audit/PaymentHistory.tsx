@@ -113,12 +113,13 @@ export default function PaymentHistory({
   const expert = summary.role === 'expert';
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pt-4">
-      <div className={`grid grid-cols-2 gap-3 ${expert ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+      <div className={`grid grid-cols-2 gap-3 ${expert ? 'lg:grid-cols-5' : 'lg:grid-cols-3'}`}>
         {expert ? (
           <>
             <Tile label="Gross earnings" value={formatUsdFromCents(summary.gross)} />
             <Tile label="Platform fees" value={formatUsdFromCents(summary.fees)} />
             <Tile label="Paid out" value={formatUsdFromCents(summary.paidOut)} />
+            <Tile label="Ready to pay" value={formatUsdFromCents(summary.readyToPay)} />
             <Tile label="Pending payout" value={formatUsdFromCents(summary.pending)} />
           </>
         ) : (

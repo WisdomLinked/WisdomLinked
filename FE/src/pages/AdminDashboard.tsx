@@ -17,6 +17,7 @@ import {
   FileText,
   Settings,
   CircleDollarSign,
+  Banknote,
 } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar';
@@ -63,6 +64,7 @@ import TermsAgreementPage from './Dashboard/_AdminDashboard/termsAgreement';
 import UserMgmt from './Dashboard/_AdminDashboard/usermgmt';
 import Payment from './Dashboard/_AdminDashboard/payment';
 import AdminRevenue from './Dashboard/_AdminDashboard/revenue';
+import AdminPayroll from './Dashboard/_AdminDashboard/payroll';
 import AdminMajors from './Dashboard/_AdminDashboard/majors';
 import AdminAuditLog from './Dashboard/_AdminDashboard/auditLog';
 import AdminExpertsManager from '../components/dashboard/AdminExpertsManager';
@@ -77,7 +79,8 @@ const adminNavItems = [
   { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
   { id: 'usermgmt', label: 'User management', icon: Users },
   { id: 'payment', label: 'Payments', icon: CreditCard },
-  { id: 'revenue', label: 'Revenue', icon: CircleDollarSign },
+  { id: 'revenue', label: 'Fee structure', icon: CircleDollarSign },
+  { id: 'payroll', label: 'Payroll', icon: Banknote },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
   { id: 'feedbacks', label: 'Feedback', icon: MessageCircleWarning },
   { id: 'contactedus', label: 'Contact requests', icon: Inbox },
@@ -512,7 +515,9 @@ export default function AdminDashboard() {
           : section === 'payment'
             ? 'Payments'
             : section === 'revenue'
-              ? 'Revenue'
+              ? 'Fee structure'
+            : section === 'payroll'
+              ? 'Payroll'
             : section === 'chat'
               ? 'Chat'
               : section === 'feedbacks'
@@ -568,6 +573,7 @@ export default function AdminDashboard() {
         <Route path="usermgmt" element={<UserMgmt />} />
         <Route path="payment" element={<Payment />} />
         <Route path="revenue" element={<AdminRevenue />} />
+        <Route path="payroll" element={<AdminPayroll />} />
         <Route path="feedbacks" element={<Feedback />} />
         <Route path="contactedus" element={<GetContactedUs />} />
         <Route path="registerUser" element={<RegisterUserByAdmin />} />

@@ -86,7 +86,8 @@ describe('auditModel payments', () => {
     ], 'expert');
     expect(summary.gross).toBe(14000);
     expect(summary.fees).toBe(2800);
-    expect(summary.paidOut).toBe(8000);
+    expect(summary.paidOut).toBe(0);
+    expect(summary.readyToPay).toBe(8000);
     expect(summary.pending).toBe(3200);
     expect(summary.net).toBe(8000);
   });
@@ -120,7 +121,38 @@ describe('auditModel payments', () => {
     ], 'expert', { seminarCommissionPercent: 50, oneToOneCommissionPercent: 50 });
     expect(summary.gross).toBe(10000);
     expect(summary.fees).toBe(2000);
-    expect(summary.paidOut).toBe(8000);
+    expect(summary.paidOut).toBe(0);
+    expect(summary.readyToPay).toBe(8000);
+  });
+
+  it('counts paid out as recorded cheques and leaves that month out of ready to pay', () => {
+    const summary = paymentSummary([
+      {
+        _id: 'mar',
+        amount: 1000,
+        status: 'completed',
+        paymentType: 'charge',
+        createdAt: '2026-03-15T00:00:00.000Z',
+      },
+      {
+        _id: 'apr',
+        amount: 1000,
+        status: 'completed',
+        paymentType: 'charge',
+        createdAt: '2026-04-02T00:00:00.000Z',
+      },
+      {
+        _id: 'pend',
+        amount: 1000,
+        status: 'pending',
+        paymentType: 'charge',
+        createdAt: '2026-03-20T00:00:00.000Z',
+      },
+    ], 'expert', undefined, [{ year: 2026, month: 3, amountCents: 800 }]);
+    expect(summary.paidOut).toBe(800);
+    expect(summary.readyToPay).toBe(800);
+    expect(summary.pending).toBe(800);
+    expect(summary.net).toBe(1600);
   });
 
   it('splits a student charge into price, platform fee and tax, including tax on a free session', () => {
@@ -170,8 +202,8 @@ describe('auditModel payments', () => {
     expect(summary.tax).toBe(0);
   });
 
-  it('maps statuses onto Paid out, Pending and Refunded pills', () => {
-    expect(paymentDisplayStatus({ status: 'completed' }).label).toBe('Paid out');
+  it('maps statuses onto Completed, Pending and Refunded pills', () => {
+    expect(paymentDisplayStatus({ status: 'completed' }).label).toBe('Completed');
     expect(paymentDisplayStatus({ status: 'pending' }).label).toBe('Pending');
     expect(paymentDisplayStatus({ status: 'withheld' }).label).toBe('Pending');
     expect(paymentDisplayStatus({ status: 'refunded' }).label).toBe('Refunded');

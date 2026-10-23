@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 vi.mock('../../../../api/api', () => ({
   doFilterPaymentHistories: vi.fn(),
   getPricingSettings: vi.fn(async () => null),
+  listExpertPayroll: vi.fn(async () => ({ cheques: [] })),
 }));
 
 import { doFilterPaymentHistories } from '../../../../api/api';
