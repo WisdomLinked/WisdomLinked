@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { doGetFullUserDataByEmail, doFilterPaymentHistories, getPricingSettings } from '../../../../api/api';
+import { doGetFullUserDataByEmail, doFilterPaymentHistories, getPricingSettings, listExpertPayroll } from '../../../../api/api';
 import ChatHistory from './chatHistory';
 import PaymentHistory from './paymentHistory';
 import AuditHeader from './audit/AuditHeader';
@@ -12,6 +12,7 @@ import {
   paymentSummary,
   auditMoneyRole,
   DEFAULT_AUDIT_RATES,
+  type AuditCheque,
   type AuditCommissionRates,
   type AuditTab,
 } from './audit/auditModel';
@@ -30,6 +31,7 @@ const AuditModal = ({
   const [paymentRows, setPaymentRows] = useState<PaymentHistoryRow[]>([]);
   const [paymentCount, setPaymentCount] = useState(0);
   const [rates, setRates] = useState<AuditCommissionRates>(DEFAULT_AUDIT_RATES);
+  const [cheques, setCheques] = useState<AuditCheque[]>([]);
 
   useEffect(() => {
     if (typeof getPricingSettings !== 'function') return;
@@ -97,6 +99,23 @@ const AuditModal = ({
   }, [selectedUser?.email, userDetails?.email]);
 
   useEffect(() => {
+    const expertId = userDetails?._id || selectedUser?._id;
+    const role = userDetails?.role || selectedUser?.role;
+    if (auditMoneyRole(role) !== 'expert' || !expertId || typeof listExpertPayroll !== 'function') {
+      setCheques([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const data = await listExpertPayroll(String(expertId));
+      if (!cancelled) setCheques(Array.isArray(data?.cheques) ? data.cheques : []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedUser?._id, selectedUser?.role, userDetails?._id, userDetails?.role]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeModal();
     };
@@ -106,8 +125,8 @@ const AuditModal = ({
 
   const conversations = useMemo(() => buildConversations(userDetails), [userDetails]);
   const paySummary = useMemo(
-    () => paymentSummary(paymentRows, auditMoneyRole(userDetails?.role || selectedUser?.role), rates),
-    [paymentRows, userDetails?.role, selectedUser?.role, rates],
+    () => paymentSummary(paymentRows, auditMoneyRole(userDetails?.role || selectedUser?.role), rates, cheques),
+    [paymentRows, userDetails?.role, selectedUser?.role, rates, cheques],
   );
   const lastActive = lastActiveFromAccount(userDetails, conversations.all);
 

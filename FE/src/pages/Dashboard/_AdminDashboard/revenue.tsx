@@ -240,7 +240,7 @@ export default function AdminRevenue() {
     <div className="px-4 py-7 sm:px-6">
       <div className="mx-auto max-w-3xl space-y-6">
         <header>
-          <h1 className={DASHBOARD_PAGE_TITLE}>Revenue</h1>
+          <h1 className={DASHBOARD_PAGE_TITLE}>Fee structure</h1>
           <p className="mt-1 text-sm text-wl-muted">
             Seminar and 1:1 rates are independent. Students pay the advertised price plus the platform fee and tax. Expert commission is recorded separately and is not a Stripe fee.
           </p>

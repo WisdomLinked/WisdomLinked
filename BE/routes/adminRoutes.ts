@@ -71,6 +71,13 @@ const {
 
 const { uploadsGeneral } = require("../middlewares/multerConfig");
 const {
+    listPayroll,
+    recordPayrollCheque,
+    updatePayrollCheque,
+    listExpertPayroll,
+} = require("../controllers/payroll.controller");
+
+const {
     previewTerms,
     publishTerms,
     listTermsVersions,
@@ -84,6 +91,10 @@ const {
 router.post("/setStripeMode", adminAuth, setStripeMode)
 router.get("/pricingSettings", adminAuth, getPricingSettings)
 router.post("/pricingSettings", adminAuth, setPricingSettings)
+router.get("/payroll", adminAuth, listPayroll)
+router.post("/payroll", adminAuth, recordPayrollCheque)
+router.get("/payroll/expert/:expertId", adminAuth, listExpertPayroll)
+router.patch("/payroll/:id", adminAuth, updatePayrollCheque)
 router.post("/setSeminarApprovalDeadline", adminAuth, setSeminarApprovalDeadline)
 router.post("/setPaymentWindow", adminAuth, setPaymentWindow)
 router.post("/sendPaymentLinkToUser", adminAuth, sendPaymentLinkToUser)

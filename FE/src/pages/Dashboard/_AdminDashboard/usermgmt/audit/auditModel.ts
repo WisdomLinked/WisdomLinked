@@ -69,11 +69,28 @@ export type PaymentSummary = {
   gross: number;
   fees: number;
   paidOut: number;
+  readyToPay: number;
   pending: number;
   net: number;
   priceCollected: number;
   tax: number;
 };
+
+export type AuditCheque = {
+  year: number;
+  month: number;
+  amountCents: number;
+};
+
+export function paymentUtcMonth(value?: string | Date | null): { year: number; month: number } | null {
+  const date = parseDate(value);
+  if (!date) return null;
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
+}
+
+function payrollMonthKey(year: number, month: number): string {
+  return `${year}-${month}`;
+}
 
 export function auditMoneyRole(role?: string): AuditMoneyRole {
   return String(role || '').toLowerCase() === 'expert' ? 'expert' : 'student';
@@ -379,14 +396,22 @@ export function paymentSummary(
   rows: PaymentHistoryRow[],
   role: AuditMoneyRole = 'expert',
   rates: AuditCommissionRates = DEFAULT_AUDIT_RATES,
+  cheques: AuditCheque[] = [],
 ): PaymentSummary {
   let gross = 0;
   let fees = 0;
-  let paidOut = 0;
+  let readyToPay = 0;
   let pending = 0;
   let priceCollected = 0;
   let tax = 0;
   let studentPaid = 0;
+  const paidMonths = new Set(
+    (cheques || []).map(cheque => payrollMonthKey(Number(cheque.year), Number(cheque.month))),
+  );
+  const chequeTotal = (cheques || []).reduce(
+    (sum, cheque) => sum + (typeof cheque.amountCents === 'number' && Number.isFinite(cheque.amountCents) ? cheque.amountCents : 0),
+    0,
+  );
 
   for (const row of rows) {
     if (isRefundedRow(row)) continue;
@@ -395,7 +420,11 @@ export function paymentSummary(
     if (role === 'expert') {
       gross += money.advertisedCents;
       fees += money.commissionCents;
-      if (row.status === 'completed') paidOut += money.expertNetCents;
+      if (row.status === 'completed') {
+        const month = paymentUtcMonth(row.createdAt);
+        const covered = month ? paidMonths.has(payrollMonthKey(month.year, month.month)) : false;
+        if (!covered) readyToPay += money.expertNetCents;
+      }
       if (row.status === 'pending' || row.status === 'withheld') pending += money.expertNetCents;
     } else {
       priceCollected += money.advertisedCents;
@@ -411,6 +440,7 @@ export function paymentSummary(
       gross: priceCollected,
       fees,
       paidOut: studentPaid,
+      readyToPay: 0,
       pending: 0,
       net: studentPaid,
       priceCollected,
@@ -422,9 +452,10 @@ export function paymentSummary(
     role: 'expert',
     gross,
     fees,
-    paidOut,
+    paidOut: chequeTotal,
+    readyToPay,
     pending,
-    net: paidOut,
+    net: readyToPay + chequeTotal,
     priceCollected: gross,
     tax: 0,
   };
@@ -438,7 +469,7 @@ export function paymentDisplayStatus(row: PaymentHistoryRow): PaymentDisplayStat
     return { label: 'Pending', tone: 'warn' };
   }
   if (row.status === 'completed') {
-    return { label: 'Paid out', tone: 'ok' };
+    return { label: 'Completed', tone: 'ok' };
   }
   if (row.status === 'failed') {
     return { label: 'Failed', tone: 'bad' };

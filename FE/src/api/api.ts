@@ -905,6 +905,48 @@ export const savePricingSettings = async (pricing: any) => {
     }
 }
 
+export const listPayrollMonth = async (year: number, month: number) => {
+    try {
+        const res = await api.get("admin/payroll", { params: { year, month } });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const recordPayrollCheque = async (body: {
+    expertId: string;
+    year: number;
+    month: number;
+    chequeNumber: string;
+    chequeDate: string;
+}) => {
+    try {
+        const res = await api.post("admin/payroll", body);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const updatePayrollCheque = async (id: string, body: { chequeNumber: string; chequeDate: string }) => {
+    try {
+        const res = await api.patch(`admin/payroll/${id}`, body);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
+export const listExpertPayroll = async (expertId: string) => {
+    try {
+        const res = await api.get(`admin/payroll/expert/${expertId}`);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
 export const createStripePaymentIntent = async (data: any) => {
     try {
         const res = await api.post("auth/createStripePaymentIntent", data);

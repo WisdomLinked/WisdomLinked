@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { doFilterPaymentHistories, getPricingSettings } from '../../../../api/api';
+import { doFilterPaymentHistories, getPricingSettings, listExpertPayroll } from '../../../../api/api';
 import PaymentHistoryView from './audit/PaymentHistory';
 import {
   auditMoneyRole,
   paymentSummary,
   DEFAULT_AUDIT_RATES,
+  type AuditCheque,
   type AuditCommissionRates,
 } from './audit/auditModel';
 import type { PaymentHistoryRow } from '../payment/paymentHistoryUtils';
@@ -17,6 +18,7 @@ const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
   const [allRows, set_allRows] = useState<PaymentHistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [rates, setRates] = useState<AuditCommissionRates>(DEFAULT_AUDIT_RATES);
+  const [cheques, setCheques] = useState<AuditCheque[]>([]);
 
   useEffect(() => {
     if (typeof getPricingSettings !== 'function') return;
@@ -86,13 +88,29 @@ const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
   }, [userDetails?.email]);
 
   useEffect(() => {
+    const expertId = userDetails?._id;
+    if (auditMoneyRole(userDetails?.role) !== 'expert' || !expertId || typeof listExpertPayroll !== 'function') {
+      setCheques([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const data = await listExpertPayroll(String(expertId));
+      if (!cancelled) setCheques(Array.isArray(data?.cheques) ? data.cheques : []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userDetails?._id, userDetails?.role]);
+
+  useEffect(() => {
     void filterHistories(0);
     void loadSummary();
   }, [filterHistories, loadSummary]);
 
   const summary = useMemo(
-    () => paymentSummary(allRows.length ? allRows : histories, auditMoneyRole(userDetails?.role), rates),
-    [allRows, histories, userDetails?.role, rates],
+    () => paymentSummary(allRows.length ? allRows : histories, auditMoneyRole(userDetails?.role), rates, cheques),
+    [allRows, histories, userDetails?.role, rates, cheques],
   );
 
   return (
