@@ -254,7 +254,11 @@ const Payment = () => {
       refundReason: refundData.reason,
     });
     if (response?.status === 'SUCCESS') {
-      notify.success('Refund processed successfully.');
+      notify.success(
+        typeof response.message === 'string' && response.message
+          ? response.message
+          : 'Refund processed successfully.',
+      );
       setIsRefundModalOpen(false);
       setSelectedRefundItem(null);
       void loadHistories();

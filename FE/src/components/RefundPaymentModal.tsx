@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { notify } from '../utils/notify';
+import { seatReleasedByRefund } from '../utils/refundSeatRelease';
 import AdminPaymentDialog, {
   paymentDialogDangerButtonClass,
   paymentDialogFieldClass,
@@ -25,6 +26,8 @@ const RefundPaymentModal: React.FC<RefundPaymentModalProps> = ({
   const [refundAmount, setRefundAmount] = useState<number>(0);
   const [refundReason, setRefundReason] = useState<string>('');
   const [maxRefundAmount, setMaxRefundAmount] = useState<number>(0);
+  const seatNotice = seatReleasedByRefund(paymentItem);
+  const student = paymentItem?.customer?.email || 'the student';
 
   useEffect(() => {
     if (paymentItem && isOpen) {
@@ -115,6 +118,14 @@ const RefundPaymentModal: React.FC<RefundPaymentModalProps> = ({
         />
         <p className={paymentDialogHintClass}>Maximum refundable: ${maxRefundAmount.toFixed(2)}</p>
       </div>
+
+      {seatNotice ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          {seatNotice.series
+            ? `Any refund, full or partial, also removes ${student} from every date of “${seatNotice.sessionName}” and its chat, unless all of its dates have ended.`
+            : `Any refund, full or partial, also removes ${student} from “${seatNotice.sessionName}” and its chat, because it has not ended yet.`}
+        </p>
+      ) : null}
 
       <div>
         <label htmlFor="refund-reason" className={paymentDialogLabelClass}>

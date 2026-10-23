@@ -61,6 +61,7 @@ import { isChatAdminOf } from '../utils/adminChatAccess';
 import { bookingEmailTo } from '../utils/emailPreferences';
 import { computeBookingPriceCents, extractHourlyRate, dollarsToCents, assertPaymentMatchesExpected, assertIntentMatchesBooking, voluntaryCancellationRefundCents, capturedAmountCents, balanceTransactionId } from '../utils/bookingPrice';
 import { resolvePendingPayment, resolveOrphanedIntent } from '../utils/pendingPayment';
+import { sessionHasEnded } from '../utils/paymentIntegrity';
 import {
     BOOKING_PAYMENT_WRONG_BOOKING,
     BOOKING_PAYMENT_UNVERIFIED,
@@ -2718,6 +2719,24 @@ const sessionHasLivePayment = async (groupChatId: string) => {
         && !refundedIntents.has(String(row.paymentIntent)));
 };
 
+const refundedSessionReleasedEmail = (chat: any) => {
+    const sessionName = chat.name || '1:1 session';
+    const startLabel = chat.start ? new Date(chat.start).toLocaleString() : '';
+    return {
+        heading: 'Session released — the payment was refunded',
+        previewText: 'This session is no longer confirmed.',
+        blocks: [
+            emailParagraph(`The payment for <strong>${emailEscape(sessionName)}</strong>${startLabel ? ` on <strong>${emailEscape(startLabel)}</strong>` : ''} was refunded, so the session is no longer confirmed and the time slot has been released.`),
+            emailFacts([
+                ['Session', sessionName],
+                ['Date & time', startLabel],
+                ['Reference', String(chat._id)],
+            ]),
+            emailCallout('No money is owed. If this session should still go ahead, please book it again or contact the administrator through WisdomLinked.', 'bad'),
+        ],
+    };
+};
+
 const reconcileRefundedSession = async (groupChatId: any, reason: string) => {
     if (!groupChatId || !mongoose.isValidObjectId(String(groupChatId))) return;
     const chat = await GroupChat.findById(String(groupChatId))
@@ -2735,22 +2754,9 @@ const reconcileRefundedSession = async (groupChatId: any, reason: string) => {
     console.error('[reconcileRefundedSession] refunded session was still confirmed — released', String(chat._id), reason);
 
     const sessionName = chat.name || '1:1 session';
-    const startLabel = chat.start ? new Date(chat.start).toLocaleString() : '';
     const expertId = String(chat.admin);
     const studentId = groupMemberIds(chat).find((id: string) => id !== expertId) || String(chat.createdBy);
-    const body = {
-        heading: 'Session released — the payment was refunded',
-        previewText: 'This session is no longer confirmed.',
-        blocks: [
-            emailParagraph(`The payment for <strong>${emailEscape(sessionName)}</strong>${startLabel ? ` on <strong>${emailEscape(startLabel)}</strong>` : ''} was refunded, so the session is no longer confirmed and the time slot has been released.`),
-            emailFacts([
-                ['Session', sessionName],
-                ['Date & time', startLabel],
-                ['Reference', String(chat._id)],
-            ]),
-            emailCallout('No money is owed. If this session should still go ahead, please book it again or contact the administrator through WisdomLinked.', 'bad'),
-        ],
-    };
+    const body = refundedSessionReleasedEmail(chat);
 
     for (const id of [expertId, studentId]) {
         if (!id || !mongoose.isValidObjectId(id)) continue;
@@ -2759,6 +2765,106 @@ const reconcileRefundedSession = async (groupChatId: any, reason: string) => {
         await sendSeminarEmail(person.email, `Session released — ${sessionName}`, body)
             .catch((emailErr: any) => console.log('[reconcileRefundedSession] notice failed', emailErr?.message));
     }
+};
+
+/** Whether the student still has money on these sessions that no refund row has given back. */
+const studentStillPaidFor = async (studentId: string, groupChatIds: any[]): Promise<boolean> => {
+    const rows = await PaymentHistory.find({
+        customer: studentId,
+        groupChat: { $in: groupChatIds },
+        $or: [
+            { paymentType: 'charge', status: { $in: ['completed', 'withheld', 'pending'] } },
+            { paymentType: 'retry', status: 'completed' },
+        ],
+    }).select('paymentIntent status');
+    const intents = rows.map((row: any) => String(row.paymentIntent || '')).filter(Boolean);
+    const refunded = new Set<string>(intents.length
+        ? (await PaymentHistory.distinct('paymentIntent', { paymentType: 'refund', paymentIntent: { $in: intents } })).map(String)
+        : []);
+    return rows.some((row: any) => (row.paymentIntent
+        ? !refunded.has(String(row.paymentIntent))
+        : row.status === 'completed'));
+};
+
+export type AdminRefundSeatRelease = {
+    released: boolean;
+    type?: 'individual' | 'seminar';
+    sessionName?: string;
+    skipped?: 'no_session' | 'not_enrolled' | 'already_cancelled' | 'ended' | 'still_paid';
+};
+
+const releaseSeatAfterAdminRefund = async (payment: any): Promise<AdminRefundSeatRelease> => {
+    const groupChatId = String(payment?.groupChat?._id ?? payment?.groupChat ?? '');
+    const studentId = String(payment?.customer?._id ?? payment?.customer ?? '');
+    if (!mongoose.isValidObjectId(groupChatId) || !mongoose.isValidObjectId(studentId)) {
+        return { released: false, skipped: 'no_session' };
+    }
+    const chat = await GroupChat.findById(groupChatId)
+        .select('name type status start end duration admin participants createdBy seriesId');
+    if (!chat || (chat.type !== 'individual' && chat.type !== 'seminar')) {
+        return { released: false, skipped: 'no_session' };
+    }
+    const sessionName = chat.name || (chat.type === 'seminar' ? 'Seminar' : '1:1 session');
+    const isParticipant = (doc: any) => (doc.participants || []).some((p: any) => normalizeId(p) === studentId);
+    const now = Date.now();
+
+    if (chat.type === 'individual') {
+        if (!isParticipant(chat) || normalizeId(chat.admin) === studentId) return { released: false, sessionName, skipped: 'not_enrolled' };
+        if (chat.status === 'cancelled') return { released: false, sessionName, skipped: 'already_cancelled' };
+        if (sessionHasEnded(chat, now)) return { released: false, sessionName, skipped: 'ended' };
+        if (await studentStillPaidFor(studentId, [chat._id])) return { released: false, sessionName, skipped: 'still_paid' };
+
+        const cancelled = await GroupChat.findOneAndUpdate(
+            { _id: chat._id, status: { $ne: 'cancelled' } },
+            { $set: { status: 'cancelled', paymentDeadline: null, decisionDeadline: null } },
+        );
+        if (!cancelled) return { released: false, sessionName, skipped: 'already_cancelled' };
+
+        const expert = await User.findById(normalizeId(chat.admin)).catch(() => null);
+        if (expert?.email) {
+            await sendSeminarEmail(expert.email, `Session released — ${sessionName}`, refundedSessionReleasedEmail(chat))
+                .catch((emailErr: any) => console.log('[releaseSeatAfterAdminRefund] expert notice failed', emailErr?.message));
+        }
+        return { released: true, type: 'individual', sessionName };
+    }
+
+    const seriesFilter: any = chat.seriesId
+        ? { $or: [{ _id: chat._id }, { seriesId: chat.seriesId, type: 'seminar' }] }
+        : { _id: chat._id };
+    const occurrences = await GroupChat.find(seriesFilter).select('_id start end duration participants');
+    const enrolled = occurrences.filter(isParticipant);
+    if (!enrolled.length) return { released: false, sessionName, skipped: 'not_enrolled' };
+    const remaining = enrolled.filter((occ: any) => !sessionHasEnded(occ, now));
+    if (!remaining.length) return { released: false, sessionName, skipped: 'ended' };
+    if (await studentStillPaidFor(studentId, occurrences.map((occ: any) => occ._id))) {
+        return { released: false, sessionName, skipped: 'still_paid' };
+    }
+
+    await unenrollSeminarSeries(chat, studentId);
+    // The waitlist only fills dates that have not started, so offer the next of those.
+    const nextUnstarted = remaining
+        .filter((occ: any) => occ.start && new Date(occ.start).getTime() > now)
+        .sort((a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime())[0];
+    if (nextUnstarted) await maybeOfferWaitlistAfterCapacityChange(nextUnstarted._id);
+
+    const [host, student] = await Promise.all([
+        User.findById(normalizeId(chat.admin)).catch(() => null),
+        User.findById(studentId).catch(() => null),
+    ]);
+    if (host?.email) {
+        await sendSeminarEmail(host.email, `Seat released — ${sessionName}`, {
+            heading: 'A seat was released — the payment was refunded',
+            previewText: 'One student is no longer enrolled.',
+            blocks: [
+                emailParagraph(`${emailEscape(student?.username || 'A student')}'s payment for <strong>${emailEscape(sessionName)}</strong> was refunded, so they are no longer enrolled and their seat is open again.`),
+                emailFacts([
+                    ['Seminar', sessionName],
+                    ['Reference', String(chat._id)],
+                ]),
+            ],
+        }).catch((emailErr: any) => console.log('[releaseSeatAfterAdminRefund] host notice failed', emailErr?.message));
+    }
+    return { released: true, type: 'seminar', sessionName };
 };
 
 const refundBookingCharge = async ({ payment_intent, charge, name, customer, expert, groupChatId, reason, recordStatus }: any) => {
@@ -6293,6 +6399,7 @@ module.exports = {
     sweepOrphanedBookingIntents,
     handleBookingPaymentIntentEvent,
     reconcileRefundedSession,
+    releaseSeatAfterAdminRefund,
     acceptIndividualAppointment,
     leaveGroup,
     deleteGroup,

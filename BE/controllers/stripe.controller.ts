@@ -536,7 +536,7 @@ const buildPaymentRequestEmail = ({ customerName, amountCents, description, url,
     ],
 });
 
-const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, retainedCents, description, expertName, start, reference, transactionId }: any) => renderStripeEmail({
+const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, retainedCents, description, expertName, start, reference, transactionId, releasedSession }: any) => renderStripeEmail({
     heading: 'Your refund has been processed',
     previewText: `${stripeMoneyFromCents(amountCents, currency)} refunded.`,
     blocks: [
@@ -553,6 +553,11 @@ const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, r
         isFullRefund
             ? ''
             : stripeCallout(`${stripeMoneyFromCents(retainedCents, currency)} of your original payment has been retained in accordance with the applicable cancellation and refund policy.`),
+        releasedSession
+            ? stripeCallout(releasedSession.type === 'seminar'
+                ? `Because of this refund, your seat in <strong>${stripeEscape(releasedSession.sessionName)}</strong> has been released, so you are no longer enrolled in it or its chat.`
+                : `Because of this refund, your 1:1 session <strong>${stripeEscape(releasedSession.sessionName)}</strong> has been cancelled.`)
+            : '',
         stripeCallout('The refund will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank. Your card issuer may notify you separately when it posts.', 'bad'),
         stripeParagraph('If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the reference above.', { muted: true }),
     ],
@@ -1149,6 +1154,16 @@ const processRefund = async (req, res) => {
 
         await refundHistory.save();
 
+        // Every automatic refund takes the seat back with the money; this one has to as well.
+        let seatRelease: any = { released: false };
+        try {
+            // Deferred require: groupChat.controller depends on this module.
+            const { releaseSeatAfterAdminRefund } = require("./groupChat.controller");
+            seatRelease = await releaseSeatAfterAdminRefund(paymentHistory);
+        } catch (releaseErr) {
+            console.error('[processRefund] seat not released — it will show under Seats to check', String(paymentHistory._id), releaseErr?.message);
+        }
+
         // Send refund notification email to customer
         if (paymentHistory.customer?.email) {
             const sgMail = require("@sendgrid/mail");
@@ -1170,6 +1185,7 @@ const processRefund = async (req, res) => {
                     : '',
                 reference: refundHistory?._id ? String(refundHistory._id) : paymentHistory.paymentIntent,
                 transactionId: paymentHistory.paymentIntent,
+                releasedSession: seatRelease.released ? seatRelease : null,
             });
 
             const refundEmailMsg = {
@@ -1212,12 +1228,19 @@ const processRefund = async (req, res) => {
                 currency: paymentHistory.currency,
                 reason: refundReason,
                 isFullRefund,
+                groupChat: paymentHistory.groupChat ? String(paymentHistory.groupChat) : undefined,
+                seatReleased: Boolean(seatRelease.released),
+                seatReleaseSkipped: seatRelease.skipped,
             },
         });
 
+        const who = paymentHistory.customer?.email || 'The student';
         res.status(200).json({
             status: 'SUCCESS',
-            message: 'Refund processed successfully.',
+            message: seatRelease.released
+                ? `Refund processed successfully. ${who} was removed from “${seatRelease.sessionName}”.`
+                : 'Refund processed successfully.',
+            seatRelease,
             refund: {
                 id: refundResult.id,
                 amount: refundAmount,

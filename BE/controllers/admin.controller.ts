@@ -21,6 +21,8 @@ import {
 } from '../utils/adminSnapshotStats';
 import {
     checkSeat,
+    markRefundedCharges,
+    sessionHasEnded,
     summarizeVerdicts,
     recordCountsByStatus,
     RECORD_COUNT_STATUSES,
@@ -202,7 +204,7 @@ const filterPaymentHistories = async (req, res) => {
         query.populate([
             { path: 'expert', select: 'username email role' },
             { path: 'customer', select: 'username email role' },
-            { path: 'groupChat', select: 'type name status start end' },
+            { path: 'groupChat', select: 'type name status start end seriesId' },
             { path: 'event', select: 'start end title status' },
         ])
 
@@ -272,7 +274,7 @@ const filterPaymentHistories = async (req, res) => {
                 ? await PaymentHistory.find({ _id: { $in: pageIds } }).populate([
                     { path: "expert", select: "username email role" },
                     { path: "customer", select: "username email role" },
-                    { path: "groupChat", select: "type name status start end" },
+                    { path: "groupChat", select: "type name status start end seriesId" },
                     { path: "event", select: "start end title status" },
                 ])
                 : [];
@@ -1523,7 +1525,7 @@ const getPaymentIntegrityReport = async (req, res) => {
             status: { $in: ['active', 'pending'] },
             createdAt: { $gte: since },
         })
-            .select('_id name type price status start admin participants seriesId paymentDeadline')
+            .select('_id name type price status start end duration admin participants seriesId paymentDeadline')
             .limit(INTEGRITY_MAX_BOOKINGS)
             .lean();
 
@@ -1541,12 +1543,22 @@ const getPaymentIntegrityReport = async (req, res) => {
 
         const chargeBookingIds = new Set<string>(bookings.map((b: any) => String(b._id)));
         for (const sibling of seriesSiblings) chargeBookingIds.add(String(sibling._id));
-        const chargeRows = chargeBookingIds.size
+        const recordedCharges: any[] = chargeBookingIds.size
             ? await PaymentHistory.find({
                 groupChat: { $in: [...chargeBookingIds] },
-                paymentType: 'charge',
+                // A paid retry link is the "take payment again" this list asks for.
+                $or: [{ paymentType: 'charge' }, { paymentType: 'retry', status: 'completed' }],
             }).select('groupChat customer status amount paymentIntent').lean()
             : [];
+        const chargeIntents = [...new Set(recordedCharges.map((row: any) => String(row.paymentIntent || '')).filter(Boolean))];
+        const refundedIntents = new Set<string>(chargeIntents.length
+            ? (await PaymentHistory.distinct('paymentIntent', {
+                paymentType: 'refund',
+                paymentIntent: { $in: chargeIntents },
+            })).map(String)
+            : []);
+        const chargeRows = markRefundedCharges(recordedCharges, refundedIntents);
+        const now = Date.now();
 
         // (bookingId|studentId) -> charge rows
         const rowsByPair = new Map<string, any[]>();
@@ -1576,6 +1588,9 @@ const getPaymentIntegrityReport = async (req, res) => {
                 const seriesHasCompletedCharge = seriesGroupIds.some((id) =>
                     (rowsByPair.get(`${id}|${studentId}`) || []).some((row: any) => row?.status === 'completed'),
                 );
+                const seriesHasRefundedCharge = seriesGroupIds.some((id) =>
+                    (rowsByPair.get(`${id}|${studentId}`) || []).some((row: any) => row?.status === 'refunded'),
+                );
                 const priceCents = Math.round(Number(booking.price ?? 0) * 100);
                 const check = checkSeat({
                     type: booking.type,
@@ -1584,6 +1599,8 @@ const getPaymentIntegrityReport = async (req, res) => {
                     priceCents,
                     ownCharges,
                     seriesHasCompletedCharge,
+                    seriesHasRefundedCharge,
+                    sessionEnded: sessionHasEnded(booking, now),
                 });
                 if (check.verdict !== 'waiting') verdicts.push(check.verdict);
                 if (onlyActionable && !check.list) continue;
