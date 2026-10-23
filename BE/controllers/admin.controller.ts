@@ -7,11 +7,13 @@ import {
     clampPageSize,
     emptyPeriodCounts,
     heldStartFilter,
+    oneToOneGroupFilter,
     parseDateParam,
     periodChange,
     resolveSnapshotRange,
     seminarBaseFilter,
     startInRangeFilter,
+    statusListFilter,
     upcomingStartFilter,
 } from '../utils/adminSnapshot';
 import {
@@ -787,7 +789,8 @@ const getDashboardStats = async (req: Request, res: Response) => {
             }),
             User.countDocuments({ role: "expert" }),
             User.countDocuments({ role: "customer" }),
-            Event.countDocuments(),
+            Promise.all([Event.countDocuments(), GroupChat.countDocuments(oneToOneGroupFilter())])
+                .then(([legacy, current]) => legacy + current),
             GroupChat.countDocuments(seminarBaseFilter()),
             PaymentHistory.countDocuments({ paymentType: { $ne: "refund" } }),
             PaymentHistory.countDocuments({ paymentType: "refund" }),
@@ -867,7 +870,7 @@ function mapEventPlatformItem(ev: any) {
     };
 }
 
-function mapGroupChatPlatformItem(g: any) {
+function mapGroupChatPlatformItem(g: any, student?: any) {
     const isSeminar = g.type === "seminar";
     const adminUser = g.admin || g.createdBy;
     return {
@@ -884,10 +887,35 @@ function mapGroupChatPlatformItem(g: any) {
                 email: adminUser.email,
             }
             : null,
-        customer: null,
+        customer: student
+            ? {
+                id: String(student._id),
+                username: student.username,
+                email: student.email,
+            }
+            : null,
         groupChatType: g.type,
         participantCount: Array.isArray(g.participants) ? g.participants.length : 0,
     };
+}
+
+async function oneToOneStudents(gcs: any[]): Promise<Map<string, any>> {
+    const studentIdByGc = new Map<string, string>();
+    for (const g of gcs) {
+        if (g.type !== "individual") continue;
+        const expertId = String(g.admin?._id ?? g.admin ?? "");
+        const studentId = (g.participants || []).map((id: any) => String(id?._id ?? id)).find((id: string) => id && id !== expertId);
+        if (studentId) studentIdByGc.set(String(g._id), studentId);
+    }
+    if (!studentIdByGc.size) return new Map();
+    const students = await User.find({ _id: { $in: [...new Set(studentIdByGc.values())] } }).select("username email").lean();
+    const byId = new Map(students.map((u: any) => [String(u._id), u]));
+    const out = new Map<string, any>();
+    for (const [gcId, studentId] of studentIdByGc) {
+        const student = byId.get(studentId);
+        if (student) out.set(gcId, student);
+    }
+    return out;
 }
 
 function groupChatTypeFilter(includeSeminar: boolean, includeOneToOne: boolean) {
@@ -926,8 +954,7 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
         const startRange = applyDateRange && (dateFrom || dateTo)
             ? startInRangeFilter(dateFrom, dateTo)
             : null;
-        const status = req.query.status ? String(req.query.status) : "";
-        const statusFilter = status ? { status } : null;
+        const statusFilter = statusListFilter(req.query.status);
         const search = String(req.query.q || "").trim();
         let eventSearch: Record<string, unknown> | null = null;
         let gcSearch: Record<string, unknown> | null = null;
@@ -941,7 +968,12 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
                 $or: [{ title: rx }, { expert: { $in: ids } }, { customer: { $in: ids } }],
             };
             gcSearch = {
-                $or: [{ name: rx }, { admin: { $in: ids } }, { createdBy: { $in: ids } }],
+                $or: [
+                    { name: rx },
+                    { admin: { $in: ids } },
+                    { createdBy: { $in: ids } },
+                    { ...oneToOneGroupFilter(), participants: { $in: ids } },
+                ],
             };
         }
 
@@ -973,7 +1005,8 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
                 .sort({ start: sortOrder })
                 .skip(skip)
                 .limit(limit);
-            for (const g of gcs) items.push(mapGroupChatPlatformItem(g));
+            const students = await oneToOneStudents(gcs);
+            for (const g of gcs) items.push(mapGroupChatPlatformItem(g, students.get(String(g._id))));
         } else if (eventQuery && gcQuery) {
             const [eventHeads, gcHeads] = await Promise.all([
                 Event.find(eventQuery).select("start").lean(),
@@ -1008,7 +1041,8 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
             ]);
             const byId = new Map<string, any>();
             for (const ev of events) byId.set(String(ev._id), mapEventPlatformItem(ev));
-            for (const g of gcs) byId.set(String(g._id), mapGroupChatPlatformItem(g));
+            const students = await oneToOneStudents(gcs as any[]);
+            for (const g of gcs) byId.set(String(g._id), mapGroupChatPlatformItem(g, students.get(String(g._id))));
             for (const head of pageHeads) {
                 const item = byId.get(head.id);
                 if (item) items.push(item);
