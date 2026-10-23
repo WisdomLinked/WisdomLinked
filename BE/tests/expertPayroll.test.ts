@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { payrollLiveNetCents } from "../utils/expertPayroll";
 
@@ -9,6 +9,20 @@ const AppState = require("../models/AppState");
 const payroll = require("../controllers/payroll.controller");
 const adminRoutes = require("../routes/adminRoutes");
 const { adminAuth } = require("../middlewares/requireAuth");
+const sgMail = require("@sendgrid/mail");
+
+type SentMail = { to?: unknown; from?: { email?: string }; subject?: string; html?: string };
+
+const sentMails: SentMail[] = [];
+const originalSgSend = sgMail.send;
+const recordSend = async (msg: SentMail) => {
+  sentMails.push(msg);
+  return [{ statusCode: 202 }];
+};
+sgMail.send = recordSend;
+after(() => {
+  sgMail.send = originalSgSend;
+});
 
 const EXPERT = "507f1f77bcf86cd799439011";
 const ADMIN = "507f1f77bcf86cd799439012";
@@ -359,6 +373,120 @@ test("a refund row lowers live net and leaves the cheque amount", async (t) => {
   assert.equal(listed.body.rows[0].differenceCents, -400);
   assert.equal(listed.body.rows[0].cheque.amountCents, 800);
   assert.equal(cheques[0].amountCents, 800);
+});
+
+test("recording a cheque emails the expert once and updating it does not", async (t) => {
+  install();
+  t.after(restore);
+  sentMails.length = 0;
+  charges = [marchCharge({ createdAt: "2026-10-15T18:00:00.000Z" })];
+  cheques = [];
+  seq = 1;
+  sgMail.send = recordSend;
+
+  const recorded = createRes();
+  await payroll.recordPayrollCheque({
+    user: { userId: ADMIN },
+    body: {
+      expertId: EXPERT,
+      year: 2026,
+      month: 10,
+      chequeNumber: "  1001 ",
+      chequeDate: "2026-10-31",
+      amountCents: 1,
+    },
+  }, recorded);
+  assert.equal(recorded.statusCode, 201);
+  assert.equal(recorded.body.amountCents, 800);
+  assert.equal(recorded.body.emailSent, true);
+  assert.equal(recorded.body.emailStatus, "sent");
+  assert.equal(cheques.length, 1);
+  assert.equal(sentMails.length, 1);
+  const mail = sentMails[0];
+  assert.equal(mail.subject, "Your WisdomLinked payout has been processed");
+  assert.deepEqual(mail.to, ["ada@example.com"]);
+  assert.equal(mail.from?.email, "noreply@wisdomlinked.com");
+  assert.match(mail.html || "", /1001/);
+  assert.match(mail.html || "", /\$8\.00/);
+  assert.match(mail.html || "", /October 2026/);
+  assert.match(mail.html || "", /Ada Expert/);
+  assert.match(mail.html || "", /expertdashboard/);
+  assert.doesNotMatch(mail.html || "", /platform fee/i);
+
+  const corrected = createRes();
+  await payroll.updatePayrollCheque({
+    params: { id: cheques[0]._id },
+    body: { chequeNumber: "2002", chequeDate: "2026-11-02" },
+  }, corrected);
+  assert.equal(corrected.statusCode, 200);
+  assert.equal(cheques[0].chequeNumber, "2002");
+  assert.equal(cheques[0].amountCents, 800);
+  assert.equal(sentMails.length, 1);
+});
+
+test("a cheque is kept when the payout email cannot be sent", async (t) => {
+  install();
+  t.after(() => {
+    sgMail.send = recordSend;
+    restore();
+  });
+  sentMails.length = 0;
+  charges = [marchCharge()];
+  cheques = [];
+  seq = 1;
+  sgMail.send = async () => {
+    throw new Error("SendGrid is down");
+  };
+
+  const recorded = createRes();
+  await payroll.recordPayrollCheque({
+    user: { userId: ADMIN },
+    body: {
+      expertId: EXPERT,
+      year: 2026,
+      month: 3,
+      chequeNumber: "1001",
+      chequeDate: "2026-03-31",
+    },
+  }, recorded);
+  assert.equal(recorded.statusCode, 201);
+  assert.equal(recorded.body.emailSent, false);
+  assert.equal(recorded.body.emailStatus, "failed");
+  assert.equal(cheques.length, 1);
+  assert.equal(cheques[0].amountCents, 800);
+  assert.equal(cheques[0].chequeNumber, "1001");
+});
+
+test("a cheque is kept when the expert has no email", async (t) => {
+  install();
+  t.after(restore);
+  sentMails.length = 0;
+  charges = [marchCharge()];
+  cheques = [];
+  seq = 1;
+  sgMail.send = recordSend;
+  User.find = () => ({
+    select() { return this; },
+    lean: async () => [{ _id: EXPERT, username: "Ada Expert", email: "  " }],
+  });
+
+  const recorded = createRes();
+  await payroll.recordPayrollCheque({
+    user: { userId: ADMIN },
+    body: {
+      expertId: EXPERT,
+      year: 2026,
+      month: 3,
+      chequeNumber: "1001",
+      chequeDate: "2026-03-31",
+    },
+  }, recorded);
+  assert.equal(recorded.statusCode, 201);
+  assert.equal(recorded.body.emailSent, false);
+  assert.equal(recorded.body.emailStatus, "no_email");
+  assert.equal(sentMails.length, 0);
+  assert.equal(cheques.length, 1);
+  assert.equal(cheques[0].chequeNumber, "1001");
 });
 
 test("a payroll month is unique per expert", () => {

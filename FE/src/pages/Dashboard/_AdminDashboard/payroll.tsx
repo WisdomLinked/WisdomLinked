@@ -47,6 +47,16 @@ function chequeDateValue(value?: string): string {
   return `${date.getUTCFullYear()}-${month}-${day}`;
 }
 
+function recordNotice(result: { emailSent?: boolean; emailStatus?: string }): string {
+  if (result.emailStatus === 'no_email') {
+    return 'The cheque was recorded. This expert has no email address, so no payout email was sent.';
+  }
+  if (result.emailSent === false) {
+    return 'The cheque was recorded and the email could not be sent.';
+  }
+  return 'Cheque recorded.';
+}
+
 function differenceCopy(row: PayrollRow): string {
   if (!row.cheque || row.differenceCents === 0) return '';
   const gap = Math.abs(row.differenceCents);
@@ -119,7 +129,7 @@ export default function AdminPayroll() {
       setError('Could not save the cheque.');
       return;
     }
-    setNotice(row.cheque ? 'Cheque details updated. The amount is unchanged.' : 'Cheque recorded.');
+    setNotice(row.cheque ? 'Cheque details updated. The amount is unchanged.' : recordNotice(result));
     setDrafts((current) => {
       const next = { ...current };
       delete next[row.expertId];
