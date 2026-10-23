@@ -80,6 +80,8 @@ export type AuditCheque = {
   year: number;
   month: number;
   amountCents: number;
+  chequeNumber?: string;
+  chequeDate?: string | Date | null;
 };
 
 export function paymentUtcMonth(value?: string | Date | null): { year: number; month: number } | null {

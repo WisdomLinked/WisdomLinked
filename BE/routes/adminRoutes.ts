@@ -75,6 +75,7 @@ const {
     recordPayrollCheque,
     updatePayrollCheque,
     listExpertPayroll,
+    listPayrollCheques,
 } = require("../controllers/payroll.controller");
 
 const {
@@ -93,6 +94,7 @@ router.get("/pricingSettings", adminAuth, getPricingSettings)
 router.post("/pricingSettings", adminAuth, setPricingSettings)
 router.get("/payroll", adminAuth, listPayroll)
 router.post("/payroll", adminAuth, recordPayrollCheque)
+router.get("/payroll/cheques", adminAuth, listPayrollCheques)
 router.get("/payroll/expert/:expertId", adminAuth, listExpertPayroll)
 router.patch("/payroll/:id", adminAuth, updatePayrollCheque)
 router.post("/setSeminarApprovalDeadline", adminAuth, setSeminarApprovalDeadline)

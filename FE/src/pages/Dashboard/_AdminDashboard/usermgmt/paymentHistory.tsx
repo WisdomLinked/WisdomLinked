@@ -117,6 +117,7 @@ const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
     <PaymentHistoryView
       rows={histories}
       summary={summary}
+      cheques={cheques}
       rates={rates}
       totalCount={totalCount}
       currentPage={currentPage}

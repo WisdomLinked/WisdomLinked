@@ -497,10 +497,86 @@ test("a payroll month is unique per expert", () => {
   assert.equal(unique, true);
 });
 
+test("admin cheque list is newest month first and names the expert", async (t) => {
+  install();
+  t.after(restore);
+  const OTHER = "507f1f77bcf86cd799439099";
+  const MISSING = "507f1f77bcf86cd799439088";
+  User.find = () => ({
+    select() { return this; },
+    lean: async () => [
+      { _id: EXPERT, username: "Ada Expert", email: "ada@example.com" },
+      { _id: OTHER, username: "", email: "nameless@example.com" },
+    ],
+  });
+  cheques = [
+    {
+      _id: "old",
+      expert: EXPERT,
+      year: 2026,
+      month: 3,
+      amountCents: 800,
+      chequeNumber: "1001",
+      chequeDate: new Date("2026-03-31T00:00:00.000Z"),
+      recordedBy: ADMIN,
+    },
+    {
+      _id: "later-date",
+      expert: EXPERT,
+      year: 2026,
+      month: 10,
+      amountCents: 4000,
+      chequeNumber: "3003",
+      chequeDate: new Date("2026-10-20T00:00:00.000Z"),
+      recordedBy: ADMIN,
+    },
+    {
+      _id: "earlier-date",
+      expert: OTHER,
+      year: 2026,
+      month: 10,
+      amountCents: 1200,
+      chequeNumber: "2002",
+      chequeDate: new Date("2026-10-02T00:00:00.000Z"),
+      recordedBy: ADMIN,
+    },
+    {
+      _id: "missing-user",
+      expert: MISSING,
+      year: 2025,
+      month: 12,
+      amountCents: 500,
+      chequeNumber: "0001",
+      chequeDate: new Date("2025-12-01T00:00:00.000Z"),
+      recordedBy: ADMIN,
+    },
+  ];
+
+  const listed = createRes();
+  await payroll.listPayrollCheques({}, listed);
+  assert.equal(listed.statusCode, 200);
+  assert.deepEqual(
+    listed.body.cheques.map((row: { chequeNumber: string }) => row.chequeNumber),
+    ["3003", "2002", "1001", "0001"],
+  );
+  assert.equal(listed.body.cheques[0].expertName, "Ada Expert");
+  assert.equal(listed.body.cheques[0].expertEmail, "ada@example.com");
+  assert.equal(listed.body.cheques[0].expertId, EXPERT);
+  assert.equal(listed.body.cheques[0].amountCents, 4000);
+  assert.equal(listed.body.cheques[0].year, 2026);
+  assert.equal(listed.body.cheques[0].month, 10);
+  assert.equal(String(listed.body.cheques[0].recordedBy), ADMIN);
+  assert.equal(listed.body.cheques[1].expertName, "nameless@example.com");
+  assert.equal(listed.body.cheques[1].expertEmail, "nameless@example.com");
+  assert.equal(listed.body.cheques[3].expertName, "Expert");
+  assert.equal(listed.body.cheques[3].expertEmail, "");
+});
+
 test("payroll routes require admin auth", async () => {
   const routes: Array<[string, string]> = [
     ["get", "/payroll"],
     ["post", "/payroll"],
+    ["get", "/payroll/cheques"],
     ["get", "/payroll/expert/:expertId"],
     ["patch", "/payroll/:id"],
   ];

@@ -947,6 +947,15 @@ export const listExpertPayroll = async (expertId: string) => {
     }
 }
 
+export const listPayrollCheques = async () => {
+    try {
+        const res = await api.get("admin/payroll/cheques");
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+}
+
 export const createStripePaymentIntent = async (data: any) => {
     try {
         const res = await api.post("auth/createStripePaymentIntent", data);
