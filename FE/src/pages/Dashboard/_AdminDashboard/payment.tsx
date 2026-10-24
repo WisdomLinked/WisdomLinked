@@ -85,6 +85,7 @@ const Payment = () => {
 
   const [emailDraft, setEmailDraft] = useState(filters.email);
   const [stripeMode, setPlatformStripeMode] = useState('test');
+  const [historiesReady, setHistoriesReady] = useState(() => Boolean(filters.mode));
   const [approvalDeadlineHours, setApprovalDeadlineHours] = useState(24);
   const [deadlineInput, setDeadlineInput] = useState('24');
   const [paymentWindowHours, setPaymentWindowHours] = useState(48);
@@ -120,6 +121,8 @@ const Payment = () => {
     },
     [setSearchParams],
   );
+  const writeParamsRef = useRef(writeParams);
+  writeParamsRef.current = writeParams;
 
   const patchFilters = useCallback(
     (patch: Partial<HistoryFilters>) => {
@@ -178,8 +181,9 @@ const Payment = () => {
   }, [currentPage, pageSize, filters.email, filters.mode, filters.status, filters.type, filters.from, filters.to]);
 
   useEffect(() => {
+    if (!historiesReady) return;
     void loadHistories();
-  }, [loadHistories]);
+  }, [historiesReady, loadHistories]);
 
   useEffect(() => {
     let cancelled = false;
@@ -226,6 +230,12 @@ const Payment = () => {
       const response = await getStripeMode();
       if (response) {
         setPlatformStripeMode(response.stripeMode || 'test');
+        const current = parsedRef.current;
+        if (response.stripeMode && !current.filters.mode) {
+          const next = { ...current.filters, mode: response.stripeMode };
+          parsedRef.current = { ...current, filters: next };
+          writeParamsRef.current(next, current.page, current.pageSize);
+        }
         const hours =
           typeof response.seminarApprovalDeadlineHours === 'number'
             ? response.seminarApprovalDeadlineHours
@@ -237,12 +247,16 @@ const Payment = () => {
         setPaymentWindowHours(windowHours);
         setPaymentWindowInput(String(windowHours));
       }
+      setHistoriesReady(true);
     })();
     void loadIntegrityReport();
   }, [loadIntegrityReport]);
 
   const updateStripeMode = async (next: string) => {
-    if (next === stripeMode) return;
+    if (next === stripeMode) {
+      if (parsedRef.current.filters.mode !== next) patchFilters({ mode: next });
+      return;
+    }
     if (next === 'live' && !window.confirm('Switch Stripe to Live mode? Charges will use real money.')) {
       return;
     }
@@ -254,6 +268,7 @@ const Payment = () => {
       return;
     }
     setPlatformStripeMode(next);
+    patchFilters({ mode: next });
     notify.success(`Stripe mode set to ${next}.`);
   };
 
