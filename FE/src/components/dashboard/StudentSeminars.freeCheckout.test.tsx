@@ -22,13 +22,41 @@ vi.mock('../../api/api', () => ({
   quoteBookingCharge: (...args: unknown[]) => quoteBookingCharge(...args),
 }));
 
-vi.mock('./StudentBookingCheckout', () => ({
-  default: () => <div data-testid="student-checkout" />,
-  quoteRequestBody: (details: { groupChatId?: string }, priceDollars = 0) => ({
-    groupChatId: details.groupChatId,
-    advertisedCents: Math.max(0, Math.round(Number(priceDollars) * 100)),
-  }),
-}));
+vi.mock('./StudentBookingCheckout', () => {
+  const money = (cents: number) => `$${(Math.round(Number(cents) || 0) / 100).toFixed(2)}`;
+  const ChargeLines = ({
+    quote,
+  }: {
+    quote: { advertisedCents: number; platformFeeCents: number; taxCents: number };
+  }) => (
+    <dl>
+      <div>
+        <dt>Price</dt>
+        <dd>{money(quote.advertisedCents)}</dd>
+      </div>
+      {quote.platformFeeCents > 0 ? (
+        <div>
+          <dt>Platform fee</dt>
+          <dd>{money(quote.platformFeeCents)}</dd>
+        </div>
+      ) : null}
+      {quote.taxCents > 0 ? (
+        <div>
+          <dt>Tax</dt>
+          <dd>{money(quote.taxCents)}</dd>
+        </div>
+      ) : null}
+    </dl>
+  );
+  return {
+    default: () => <div data-testid="student-checkout" />,
+    quoteRequestBody: (details: { groupChatId?: string }, priceDollars = 0) => ({
+      groupChatId: details.groupChatId,
+      advertisedCents: Math.max(0, Math.round(Number(priceDollars) * 100)),
+    }),
+    ChargeLines,
+  };
+});
 
 const freeSeminar = {
   _id: 'sem-free',
@@ -77,7 +105,8 @@ describe('StudentSeminars $0 advertised price', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^view details$/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm booking/i }));
 
-    expect(await screen.findByText('$1.00')).toBeTruthy();
+    expect(await screen.findByText('Platform fee')).toBeTruthy();
+    expect(screen.getAllByText('$1.00').length).toBeGreaterThanOrEqual(2);
     fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
 
     expect(await screen.findByTestId('student-checkout')).toBeTruthy();

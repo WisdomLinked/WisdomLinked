@@ -97,42 +97,58 @@ vi.mock('./StudentExpertBookingPicker', () => ({
 
 
 
-vi.mock('./StudentBookingCheckout', () => ({
+vi.mock('./StudentBookingCheckout', () => {
+  const money = (cents: number) => `$${(Math.round(Number(cents) || 0) / 100).toFixed(2)}`;
+  const ChargeLines = ({
+    quote,
+  }: {
+    quote: { advertisedCents: number; platformFeeCents: number; taxCents: number };
+  }) => (
+    <dl className="mt-3 space-y-1 text-[13px] text-[#1A3A4A]">
+      <div className="flex justify-between gap-3">
+        <dt>Price</dt>
+        <dd className="tabular-nums">{money(quote.advertisedCents)}</dd>
+      </div>
+      {quote.platformFeeCents > 0 ? (
+        <div className="flex justify-between gap-3">
+          <dt>Platform fee</dt>
+          <dd className="tabular-nums">{money(quote.platformFeeCents)}</dd>
+        </div>
+      ) : null}
+      {quote.taxCents > 0 ? (
+        <div className="flex justify-between gap-3">
+          <dt>Tax</dt>
+          <dd className="tabular-nums">{money(quote.taxCents)}</dd>
+        </div>
+      ) : null}
+    </dl>
+  );
 
-  default: ({ onPaymentSuccess, onCancel, cancelLabel = 'Cancel pay' }: any) => (
-
-    <div data-testid="student-checkout">
-
-      <button type="button" onClick={() => onPaymentSuccess('pi_test')}>
-
-        Pay mock
-
-      </button>
-
-      <button type="button" onClick={onCancel}>
-
-        {cancelLabel}
-
-      </button>
-
-    </div>
-
-  ),
-
-  quoteRequestBody: (details: any, priceDollars = 0) => ({
-    groupChatId: details?.groupChatId,
-    expertId: details?.expert ? String(details.expert) : undefined,
-    duration: details?.duration,
-    advertisedCents: Math.max(0, Math.round(Number(priceDollars) * 100)),
-  }),
-
-  completeStudentBookingFromStorage: vi.fn(),
-
-}));
+  return {
+    default: ({ onPaymentSuccess, onCancel, cancelLabel = 'Cancel pay' }: any) => (
+      <div data-testid="student-checkout">
+        <button type="button" onClick={() => onPaymentSuccess('pi_test')}>
+          Pay mock
+        </button>
+        <button type="button" onClick={onCancel}>
+          {cancelLabel}
+        </button>
+      </div>
+    ),
+    quoteRequestBody: (details: any, priceDollars = 0) => ({
+      groupChatId: details?.groupChatId,
+      expertId: details?.expert ? String(details.expert) : undefined,
+      duration: details?.duration,
+      advertisedCents: Math.max(0, Math.round(Number(priceDollars) * 100)),
+    }),
+    completeStudentBookingFromStorage: vi.fn(),
+    ChargeLines,
+  };
+});
 
 
 
-import { getExpertById, createGroupChatByUser } from '../../api/api';
+import { getExpertById, createGroupChatByUser, quoteBookingCharge } from '../../api/api';
 
 
 
@@ -187,6 +203,7 @@ describe('ExpertProfile booking', () => {
   beforeEach(() => {
 
     vi.clearAllMocks();
+    vi.mocked(quoteBookingCharge).mockResolvedValue(null);
 
     vi.mocked(getExpertById).mockResolvedValue({
 
@@ -617,6 +634,31 @@ describe('ExpertProfile booking', () => {
 
     expect(await screen.findByText('Review your booking')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /review booking/i })).not.toBeInTheDocument();
+  });
+
+  it('shows platform fee and server total on the paid review step', async () => {
+    vi.mocked(quoteBookingCharge).mockResolvedValue({
+      sessionType: 'oneToOne',
+      advertisedCents: 6000,
+      platformFeeCents: 180,
+      taxCents: 0,
+      chargeCents: 6180,
+    });
+
+    render(
+      <Provider store={store}>
+        <ExpertProfile mentor={mentor} onBack={vi.fn()} />
+      </Provider>,
+    );
+
+    await screen.findByTestId('slot-picker');
+    fireEvent.click(screen.getByTestId('pick-slot'));
+
+    const summary = (await screen.findByText('Review your booking')).closest('div') as HTMLElement;
+    expect(await within(summary).findByText('Platform fee')).toBeInTheDocument();
+    expect(within(summary).getByText('$1.80')).toBeInTheDocument();
+    expect(within(summary).getByText('$61.80')).toBeInTheDocument();
+    expect(within(summary).getByText('$60.00')).toBeInTheDocument();
   });
 
 });
