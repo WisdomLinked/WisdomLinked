@@ -128,7 +128,7 @@ export const payButtonLabel = (
   return name ? `Pay ${totalLabel} with ${name}` : `Pay ${totalLabel}`;
 };
 
-function ChargeLines({ quote }: { quote: BookingQuote }) {
+export function ChargeLines({ quote }: { quote: BookingQuote }) {
   return (
     <dl className="mt-3 space-y-1 text-[13px] text-[#1A3A4A]">
       <div className="flex justify-between gap-3">

@@ -25,7 +25,11 @@ import { SetLoadingStatus } from '../../actions/appActions';
 import { notify } from '../../utils/notify';
 import { paymentBannerMessage, stripeTransactionId } from '../../utils/paymentBanner';
 import { updateMe } from '../../actions/authActions';
-import StudentBookingCheckout, { quoteRequestBody } from './StudentBookingCheckout';
+import StudentBookingCheckout, {
+  ChargeLines,
+  quoteRequestBody,
+  type BookingQuote,
+} from './StudentBookingCheckout';
 import { formatDollarsFromCents } from '../../utils/bookingPrice';
 import { usePeerProfileModal } from '../../hooks/usePeerProfileModal';
 import seminarFallbackImg from '../../assets/images/dashboard_img1.png';
@@ -183,7 +187,7 @@ export default function StudentSeminars({
   );
   const [seatPaying, setSeatPaying] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
-  const [reviewQuote, setReviewQuote] = useState<{ chargeCents: number } | null>(null);
+  const [reviewQuote, setReviewQuote] = useState<BookingQuote | null>(null);
   const [reviewQuoteFailed, setReviewQuoteFailed] = useState(false);
   const dispatch = useDispatch();
   const { openPeerProfile, peerProfileModal } = usePeerProfileModal(userDetails?.role);
@@ -236,7 +240,13 @@ export default function StudentSeminars({
         setReviewQuoteFailed(true);
         return;
       }
-      setReviewQuote({ chargeCents: Number(response.chargeCents) || 0 });
+      setReviewQuote({
+        sessionType: response.sessionType,
+        advertisedCents: Number(response.advertisedCents) || 0,
+        platformFeeCents: Number(response.platformFeeCents) || 0,
+        taxCents: Number(response.taxCents) || 0,
+        chargeCents: Number(response.chargeCents) || 0,
+      });
     })();
     return () => {
       cancelled = true;
@@ -997,6 +1007,7 @@ export default function StudentSeminars({
                     <dt className="text-[#7A7A72]">Time</dt>
                     <dd className="text-right text-[#7A7A72]">{s.time} · {viewerTz}</dd>
                   </div>
+                  {reviewQuote ? <ChargeLines quote={reviewQuote} /> : null}
                   <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">
                     <dt className="text-[#7A7A72]">Total</dt>
                     <dd className="font-serif text-lg font-semibold">
