@@ -14,6 +14,7 @@ import {
   GraduationCap,
   ScrollText,
   Award,
+  FileText,
   Settings,
 } from 'lucide-react';
 
@@ -61,6 +62,7 @@ import UserMgmt from './Dashboard/_AdminDashboard/usermgmt';
 import Payment from './Dashboard/_AdminDashboard/payment';
 import AdminMajors from './Dashboard/_AdminDashboard/majors';
 import AdminAuditLog from './Dashboard/_AdminDashboard/auditLog';
+import TermsAgreementPage from './Dashboard/_AdminDashboard/terms';
 import AdminExpertsManager from '../components/dashboard/AdminExpertsManager';
 import Chatbot from '../components/chatbot';
 import { PendingContactRequestsProvider } from '../hooks/usePendingContactRequestsCount';
@@ -79,6 +81,7 @@ const adminNavItems = [
   { id: 'majors', label: 'Majors', icon: GraduationCap },
   { id: 'featuredExperts', label: 'Featured experts', icon: Award },
   { id: 'auditLog', label: 'Audit log', icon: ScrollText },
+  { id: 'terms', label: 'Terms & Agreement', icon: FileText },
   { id: 'chatBotQA', label: 'HelpBot Q&A', icon: Bot },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
@@ -518,6 +521,8 @@ export default function AdminDashboard() {
                             ? 'Featured experts'
                           : section === 'auditLog'
                             ? 'Audit log'
+                          : section === 'terms'
+                            ? 'Terms & Agreement'
                           : section === 'settings'
                             ? 'Settings'
                           : 'Admin Dashboard';
@@ -560,6 +565,7 @@ export default function AdminDashboard() {
         <Route path="majors" element={<AdminMajors />} />
         <Route path="featuredExperts" element={<AdminExpertsManager />} />
         <Route path="auditLog" element={<AdminAuditLog />} />
+        <Route path="terms" element={<TermsAgreementPage />} />
         <Route path="chatBotQA" element={<ChatBotQA />} />
         <Route path="*" element={<AdminOverview go={goToSection} />} />
       </Routes>
