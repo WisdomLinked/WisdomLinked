@@ -11,6 +11,9 @@ const api = vi.hoisted(() => ({
   doSetExpertBookingNoticeHours: vi.fn(),
 }));
 vi.mock('../../../api/api', () => api);
+vi.mock('../../../api/termsApi', () => ({
+  getRequiredContracts: () => Promise.reject(new Error('terms unavailable in setup card tests')),
+}));
 
 let savedUser: Record<string, unknown> = {};
 vi.mock('../../../actions/authActions', () => ({

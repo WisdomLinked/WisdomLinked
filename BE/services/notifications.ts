@@ -382,6 +382,57 @@ sendPaymentConfirmationEmail = async ({ to, sessionType, sessionName, expertName
     await sendNotificationEmail(to, subjectLine, html);
 }
 
+const payrollMonthLabel = (year: any, month: any) =>
+    new Date(Date.UTC(Number(year), Number(month) - 1, 1)).toLocaleString('en-US', {
+        timeZone: 'UTC',
+        month: 'long',
+        year: 'numeric',
+    });
+
+const payrollChequeDateLabel = (value: any) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-US', {
+        timeZone: 'UTC',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    });
+};
+
+/**
+ * Sent once, when an admin first records a payroll cheque.
+ * Correcting the cheque number or date does not send this again.
+ */
+const sendPayrollChequeEmail = async ({
+    targetEmail,
+    userName,
+    year,
+    month,
+    amountCents,
+    chequeNumber,
+    chequeDate,
+}: any) => {
+    const monthLabel = payrollMonthLabel(year, month);
+    const subject = 'Your WisdomLinked payout has been processed';
+    const html = renderEmail({
+        heading: 'Your payout has been processed',
+        previewText: 'Your WisdomLinked payout has been processed.',
+        blocks: [
+            emailParagraph(`Dear ${emailEscape(userName)},`),
+            emailParagraph(`WisdomLinked has processed your payout for ${emailEscape(monthLabel)}.`),
+            emailFacts([
+                ['Amount', emailMoneyFromCents(amountCents)],
+                ['Cheque number', chequeNumber],
+                ['Cheque date', payrollChequeDateLabel(chequeDate)],
+            ]),
+            emailCallout('Your cheque is on its way. No further action is needed.', 'good'),
+            emailButton('Open your dashboard', appDashboardUrl('expert')),
+        ],
+    });
+    return sendNotificationEmail(targetEmail, subject, html);
+};
+
 /**
  * Send now. There is deliberately no scheduled-send path: SendGrid's `sendAt`
  * refuses anything more than 72h ahead and cannot be cancelled without a
@@ -423,5 +474,6 @@ module.exports = {
     sendExpertResumeFormatReminderEmail,
     shareMeetingId,
     sendPaymentConfirmationEmail,
-    sendNotificationEmail
+    sendNotificationEmail,
+    sendPayrollChequeEmail,
 };

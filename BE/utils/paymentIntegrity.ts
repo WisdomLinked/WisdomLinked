@@ -47,6 +47,9 @@ export type SeatCheckInput = {
     ownCharges?: Array<{ status?: string }>;
     /** A completed charge for this person exists on this session or another date in the same series. */
     seriesHasCompletedCharge?: boolean;
+    /** The series payment that covered this date was refunded (it sits on another date). */
+    seriesHasRefundedCharge?: boolean;
+    sessionEnded?: boolean;
 };
 
 export type SeatCheck = {
@@ -59,6 +62,7 @@ export type SeatCheck = {
 export function checkSeat(input: SeatCheckInput): SeatCheck {
     const folded = foldChargeRows(input.ownCharges || []);
     if (input.seriesHasCompletedCharge) folded.hasCompletedCharge = true;
+    if (input.seriesHasRefundedCharge) folded.hasRefundedCharge = true;
 
     const noChargeYet = !folded.hasCompletedCharge
         && !folded.hasPendingCharge
@@ -74,7 +78,36 @@ export function checkSeat(input: SeatCheckInput): SeatCheck {
         priceCents: input.priceCents,
         ...folded,
     });
+    if (verdict === 'refunded' && input.sessionEnded) return { verdict, list: false };
     return { verdict, list: isActionable(verdict) };
+}
+
+/**
+ * An admin refund adds a refund row and leaves the charge 'completed'. A completed charge
+ * whose payment intent has any refund row is read as refunded, partial refunds included.
+ */
+export function markRefundedCharges<T extends { status?: string; paymentIntent?: string | null }>(
+    rows: T[],
+    refundedIntents: Set<string>,
+): T[] {
+    return (rows || []).map((row) => (
+        row?.status === 'completed' && row.paymentIntent && refundedIntents.has(String(row.paymentIntent))
+            ? { ...row, status: 'refunded' }
+            : row
+    ));
+}
+
+/** Over once its end has passed; without an end, once start + duration has. Undated is not over. */
+export function sessionHasEnded(
+    session: { start?: unknown; end?: unknown; duration?: unknown } | null | undefined,
+    nowMs: number = Date.now(),
+): boolean {
+    const endMs = session?.end ? new Date(session.end as any).getTime() : NaN;
+    if (Number.isFinite(endMs)) return endMs <= nowMs;
+    const startMs = session?.start ? new Date(session.start as any).getTime() : NaN;
+    if (!Number.isFinite(startMs)) return false;
+    const minutes = Number(session?.duration);
+    return startMs + (Number.isFinite(minutes) && minutes > 0 ? minutes * 60 * 1000 : 0) <= nowMs;
 }
 
 export type IntegritySummary = Record<BookingPaymentVerdict, number>;

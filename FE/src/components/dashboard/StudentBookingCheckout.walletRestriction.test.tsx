@@ -4,13 +4,19 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 import StudentBookingCheckout from './StudentBookingCheckout';
 import { ACCOUNT_BLOCKED_MESSAGE, ACCOUNT_UNDER_REVIEW_MESSAGE } from '../../utils/accountStatus';
+import { computeSessionCharge, DEFAULT_PRICING_RATES } from '../../utils/bookingPrice';
 
 const storeState = { auth: { userDetails: { email: 's@test.com', status: 'active' } } };
 vi.mock('../../store', () => ({ store: { getState: () => storeState, dispatch: vi.fn() } }));
 
+const quoteBookingCharge = vi.fn(async (body: any) =>
+  computeSessionCharge(Number(body?.advertisedCents) || 0, DEFAULT_PRICING_RATES, 'oneToOne'),
+);
+
 vi.mock('../../api/api', () => ({
   getStripeMode: vi.fn(async () => ({ stripeMode: 'test' })),
   createStripePaymentIntent: vi.fn(),
+  quoteBookingCharge: (...args: any[]) => quoteBookingCharge(...args),
 }));
 
 vi.mock('../../actions/appActions', () => ({

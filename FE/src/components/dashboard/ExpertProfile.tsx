@@ -17,9 +17,13 @@ import { useAppSelector } from '../../store';
 import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
 import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
 import StudentExpertBookingPicker from './StudentExpertBookingPicker';
-import StudentBookingCheckout from './StudentBookingCheckout';
+import StudentBookingCheckout, {
+  ChargeLines,
+  quoteRequestBody,
+  type BookingQuote,
+} from './StudentBookingCheckout';
 import { purposeOptionsFromServices, PURPOSE_OTHER } from '../../constants/serviceOptions';
-import { createGroupChatByUser, getExpertById, getMySeatRequests, profileImageFetch, registerForSeminar, requestSeminarSeat } from '../../api/api';
+import { createGroupChatByUser, getExpertById, getMySeatRequests, profileImageFetch, quoteBookingCharge, registerForSeminar, requestSeminarSeat } from '../../api/api';
 import {
   emptySeatRequestIndex,
   indexSeatRequests,
@@ -37,7 +41,7 @@ import {
 } from '../../utils/seatRequestWindow';
 import { normalizeExpertPrice } from '../../utils/schedulingSlots';
 import { EXPERT_SETUP_INCOMPLETE_FOR_STUDENT, isExpertSetupComplete } from './expertSetup/setupSteps';
-import { computeBookingPriceDollars } from '../../utils/bookingPrice';
+import { computeBookingPriceDollars, formatDollarsFromCents } from '../../utils/bookingPrice';
 import {
   defaultAppointmentDuration,
   formatOfferedDurationsList,
@@ -242,6 +246,52 @@ export default function ExpertProfile({
     if (hourly == null) return 0;
     return computeBookingPriceDollars(pickedDuration, hourly);
   }, [pickedDuration, expertDetails?.price]);
+
+  const [oneToOneQuote, setOneToOneQuote] = useState<BookingQuote | null>(null);
+  const [oneToOneQuoteFailed, setOneToOneQuoteFailed] = useState(false);
+
+  useEffect(() => {
+    if (bookingStep !== 'review' || !pickedDuration) {
+      setOneToOneQuote(null);
+      setOneToOneQuoteFailed(false);
+      return;
+    }
+    let cancelled = false;
+    setOneToOneQuote(null);
+    setOneToOneQuoteFailed(false);
+    const expertId = String(expertDetails?._id ?? mentor.id);
+    (async () => {
+      try {
+        const response = await quoteBookingCharge(
+          quoteRequestBody(
+            { expert: expertId, duration: pickedDuration, price: oneToOneSessionPrice },
+            oneToOneSessionPrice,
+          ),
+        );
+        if (cancelled) return;
+        if (!response || typeof response.chargeCents !== 'number') {
+          setOneToOneQuote(null);
+          setOneToOneQuoteFailed(true);
+          return;
+        }
+        setOneToOneQuote({
+          sessionType: response.sessionType,
+          advertisedCents: Number(response.advertisedCents) || 0,
+          platformFeeCents: Number(response.platformFeeCents) || 0,
+          taxCents: Number(response.taxCents) || 0,
+          chargeCents: response.chargeCents,
+        });
+        setOneToOneQuoteFailed(false);
+      } catch {
+        if (cancelled) return;
+        setOneToOneQuote(null);
+        setOneToOneQuoteFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingStep, oneToOneSessionPrice, pickedDuration, expertDetails?._id, mentor.id]);
 
   const pickedSlotDisplay = useMemo(() => {
     if (!pickedStart || !pickedEnd) return null;
@@ -871,7 +921,23 @@ export default function ExpertProfile({
                                     setSeminarCheckout(target);
                                     return;
                                   }
-                                  void registerSeminarFor('0', target);
+                                  void (async () => {
+                                    const quote = await quoteBookingCharge(
+                                      quoteRequestBody(
+                                        { groupChatId: target.id, price: target.price, name: target.name },
+                                        target.price,
+                                      ),
+                                    );
+                                    if (!quote || typeof quote.chargeCents !== 'number') {
+                                      setSeminarBookingError('Could not load the amount due. Please try again.');
+                                      return;
+                                    }
+                                    if (quote.chargeCents > 0) {
+                                      setSeminarCheckout(target);
+                                      return;
+                                    }
+                                    void registerSeminarFor('0', target);
+                                  })();
                                 }}
                                 className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#122635]"
                               >
@@ -1191,13 +1257,28 @@ export default function ExpertProfile({
                 <dt className="text-[#7A7A72]">Appointment duration</dt>
                 <dd className="font-semibold">{pickedDuration} min</dd>
               </div>
+              {oneToOneQuote ? (
+                <ChargeLines quote={oneToOneQuote} />
+              ) : oneToOneSessionPrice > 0 ? (
+                <div className="flex justify-between gap-2">
+                  <dt className="text-[#7A7A72]">Price</dt>
+                  <dd className="font-semibold tabular-nums">
+                    {formatDollarsFromCents(Math.round(oneToOneSessionPrice * 100))}
+                  </dd>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">
                 <dt className="text-[#7A7A72]">Total</dt>
                 <dd className="font-serif text-lg font-semibold">
-                  ${oneToOneSessionPrice.toFixed(2)}
+                  {oneToOneQuote ? formatDollarsFromCents(oneToOneQuote.chargeCents) : '…'}
                 </dd>
               </div>
             </dl>
+            {oneToOneQuoteFailed ? (
+              <p className="text-xs font-medium text-rose-700">
+                Could not load the amount due. Please try again.
+              </p>
+            ) : null}
 
             <div className="space-y-3 border-t border-[#E5E2DB] pt-3">
               <div>
@@ -1274,7 +1355,7 @@ export default function ExpertProfile({
             ) : null}
             <button
               type="button"
-              disabled={!!bookingFormError}
+              disabled={!!bookingFormError || (oneToOneSessionPrice <= 0 && !oneToOneQuote)}
               onClick={async () => {
                 if (!isExpertSetupComplete(expertDetails)) {
                   // The expert may have finished setup since this page loaded.

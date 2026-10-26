@@ -20,18 +20,20 @@ export default function SummaryStrip({
   conversationCount,
   seminarCount,
   netEarningsCents,
+  earningsLabel = 'Expert net',
   lastActive,
 }: {
   conversationCount: number;
   seminarCount: number;
   netEarningsCents: number;
+  earningsLabel?: string;
   lastActive?: string;
 }) {
   return (
     <div className="grid grid-cols-2 divide-x divide-y divide-audit-line overflow-hidden rounded-xl border border-audit-line lg:grid-cols-4 lg:divide-y-0">
       <Stat label="Conversations" value={String(conversationCount)} />
       <Stat label="Seminars" value={String(seminarCount)} />
-      <Stat label="Net earnings" value={formatUsdFromCents(netEarningsCents)} />
+      <Stat label={earningsLabel} value={formatUsdFromCents(netEarningsCents)} />
       <Stat label="Last active" value={formatLastActive(lastActive)} />
     </div>
   );

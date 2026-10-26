@@ -6,7 +6,8 @@ const User = require("../models/User");
 const Keyword = require("../models/Keyword");
 const PaymentHistory = require("../models/PaymentHistory");
 const { shareMeetingId } = require("../services/notifications")
-const { classifyPayment, summarizePaymentHistory } = require("../utils/paymentSummary");
+const { classifyPayment, summarizePaymentHistory, expertDisplayCents } = require("../utils/paymentSummary");
+import { loadPricingSettings } from '../utils/pricingSettings';
 
 function expertUserUpdateFilter(req: any) {
     if (req.user?.userId) {
@@ -390,14 +391,20 @@ const getMyPaymentHistory = async (req: any, res: Response) => {
             .limit(500)
             .lean();
 
+        const settings = await loadPricingSettings();
+        const rates = {
+            seminarCommissionPercent: settings.seminar.expertCommissionPercent,
+            oneToOneCommissionPercent: settings.oneToOne.expertCommissionPercent,
+        };
         const enriched = histories.map((h: any) => ({
             ...h,
             paymentKind: classifyPayment(h),
+            expertNetCents: expertDisplayCents(h, histories, rates),
         }));
 
         return res.status(200).json({
             result: enriched,
-            summary: summarizePaymentHistory(histories),
+            summary: summarizePaymentHistory(histories, rates),
         });
     } catch (err: any) {
         console.log(err);

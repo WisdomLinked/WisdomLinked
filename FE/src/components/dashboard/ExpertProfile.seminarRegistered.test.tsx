@@ -5,7 +5,7 @@ import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 
 import ExpertProfile from './ExpertProfile';
-import { getExpertById, getMySeatRequests } from '../../api/api';
+import { getExpertById, getMySeatRequests, quoteBookingCharge, registerForSeminar } from '../../api/api';
 
 const checkoutProps = vi.hoisted(() => ({ calls: [] as Array<Record<string, unknown>> }));
 
@@ -15,6 +15,7 @@ vi.mock('../../api/api', () => ({
   profileImageFetch: vi.fn(async () => null),
   getMySeatRequests: vi.fn(async () => ({ result: [] })),
   registerForSeminar: vi.fn(),
+  quoteBookingCharge: vi.fn(async () => null),
 }));
 
 vi.mock('./StudentExpertBookingPicker', () => ({
@@ -26,6 +27,10 @@ vi.mock('./StudentBookingCheckout', () => ({
     checkoutProps.calls.push(props);
     return <div data-testid="student-checkout" />;
   },
+  quoteRequestBody: (details: any, priceDollars = 0) => ({
+    groupChatId: details?.groupChatId,
+    advertisedCents: Math.max(0, Math.round(Number(priceDollars) * 100)),
+  }),
 }));
 
 const mentor = {
@@ -155,12 +160,32 @@ describe('ExpertProfile seminar registration state', () => {
     expect(await screen.findByRole('button', { name: /book the session/i })).toBeTruthy();
   });
 
-  it('opens seminar registration checkout with a card hold', async () => {
+  it('opens checkout for a $0 seminar instead of registering with payment intent 0', async () => {
+    vi.mocked(getExpertById).mockResolvedValue({
+      result: {
+        _id: 'expert-1',
+        timeSlots: [18],
+        price: 60,
+        timeZone: 'UTC',
+        events: [],
+        groupChats: [seminar({ price: 0 })],
+        pendingGroupChats: [],
+      },
+    } as any);
+    vi.mocked(quoteBookingCharge).mockResolvedValue({
+      sessionType: 'seminar',
+      advertisedCents: 0,
+      platformFeeCents: 100,
+      taxCents: 0,
+      chargeCents: 100,
+    });
+
     renderProfile([]);
 
     fireEvent.click(await screen.findByRole('button', { name: /book the session/i }));
 
     expect(await screen.findByTestId('student-checkout')).toBeTruthy();
+    expect(registerForSeminar).not.toHaveBeenCalled();
     expect(checkoutProps.calls.at(-1)).toMatchObject({ type: 'Seminar', holdsFunds: true });
   });
 

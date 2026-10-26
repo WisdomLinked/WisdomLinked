@@ -149,11 +149,54 @@ export function seminarBaseFilter(): Record<string, unknown> {
     };
 }
 
+export function oneToOneGroupFilter(): Record<string, unknown> {
+    return { type: "individual" };
+}
+
+export const CANCELLED_SESSION_STATUSES = ["cancelled", "canceled", "declined"] as const;
+
 export function cancelledSessionFilter(from: Date | null, to: Date | null, now: Date): Record<string, unknown> {
     return {
         ...heldStartFilter(from, to, now),
-        status: { $in: ["cancelled", "canceled", "declined"] },
+        status: { $in: [...CANCELLED_SESSION_STATUSES] },
     };
+}
+
+export function heldSessionFilter(from: Date | null, to: Date | null, now: Date): Record<string, unknown> {
+    return {
+        ...heldStartFilter(from, to, now),
+        status: { $nin: [...CANCELLED_SESSION_STATUSES] },
+    };
+}
+
+export function upcomingSessionFilter(now: Date): Record<string, unknown> {
+    return {
+        ...upcomingStartFilter(now),
+        status: { $nin: [...CANCELLED_SESSION_STATUSES] },
+    };
+}
+
+export function sumMonthCountRows(...lists: { _id?: unknown; count?: number }[][]): { _id: string; count: number }[] {
+    const byMonth = new Map<string, number>();
+    for (const rows of lists) {
+        for (const row of rows || []) {
+            const month = typeof row._id === "string" ? row._id : "";
+            if (!month) continue;
+            byMonth.set(month, (byMonth.get(month) || 0) + (Number(row.count) || 0));
+        }
+    }
+    return [...byMonth.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([month, count]) => ({ _id: month, count }));
+}
+
+export function statusListFilter(raw: unknown): { status: string | { $in: string[] } } | null {
+    const statuses = String(raw ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    if (!statuses.length) return null;
+    return { status: statuses.length === 1 ? statuses[0] : { $in: statuses } };
 }
 
 export function monthKeyUTC(d: Date): string {

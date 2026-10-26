@@ -73,7 +73,8 @@ test('an admin full refund nets to zero, a partial refund leaves the remainder',
         { status: 'completed', paymentType: 'charge', amount: 5000, groupChat: { type: 'seminar' } },
         { status: 'completed', paymentType: 'refund', amount: 2000, groupChat: { type: 'seminar' } },
     ]);
-    assert.equal(partial.seminarsCents, 3000);
+    // Expert net on $50 at the default 20% is $40. A $20 refund reverses $16 of that.
+    assert.equal(partial.seminarsCents, 2400);
 });
 
 test('refunds only offset their own bucket', () => {
@@ -83,8 +84,8 @@ test('refunds only offset their own bucket', () => {
         { status: 'completed', paymentType: 'charge', amount: 2000, groupChat: { type: 'individual' } },
     ]);
     assert.equal(summary.seminarsCents, 0);
-    assert.equal(summary.individualSessionsCents, 2000);
-    assert.equal(summary.totalReceivedCents, 2000);
+    assert.equal(summary.individualSessionsCents, 1600);
+    assert.equal(summary.totalReceivedCents, 1600);
 });
 
 test('uncaptured holds and failed payments are not revenue', () => {
@@ -98,8 +99,8 @@ test('uncaptured holds and failed payments are not revenue', () => {
 
 test('a captured seminar payment counts once', () => {
     const summary = summarizePaymentHistory([seminarCharge(5000)]);
-    assert.equal(summary.seminarsCents, 5000);
-    assert.equal(summary.totalReceivedCents, 5000);
+    assert.equal(summary.seminarsCents, 4000);
+    assert.equal(summary.totalReceivedCents, 4000);
 });
 
 test('missing or malformed amounts are ignored, not NaN', () => {
@@ -108,5 +109,35 @@ test('missing or malformed amounts are ignored, not NaN', () => {
         { status: 'completed', paymentType: 'charge', amount: null, groupChat: { type: 'seminar' } },
         seminarCharge(1000),
     ]);
-    assert.equal(summary.seminarsCents, 1000);
+    assert.equal(summary.seminarsCents, 800);
+});
+
+test('a stored expert net is used, and a historical zero stays zero', () => {
+    const summary = summarizePaymentHistory([
+        {
+            status: 'completed',
+            paymentType: 'charge',
+            amount: 10300,
+            expertNetCents: 8000,
+            groupChat: { type: 'individual' },
+        },
+        {
+            status: 'completed',
+            paymentType: 'charge',
+            amount: 0,
+            groupChat: { type: 'seminar' },
+        },
+    ], { seminarCommissionPercent: 50, oneToOneCommissionPercent: 50 });
+    assert.equal(summary.individualSessionsCents, 8000);
+    assert.equal(summary.seminarsCents, 0);
+    assert.equal(summary.totalReceivedCents, 8000);
+});
+
+test('seminar and 1:1 commissions are independent for old rows', () => {
+    const summary = summarizePaymentHistory([
+        { status: 'completed', paymentType: 'charge', amount: 10000, groupChat: { type: 'seminar' } },
+        { status: 'completed', paymentType: 'charge', amount: 10000, groupChat: { type: 'individual' } },
+    ], { seminarCommissionPercent: 10, oneToOneCommissionPercent: 25 });
+    assert.equal(summary.seminarsCents, 9000);
+    assert.equal(summary.individualSessionsCents, 7500);
 });
