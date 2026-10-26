@@ -97,6 +97,8 @@ vi.mock('./StudentExpertBookingPicker', () => ({
 
 
 
+const checkoutProps = vi.hoisted(() => ({ calls: [] as Array<Record<string, unknown>> }));
+
 vi.mock('./StudentBookingCheckout', () => {
   const money = (cents: number) => `$${(Math.round(Number(cents) || 0) / 100).toFixed(2)}`;
   const ChargeLines = ({
@@ -125,7 +127,9 @@ vi.mock('./StudentBookingCheckout', () => {
   );
 
   return {
-    default: ({ onPaymentSuccess, onCancel, cancelLabel = 'Cancel pay' }: any) => (
+    default: ({ onPaymentSuccess, onCancel, cancelLabel = 'Cancel pay', ...rest }: any) => {
+      checkoutProps.calls.push({ ...rest, cancelLabel });
+      return (
       <div data-testid="student-checkout">
         <button type="button" onClick={() => onPaymentSuccess('pi_test')}>
           Pay mock
@@ -134,7 +138,8 @@ vi.mock('./StudentBookingCheckout', () => {
           {cancelLabel}
         </button>
       </div>
-    ),
+      );
+    },
     quoteRequestBody: (details: any, priceDollars = 0) => ({
       groupChatId: details?.groupChatId,
       expertId: details?.expert ? String(details.expert) : undefined,
@@ -203,6 +208,7 @@ describe('ExpertProfile booking', () => {
   beforeEach(() => {
 
     vi.clearAllMocks();
+    checkoutProps.calls.length = 0;
     vi.mocked(quoteBookingCharge).mockResolvedValue(null);
 
     vi.mocked(getExpertById).mockResolvedValue({
@@ -315,6 +321,7 @@ describe('ExpertProfile booking', () => {
     fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
 
     expect(await screen.findByTestId('student-checkout')).toBeInTheDocument();
+    expect(checkoutProps.calls.at(-1)).toMatchObject({ type: '1:1 session', holdsFunds: true });
 
     expect(String(window.location.href)).not.toContain('customerdashboard/search');
   });
