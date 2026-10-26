@@ -6,6 +6,7 @@ import { chargeForAdvertised, loadPricingSettings, savePricingSettings } from '.
 import { seminarIsFull, firstFullFutureOccurrence, seatRequestUnavailableMessage } from '../utils/seminarCapacity';
 const SeminarSeatRequest = require("../models/SeminarSeatRequest");
 import { checkoutPaymentMetadata, retryLinkExpiry } from '../utils/retryPaymentLink';
+import { auditAmount, auditChanges, flattenForAudit } from '../utils/adminAuditChanges';
 import {
     normalizePaymentMode,
     isWallet,
@@ -324,12 +325,19 @@ const setSeminarApprovalDeadline = async (req, res) => {
             return res.status(400).send({ error: 'Deadline must be between 0 and 168 hours.' });
         }
         let appState = await AppState.findOne();
+        const previous = appState?.seminarApprovalDeadlineHours ?? 24;
         if (!appState) {
             appState = await AppState.create({ seminarApprovalDeadlineHours: hours });
         } else {
             appState.seminarApprovalDeadlineHours = hours;
             await appState.save();
         }
+        logAdminAction({
+            actor: req.user,
+            action: 'set_seminar_approval_deadline',
+            targetType: 'appState',
+            meta: { from: previous, to: hours },
+        });
         res.send({ result: 'SUCCESS', seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours });
     } catch (err) {
         console.log(err);
@@ -344,12 +352,19 @@ const setPaymentWindow = async (req, res) => {
             return res.status(400).send({ error: 'The payment window must be between 1 and 168 hours.' });
         }
         let appState = await AppState.findOne();
+        const previous = paymentWindowHours(appState);
         if (!appState) {
             appState = await AppState.create({ paymentWindowHours: hours });
         } else {
             appState.paymentWindowHours = hours;
             await appState.save();
         }
+        logAdminAction({
+            actor: req.user,
+            action: 'set_payment_window',
+            targetType: 'appState',
+            meta: { from: previous, to: hours },
+        });
         res.send({ result: 'SUCCESS', paymentWindowHours: appState.paymentWindowHours });
     } catch (err) {
         console.log(err);
@@ -777,6 +792,20 @@ const sendPaymentLinkToUser = async (req, res) => {
         const inline_msg = stripeAttachments();
         if (inline_msg.length) (msg as any).attachments = inline_msg;
         await sgMail.send(msg);
+
+        logAdminAction({
+            actor: req.user,
+            action: 'send_payment_link',
+            targetType: 'paymentHistory',
+            targetId: immediatePaymentHistory._id,
+            targetEmail: customerEmail,
+            meta: {
+                amount: auditAmount(finalAmount, paymentHistory.currency),
+                description: finalDescription,
+                originalPayment: String(paymentHistoryId),
+                stripeMode: currentStripeMode,
+            },
+        });
 
         res.status(200).json({
             status: 'SUCCESS',
@@ -1424,6 +1453,19 @@ const sendAdHocPaymentLink = async (req, res) => {
         await sgMail.send(emailMsg);
         console.log('Ad-hoc payment link email sent to:', customerEmail.trim());
 
+        logAdminAction({
+            actor: req.user,
+            action: 'send_adhoc_payment_link',
+            targetType: 'paymentHistory',
+            targetId: immediatePaymentHistory._id,
+            targetEmail: customerEmail.trim(),
+            meta: {
+                amount: auditAmount(finalAmount),
+                description: finalDescription,
+                stripeMode: currentStripeMode,
+            },
+        });
+
         res.status(200).json({
             status: 'SUCCESS',
             message: 'Payment link sent successfully.',
@@ -1501,12 +1543,13 @@ const getPricingSettings = async (req, res) => {
 
 const setPricingSettings = async (req, res) => {
     try {
+        const previous = await loadPricingSettings();
         const settings = await savePricingSettings(req.body);
         logAdminAction({
             actor: req.user,
             action: 'set_pricing_settings',
             targetType: 'appState',
-            meta: settings as unknown as Record<string, unknown>,
+            meta: { changes: auditChanges(flattenForAudit(previous), flattenForAudit(settings)) },
         });
         res.send({ result: 'SUCCESS', ...settings });
     } catch (err: any) {
