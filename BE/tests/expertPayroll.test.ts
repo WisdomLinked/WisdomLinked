@@ -6,6 +6,7 @@ const PaymentHistory = require("../models/PaymentHistory");
 const PayrollCheque = require("../models/PayrollCheque");
 const User = require("../models/User");
 const AppState = require("../models/AppState");
+const AdminAuditLog = require("../models/AdminAuditLog");
 const payroll = require("../controllers/payroll.controller");
 const adminRoutes = require("../routes/adminRoutes");
 const { adminAuth } = require("../middlewares/requireAuth");
@@ -50,6 +51,7 @@ type Cheque = {
 let charges: Charge[] = [];
 let cheques: Cheque[] = [];
 let seq = 1;
+let auditLogs: any[] = [];
 
 const originals = {
   historyFind: PaymentHistory.find,
@@ -57,6 +59,8 @@ const originals = {
   chequeFindOne: PayrollCheque.findOne,
   chequeCreate: PayrollCheque.create,
   chequeUpdate: PayrollCheque.findByIdAndUpdate,
+  chequeFindById: PayrollCheque.findById,
+  auditCreate: AdminAuditLog.create,
   userFind: User.find,
   appFind: AppState.findOne,
 };
@@ -76,6 +80,7 @@ const matchesCharge = (row: Charge, filter: any) => {
 };
 
 const install = () => {
+  auditLogs = [];
   PaymentHistory.find = (filter: any) => ({
     lean: async () => charges.filter((row) => matchesCharge(row, filter)),
   });
@@ -106,6 +111,17 @@ const install = () => {
     cheques.push(saved);
     return saved;
   };
+  PayrollCheque.findById = (id: string) => ({
+    select() { return this; },
+    lean: async () => {
+      const row = cheques.find((cheque) => cheque._id === String(id));
+      return row ? { ...row } : null;
+    },
+  });
+  AdminAuditLog.create = async (doc: any) => {
+    auditLogs.push(doc);
+    return doc;
+  };
   PayrollCheque.findByIdAndUpdate = async (id: string, update: any) => {
     const row = cheques.find((cheque) => cheque._id === String(id));
     if (!row) return null;
@@ -125,6 +141,8 @@ const restore = () => {
   PayrollCheque.findOne = originals.chequeFindOne;
   PayrollCheque.create = originals.chequeCreate;
   PayrollCheque.findByIdAndUpdate = originals.chequeUpdate;
+  PayrollCheque.findById = originals.chequeFindById;
+  AdminAuditLog.create = originals.auditCreate;
   User.find = originals.userFind;
   AppState.findOne = originals.appFind;
 };
@@ -422,6 +440,64 @@ test("recording a cheque emails the expert once and updating it does not", async
   assert.equal(cheques[0].chequeNumber, "2002");
   assert.equal(cheques[0].amountCents, 800);
   assert.equal(sentMails.length, 1);
+});
+
+test("recording and correcting a cheque are written to the admin audit log", async (t) => {
+  install();
+  t.after(restore);
+  sentMails.length = 0;
+  charges = [marchCharge({ createdAt: "2026-10-15T18:00:00.000Z" })];
+  cheques = [];
+  seq = 1;
+  sgMail.send = recordSend;
+  const admin = { userId: ADMIN, email: "admin@example.com" };
+
+  await payroll.recordPayrollCheque({
+    user: admin,
+    body: { expertId: EXPERT, year: 2026, month: 10, chequeNumber: "1001", chequeDate: "2026-10-31" },
+  }, createRes());
+  assert.equal(auditLogs.length, 1);
+  assert.equal(auditLogs[0].action, "record_payroll_cheque");
+  assert.equal(auditLogs[0].actorEmail, "admin@example.com");
+  assert.equal(auditLogs[0].targetType, "payrollCheque");
+  assert.equal(auditLogs[0].targetId, cheques[0]._id);
+  assert.equal(auditLogs[0].targetEmail, "ada@example.com");
+  assert.deepEqual(auditLogs[0].meta, {
+    month: "2026-10",
+    amount: "8.00 USD",
+    chequeNumber: "1001",
+    chequeDate: "2026-10-31",
+  });
+
+  await payroll.updatePayrollCheque({
+    user: admin,
+    params: { id: cheques[0]._id },
+    body: { chequeNumber: "2002", chequeDate: "2026-10-31" },
+  }, createRes());
+  assert.equal(auditLogs.length, 2);
+  assert.equal(auditLogs[1].action, "update_payroll_cheque");
+  assert.equal(auditLogs[1].targetEmail, "ada@example.com");
+  assert.deepEqual(auditLogs[1].meta, {
+    month: "2026-10",
+    changes: { chequeNumber: { from: "1001", to: "2002" } },
+  });
+
+  const unchanged = createRes();
+  await payroll.updatePayrollCheque({
+    user: admin,
+    params: { id: cheques[0]._id },
+    body: { chequeNumber: "2002", chequeDate: "2026-10-31" },
+  }, unchanged);
+  assert.equal(unchanged.statusCode, 200);
+  assert.equal(auditLogs.length, 2);
+
+  const refused = createRes();
+  await payroll.recordPayrollCheque({
+    user: admin,
+    body: { expertId: EXPERT, year: 2026, month: 10, chequeNumber: "3003", chequeDate: "2026-10-31" },
+  }, refused);
+  assert.equal(refused.statusCode, 409);
+  assert.equal(auditLogs.length, 2);
 });
 
 test("a cheque is kept when the payout email cannot be sent", async (t) => {

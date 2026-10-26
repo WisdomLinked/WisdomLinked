@@ -47,6 +47,7 @@ const PaymentHistory = require("../models/PaymentHistory");
 const Conversation = require("../models/Conversation");
 const GroupChat = require("../models/GroupChat");
 const Keyword = require("../models/Keyword");
+const Service = require("../models/Service");
 const MajorConsolidation = require("../models/MajorConsolidation");
 const AdminAuditLog = require("../models/AdminAuditLog");
 const { classifyMajors } = require("../utils/majorClassification");
@@ -56,6 +57,7 @@ const PendingUser = require("../models/PendingUser");
 const PendingLogin = require("../models/PendingLogin");
 const chatBotQA = require("../models/chatBotQA");
 const { logAdminAction } = require("../utils/adminAudit");
+const { auditChanges, profileAuditSnapshot, PROFILE_AUDIT_FIELDS } = require("../utils/adminAuditChanges");
 const {
     assertPendingSignupCanCreateAccount,
     recordSignupAcceptance,
@@ -374,7 +376,12 @@ const updateProfileOfUser = async (req, res) => {
                 typeof specialNote === 'string' ? specialNote.slice(0, 5000) : String(specialNote).slice(0, 5000);
         }
 
-        const existing = await User.findOne({ email: String(email) }).select("_id email status role username");
+        const loadAuditedProfile = () => User.findOne({ email: String(email) })
+            .select(`_id email status role ${PROFILE_AUDIT_FIELDS}`)
+            .populate({ path: "keywords", select: "value", model: Keyword })
+            .populate({ path: "services", select: "value", model: Service })
+            .lean();
+        const existing = await loadAuditedProfile();
         await User.findOneAndUpdate({ email: String(email) }, updates, { new: true })
         const result = await getFullUserData(email)
         if (status && status === 'active') {
@@ -390,6 +397,26 @@ const updateProfileOfUser = async (req, res) => {
                 targetEmail: existing.email,
                 meta: { from: existing.status, to: status, role: existing.role },
             });
+        }
+        if (existing && Object.keys(updates).some((key) => key !== "status")) {
+            try {
+                const changes = auditChanges(
+                    profileAuditSnapshot(existing),
+                    profileAuditSnapshot(await loadAuditedProfile()),
+                );
+                if (Object.keys(changes).length) {
+                    logAdminAction({
+                        actor: req.user,
+                        action: "update_user_profile",
+                        targetType: "user",
+                        targetId: existing._id,
+                        targetEmail: existing.email,
+                        meta: { role: existing.role, changes },
+                    });
+                }
+            } catch (auditErr) {
+                console.error("[adminAudit] profile edit not recorded:", auditErr);
+            }
         }
         result.password = null
         result.token = null

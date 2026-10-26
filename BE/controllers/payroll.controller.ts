@@ -7,12 +7,14 @@ import {
     utcMonthRange,
 } from '../utils/expertPayroll';
 import type { CommissionRates } from '../utils/paymentSummary';
+import { auditAmount, auditChanges, auditDate } from '../utils/adminAuditChanges';
 
 const mongoose = require('mongoose');
 const PaymentHistory = require('../models/PaymentHistory');
 const PayrollCheque = require('../models/PayrollCheque');
 const User = require('../models/User');
 const { sendPayrollChequeEmail } = require('../services/notifications');
+const { logAdminAction } = require('../utils/adminAudit');
 
 const expertIdOf = (value: any) => {
     if (!value) return '';
@@ -132,6 +134,15 @@ const payoutEmailResult = async (cheque: any, expertId: string) => {
     }
 };
 
+const expertEmailOf = async (expertId: string) => {
+    try {
+        const users = await usersById([expertId]);
+        return String(users.get(String(expertId))?.email || '') || undefined;
+    } catch {
+        return undefined;
+    }
+};
+
 const readChequeDetails = (body: any) => {
     const chequeNumber = normalizeChequeNumber(body?.chequeNumber);
     if (!chequeNumber) return { error: 'Cheque number is required.' };
@@ -247,6 +258,20 @@ const recordPayrollCheque = async (req, res) => {
             throw err;
         }
 
+        logAdminAction({
+            actor: req.user,
+            action: 'record_payroll_cheque',
+            targetType: 'payrollCheque',
+            targetId: created._id,
+            targetEmail: await expertEmailOf(expertId),
+            meta: {
+                month: `${period.year}-${String(period.month).padStart(2, '0')}`,
+                amount: auditAmount(liveNetCents),
+                chequeNumber: details.chequeNumber,
+                chequeDate: auditDate(details.chequeDate),
+            },
+        });
+
         const email = await payoutEmailResult(created, expertId);
         return res.status(201).send({
             ...chequeFields(created),
@@ -266,12 +291,31 @@ const updatePayrollCheque = async (req, res) => {
     try {
         const details = readChequeDetails(req.body);
         if ('error' in details) return res.status(400).send({ error: details.error });
+        const before = await PayrollCheque.findById(req.params?.id).select('chequeNumber chequeDate').lean();
         const updated = await PayrollCheque.findByIdAndUpdate(
             req.params?.id,
             { $set: { chequeNumber: details.chequeNumber, chequeDate: details.chequeDate } },
             { new: true },
         );
         if (!updated) return res.status(404).send({ error: 'Cheque not found.' });
+
+        const changes = auditChanges(
+            { chequeNumber: before?.chequeNumber, chequeDate: auditDate(before?.chequeDate) },
+            { chequeNumber: updated.chequeNumber, chequeDate: auditDate(updated.chequeDate) },
+        );
+        if (Object.keys(changes).length) {
+            logAdminAction({
+                actor: req.user,
+                action: 'update_payroll_cheque',
+                targetType: 'payrollCheque',
+                targetId: updated._id,
+                targetEmail: await expertEmailOf(expertIdOf(updated.expert)),
+                meta: {
+                    month: `${updated.year}-${String(updated.month).padStart(2, '0')}`,
+                    changes,
+                },
+            });
+        }
 
         const rates = await commissionRates();
         const liveNetCents = await liveNetForExpertMonth(

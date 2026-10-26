@@ -14,6 +14,7 @@ const {
     acceptTermsForUser,
     getCurrentSharedPublic,
 } = require("../services/termsAgreement");
+const adminAudit = require("../utils/adminAudit");
 
 function sendTermsError(res: any, err: any) {
     const status = Number(err?.status) || 500;
@@ -58,6 +59,13 @@ const publishTerms = async (req: any, res: any) => {
             buffer: file.buffer,
             filename: file.originalname,
             publisherId: req.user.userId,
+        });
+        adminAudit.logAdminAction({
+            actor: req.user,
+            action: "publish_terms",
+            targetType: "terms",
+            targetId: `${published.audience} v${published.version}`,
+            meta: { audience: published.audience, version: published.version, file: published.originalFilename },
         });
         return res.status(201).json(published);
     } catch (err) {

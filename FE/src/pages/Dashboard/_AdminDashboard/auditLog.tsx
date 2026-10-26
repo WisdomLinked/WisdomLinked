@@ -3,6 +3,7 @@ import { getAdminAuditLogs } from "../../../api/api";
 import Pagination from "../../../components/Pagination";
 import { SetLoadingStatus } from "../../../actions/appActions";
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
+import { metaSummary } from "./auditLogMeta";
 
 type AuditRow = {
     _id: string;
@@ -16,31 +17,6 @@ type AuditRow = {
 };
 
 const PAGE_SIZE = 25;
-
-function metaSummary(meta?: Record<string, unknown>): string {
-    if (!meta || typeof meta !== "object") return "—";
-    try {
-        const keys = Object.keys(meta);
-        if (!keys.length) return "—";
-        const preferred = ["from", "to", "role", "amount", "reason", "target", "sources", "targetRole"];
-        const parts: string[] = [];
-        for (const k of preferred) {
-            if (meta[k] !== undefined && meta[k] !== null) {
-                const v = Array.isArray(meta[k]) ? (meta[k] as unknown[]).join(", ") : String(meta[k]);
-                parts.push(`${k}=${v}`);
-            }
-        }
-        if (!parts.length) {
-            return keys
-                .slice(0, 3)
-                .map((k) => `${k}=${String(meta[k])}`)
-                .join("; ");
-        }
-        return parts.join("; ");
-    } catch {
-        return "—";
-    }
-}
 
 export default function AdminAuditLog() {
     const [rows, setRows] = useState<AuditRow[]>([]);
