@@ -1,5 +1,21 @@
 const mongoose = require("mongoose");
 
+const pricingGroupSchema = new mongoose.Schema(
+    {
+        expertCommissionPercent: { type: Number, default: 20 },
+        studentFeePercent: { type: Number, default: 3 },
+        studentFeeCapDollars: { type: Number, default: 5 },
+        taxPercent: { type: Number, default: 0 },
+        freeSessionPlatformFeeDollars: { type: Number, default: 1 },
+        // Read at cancel time. Missing values use the type default in normalizePricingRates.
+        cancellationRefund: {
+            type: String,
+            enum: ['full', 'keep_platform_fee', 'processing_fee'],
+        },
+    },
+    { _id: false }
+);
+
 const appStateSchema = new mongoose.Schema(
     {
         stripeMode: { type: String, default: 'test' },
@@ -18,6 +34,11 @@ const appStateSchema = new mongoose.Schema(
          */
         reminderSweepActivatedAt: { type: Date, default: null },
         unreadEmailSweepActivatedAt: { type: Date, default: null },
+        // Next checkout only. Missing groups fall back to the calculator defaults.
+        pricing: {
+            seminar: { type: pricingGroupSchema, default: undefined },
+            oneToOne: { type: pricingGroupSchema, default: undefined },
+        },
         announcement: {
             id: { type: String, default: '' },
             message: { type: String, default: '' },

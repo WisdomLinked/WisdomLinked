@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { useAppSelector } from '../../../store';
 import { doSetExpertBookingNoticeHours, doUpdateProfile } from '../../../api/api';
+import { getRequiredContracts } from '../../../api/termsApi';
+import TermsSignDialog from '../../terms/TermsSignDialog';
 import { updateMe } from '../../../actions/authActions';
 import { notify } from '../../../utils/notify';
 import { detectUserTimeZone } from '../../../utils/schedulingTimezone';
@@ -36,13 +38,35 @@ export default function ExpertSetupCard({ onOpenAvailability }: { onOpenAvailabi
     | undefined;
   const [expandedStep, setExpandedStep] = useState<SetupStepId | null>(null);
   const [listOpen, setListOpen] = useState(true);
+  const [roleTerms, setRoleTerms] = useState<'unknown' | 'signed' | 'unsigned'>('unknown');
+  const [termsOpen, setTermsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!userDetails?._id || userDetails.role !== 'expert') return;
+    let cancelled = false;
+    getRequiredContracts()
+      .then((contracts) => {
+        if (cancelled) return;
+        const unsigned = contracts.some((contract) => contract.audience === 'expert');
+        setRoleTerms(unsigned ? 'unsigned' : 'signed');
+      })
+      .catch(() => {
+        if (!cancelled) setRoleTerms('unknown');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userDetails?._id, userDetails?.role, termsOpen]);
 
   if (!userDetails?._id || userDetails.role !== 'expert') return null;
 
   const availability: ExpertAvailability = userDetails;
   const status = SETUP_STEPS.map((step) => step.isComplete(availability));
-  const completed = status.filter(Boolean).length;
-  if (completed === SETUP_STEPS.length) return null;
+  const includeTerms = roleTerms === 'signed' || roleTerms === 'unsigned';
+  const termsDone = roleTerms === 'signed';
+  const completed = status.filter(Boolean).length + (includeTerms && termsDone ? 1 : 0);
+  const total = SETUP_STEPS.length + (includeTerms ? 1 : 0);
+  if (completed === total) return null;
   const currentIndex = status.indexOf(false);
 
   const persist = async (save: () => Promise<boolean>) => {
@@ -134,7 +158,7 @@ export default function ExpertSetupCard({ onOpenAvailability }: { onOpenAvailabi
       </div>
 
       <div className="mt-5">
-        <SetupProgressBar completed={completed} total={SETUP_STEPS.length} />
+        <SetupProgressBar completed={completed} total={total} />
       </div>
 
       {listOpen ? (
@@ -162,8 +186,57 @@ export default function ExpertSetupCard({ onOpenAvailability }: { onOpenAvailabi
               </SetupStepRow>
             );
           })}
+          {includeTerms ? (
+            <li className={`rounded-xl px-3 py-3 sm:px-4 ${!termsDone && currentIndex === -1 ? 'bg-[#e8f0f8]' : ''}`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <span
+                    className={[
+                      'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+                      termsDone ? 'bg-emerald-600 text-white' : 'border border-gray-300 bg-white text-gray-500',
+                    ].join(' ')}
+                  >
+                    {termsDone ? (
+                      <>
+                        <Check className="h-4 w-4" aria-hidden />
+                        <span className="sr-only">Done:</span>
+                      </>
+                    ) : (
+                      <span aria-hidden>{SETUP_STEPS.length + 1}</span>
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm font-semibold text-gray-800">Terms</h3>
+                      {termsDone ? (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                          Done
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-0.5 text-sm text-gray-500">
+                      {termsDone ? 'Current agreement signed' : 'Sign the current expert agreement.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTermsOpen(true)}
+                  className="inline-flex h-10 items-center justify-center rounded-lg bg-[#234C6A] px-4 text-sm font-medium text-white"
+                >
+                  {termsDone ? 'View agreement' : 'Sign agreement'}
+                </button>
+              </div>
+            </li>
+          ) : null}
         </ol>
       ) : null}
+      <TermsSignDialog
+        open={termsOpen}
+        role="expert"
+        onClose={() => setTermsOpen(false)}
+        onSigned={() => setRoleTerms('signed')}
+      />
     </section>
   );
 }

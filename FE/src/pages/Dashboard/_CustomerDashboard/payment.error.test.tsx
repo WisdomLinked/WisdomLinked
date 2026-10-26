@@ -7,6 +7,7 @@ import Payment from './payment';
 vi.mock('../../../api/api', () => ({
   getStripeMode: vi.fn(async () => ({ stripeMode: 'test' })),
   createStripePaymentIntent: vi.fn(),
+  quoteBookingCharge: vi.fn(async () => ({ chargeCents: 4120 })),
 }));
 
 vi.mock('../../../actions/appActions', () => ({

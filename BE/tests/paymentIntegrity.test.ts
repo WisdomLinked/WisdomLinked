@@ -6,6 +6,8 @@ import {
   classifyBookingPayment,
   foldChargeRows,
   isActionable,
+  markRefundedCharges,
+  sessionHasEnded,
   summarizeVerdicts,
   recordCountsByStatus,
 } from "../utils/paymentIntegrity";
@@ -210,5 +212,72 @@ test("recordCountsByStatus ignores statuses without a tile and junk groups", () 
       {},
     ] as any),
     { completed: 0, refunded: 0, pending: 0, withheld: 0 },
+  );
+});
+
+test("an admin refund row marks its completed charge as refunded, partial or full", () => {
+  const rows = markRefundedCharges(
+    [
+      { status: "completed", paymentIntent: "pi_refunded" },
+      { status: "completed", paymentIntent: "pi_kept" },
+      { status: "withheld", paymentIntent: "pi_refunded" },
+      { status: "completed" },
+    ],
+    new Set(["pi_refunded"]),
+  );
+  assert.deepEqual(rows.map((r) => r.status), ["refunded", "completed", "withheld", "completed"]);
+});
+
+test("a seat whose only charge an admin refunded is flagged", () => {
+  const ownCharges = markRefundedCharges([{ status: "completed", paymentIntent: "pi_1" }], new Set(["pi_1"]));
+  const check = checkSeat({ type: "seminar", status: "active", priceCents: 2000, ownCharges });
+  assert.deepEqual(check, { verdict: "refunded", list: true });
+});
+
+test("a refund on a finished session is history, not a seat to take back", () => {
+  const check = checkSeat({
+    type: "individual",
+    status: "active",
+    priceCents: 2000,
+    ownCharges: [{ status: "refunded" }],
+    sessionEnded: true,
+  });
+  assert.deepEqual(check, { verdict: "refunded", list: false });
+});
+
+test("an unpaid seat is still flagged after the session ends", () => {
+  const check = checkSeat({ type: "seminar", status: "active", priceCents: 2000, ownCharges: [], sessionEnded: true });
+  assert.deepEqual(check, { verdict: "unpaid", list: true });
+});
+
+test("sessionHasEnded uses the end, else start plus duration, and never ends an undated session", () => {
+  const now = Date.parse("2026-10-23T12:00:00.000Z");
+  assert.equal(sessionHasEnded({ end: "2026-10-23T11:59:00.000Z" }, now), true);
+  assert.equal(sessionHasEnded({ start: "2026-10-23T11:00:00.000Z", end: "2026-10-23T12:30:00.000Z" }, now), false);
+  assert.equal(sessionHasEnded({ end: "2026-10-23T12:00:00.000Z" }, now), true);
+  assert.equal(sessionHasEnded({ start: "2026-10-23T11:30:00.000Z", duration: 60 }, now), false);
+  assert.equal(sessionHasEnded({ start: "2026-10-23T10:30:00.000Z", duration: 60 }, now), true);
+  assert.equal(sessionHasEnded({ start: "2026-10-23T11:30:00.000Z" }, now), true);
+  assert.equal(sessionHasEnded({}, now), false);
+  assert.equal(sessionHasEnded(null, now), false);
+  assert.equal(sessionHasEnded({ end: "not a date", start: "also not" }, now), false);
+});
+
+test("a series date whose payment on another date was refunded reads as refunded, not unpaid", () => {
+  const check = checkSeat({
+    type: "seminar",
+    status: "active",
+    priceCents: 1000,
+    ownCharges: [],
+    seriesHasRefundedCharge: true,
+  });
+  assert.deepEqual(check, { verdict: "refunded", list: true });
+  assert.deepEqual(
+    checkSeat({ type: "seminar", status: "active", priceCents: 1000, ownCharges: [], seriesHasRefundedCharge: true, sessionEnded: true }),
+    { verdict: "refunded", list: false },
+  );
+  assert.equal(
+    checkSeat({ type: "seminar", status: "active", priceCents: 1000, ownCharges: [], seriesHasRefundedCharge: true, seriesHasCompletedCharge: true }).verdict,
+    "paid",
   );
 });

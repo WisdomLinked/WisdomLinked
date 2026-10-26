@@ -73,8 +73,10 @@ test("requestSeminarSeat joins interest waitlist far before start with no paymen
     seatCreate: SeminarSeatRequest.create,
     seatCount: SeminarSeatRequest.countDocuments,
     userFindById: User.findById,
+    appState: AppState.findOne,
   };
   try {
+    AppState.findOne = async () => ({ stripeMode: "test" });
     GroupChat.findOne = async () => seminar({ start: IN_30_DAYS, maxAttendees: 1, participants: ["host-1", "s0"] });
     SeminarSeatRequest.countDocuments = async () => 0;
     SeminarSeatRequest.findOne = async () => null;
@@ -105,6 +107,7 @@ test("requestSeminarSeat joins interest waitlist far before start with no paymen
     SeminarSeatRequest.create = originals.seatCreate;
     SeminarSeatRequest.countDocuments = originals.seatCount;
     User.findById = originals.userFindById;
+    AppState.findOne = originals.appState;
   }
 });
 
@@ -174,7 +177,7 @@ test("offerNextWaitlistedSeat offers oldest interest pending as awaiting_payment
     assert.equal(updates.length, 1);
     assert.equal(updates[0].filter._id, "req-old");
     assert.equal(updates[0].update.$set.status, "awaiting_payment");
-    assert.equal(updates[0].update.$set.amount, 4000);
+    assert.equal(updates[0].update.$set.amount, 4120);
     assert.ok(updates[0].update.$set.paymentDeadline);
     assert.ok(String(updates[0].update.$set.decisionNote || "").includes("seat opened"));
     // Homepage notice fields are set so DecisionNotices can surface the offer.
@@ -195,7 +198,7 @@ test("offerNextWaitlistedSeat offers oldest interest pending as awaiting_payment
   }
 });
 
-test("offerNextWaitlistedSeat enrolls free waitlist entries via atomic claim and skips legacy held rows", async () => {
+test("offerNextWaitlistedSeat offers a $0 seat for the platform fee and skips legacy held rows", async () => {
   const updates: any[] = [];
   const originals = {
     gcFindById: GroupChat.findById,
@@ -207,6 +210,7 @@ test("offerNextWaitlistedSeat enrolls free waitlist entries via atomic claim and
     seatFind: SeminarSeatRequest.find,
     seatCount: SeminarSeatRequest.countDocuments,
     seatFindOneAndUpdate: SeminarSeatRequest.findOneAndUpdate,
+    appState: AppState.findOne,
   };
 
   const chat = seminar({
@@ -216,6 +220,7 @@ test("offerNextWaitlistedSeat enrolls free waitlist entries via atomic claim and
   });
 
   try {
+    AppState.findOne = async () => ({ stripeMode: "test" });
     GroupChat.findById = () => ({
       then: (r: any, j: any) => Promise.resolve(chat).then(r, j),
       populate: () => ({
@@ -264,8 +269,10 @@ test("offerNextWaitlistedSeat enrolls free waitlist entries via atomic claim and
     const offered = await groupController.offerNextWaitlistedSeat("seminar-1");
     assert.equal(offered, true);
     assert.equal(updates[0].filter._id, "req-free");
-    assert.equal(updates[0].update.$set.status, "approved");
-    assert.ok(chat.participants.includes("waiter-free"));
+    assert.equal(updates[0].update.$set.status, "awaiting_payment");
+    assert.equal(updates[0].update.$set.amount, 100, "the free-session platform fee, tax 0");
+    assert.ok(updates[0].update.$set.paymentDeadline);
+    assert.ok(!chat.participants.includes("waiter-free"), "the student is not enrolled until they pay");
   } finally {
     GroupChat.findById = originals.gcFindById;
     GroupChat.findOneAndUpdate = originals.gcFindOneAndUpdate;
@@ -276,6 +283,7 @@ test("offerNextWaitlistedSeat enrolls free waitlist entries via atomic claim and
     SeminarSeatRequest.find = originals.seatFind;
     SeminarSeatRequest.countDocuments = originals.seatCount;
     SeminarSeatRequest.findOneAndUpdate = originals.seatFindOneAndUpdate;
+    AppState.findOne = originals.appState;
   }
 });
 
@@ -295,8 +303,10 @@ test("soft-held awaiting_payment seat blocks a second student from claiming it",
     seatFindOne: SeminarSeatRequest.findOne,
     seatCreate: SeminarSeatRequest.create,
     userFindById: User.findById,
+    appState: AppState.findOne,
   };
   try {
+    AppState.findOne = async () => ({ stripeMode: "test" });
     GroupChat.findOne = async () => chat;
     GroupChat.findById = () => ({
       then: (r: any, j: any) => Promise.resolve(chat).then(r, j),
@@ -337,6 +347,7 @@ test("soft-held awaiting_payment seat blocks a second student from claiming it",
     SeminarSeatRequest.findOne = originals.seatFindOne;
     SeminarSeatRequest.create = originals.seatCreate;
     User.findById = originals.userFindById;
+    AppState.findOne = originals.appState;
   }
 });
 
@@ -361,8 +372,10 @@ test("atomic claim refuses when another student already took the only seat (pay-
     seatFindOne: SeminarSeatRequest.findOne,
     seatCreate: SeminarSeatRequest.create,
     userFindById: User.findById,
+    appState: AppState.findOne,
   };
   try {
+    AppState.findOne = async () => ({ stripeMode: "test" });
     GroupChat.findOne = async () => ({ ...chat, price: 0 });
     GroupChat.findById = () => ({
       then: (r: any, j: any) => Promise.resolve({ ...chat, price: 0 }).then(r, j),
@@ -396,6 +409,7 @@ test("atomic claim refuses when another student already took the only seat (pay-
     SeminarSeatRequest.findOne = originals.seatFindOne;
     SeminarSeatRequest.create = originals.seatCreate;
     User.findById = originals.userFindById;
+    AppState.findOne = originals.appState;
   }
 });
 

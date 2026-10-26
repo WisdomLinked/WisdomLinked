@@ -52,6 +52,7 @@ const groupController = require("../controllers/groupChat.controller");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
 const PaymentHistory = require("../models/PaymentHistory");
+const AppState = require("../models/AppState");
 
 const STUDENT_ID = "aaaaaaaaaaaaaaaaaaaaaaa1";
 const EXPERT_ID = "bbbbbbbbbbbbbbbbbbbbbbb2";
@@ -120,6 +121,7 @@ const withModels = ({ chat, payment, parked, claimWins = true }: any) => {
     historyFindOne: PaymentHistory.findOne,
     historyExists: PaymentHistory.exists,
     historyFindByIdAndUpdate: PaymentHistory.findByIdAndUpdate,
+    appStateFindOne: AppState.findOne,
   };
 
   GroupChat.findOne = async () => chat;
@@ -151,6 +153,7 @@ const withModels = ({ chat, payment, parked, claimWins = true }: any) => {
     record("historyUpdate", [id, update]);
     return {};
   };
+  AppState.findOne = async () => ({ stripeMode: "test" });
 
   return () => {
     GroupChat.findOne = original.groupFindOne;
@@ -161,6 +164,7 @@ const withModels = ({ chat, payment, parked, claimWins = true }: any) => {
     PaymentHistory.findOne = original.historyFindOne;
     PaymentHistory.exists = original.historyExists;
     PaymentHistory.findByIdAndUpdate = original.historyFindByIdAndUpdate;
+    AppState.findOne = original.appStateFindOne;
   };
 };
 

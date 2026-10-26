@@ -7,11 +7,13 @@ import {
     clampPageSize,
     emptyPeriodCounts,
     heldStartFilter,
+    oneToOneGroupFilter,
     parseDateParam,
     periodChange,
     resolveSnapshotRange,
     seminarBaseFilter,
     startInRangeFilter,
+    statusListFilter,
     upcomingStartFilter,
 } from '../utils/adminSnapshot';
 import {
@@ -21,6 +23,8 @@ import {
 } from '../utils/adminSnapshotStats';
 import {
     checkSeat,
+    markRefundedCharges,
+    sessionHasEnded,
     summarizeVerdicts,
     recordCountsByStatus,
     RECORD_COUNT_STATUSES,
@@ -52,6 +56,10 @@ const PendingUser = require("../models/PendingUser");
 const PendingLogin = require("../models/PendingLogin");
 const chatBotQA = require("../models/chatBotQA");
 const { logAdminAction } = require("../utils/adminAudit");
+const {
+    assertPendingSignupCanCreateAccount,
+    recordSignupAcceptance,
+} = require("../services/termsAgreement");
 const { authCookieOptions, clearAuthCookieOptions } = require("../config/authCookie");
 const { readAccessToken } = require("../middlewares/requireAuth");
 const jwt = require("jsonwebtoken");
@@ -198,7 +206,7 @@ const filterPaymentHistories = async (req, res) => {
         query.populate([
             { path: 'expert', select: 'username email role' },
             { path: 'customer', select: 'username email role' },
-            { path: 'groupChat', select: 'type name status start end' },
+            { path: 'groupChat', select: 'type name status start end seriesId' },
             { path: 'event', select: 'start end title status' },
         ])
 
@@ -268,7 +276,7 @@ const filterPaymentHistories = async (req, res) => {
                 ? await PaymentHistory.find({ _id: { $in: pageIds } }).populate([
                     { path: "expert", select: "username email role" },
                     { path: "customer", select: "username email role" },
-                    { path: "groupChat", select: "type name status start end" },
+                    { path: "groupChat", select: "type name status start end seriesId" },
                     { path: "event", select: "start end title status" },
                 ])
                 : [];
@@ -783,7 +791,8 @@ const getDashboardStats = async (req: Request, res: Response) => {
             }),
             User.countDocuments({ role: "expert" }),
             User.countDocuments({ role: "customer" }),
-            Event.countDocuments(),
+            Promise.all([Event.countDocuments(), GroupChat.countDocuments(oneToOneGroupFilter())])
+                .then(([legacy, current]) => legacy + current),
             GroupChat.countDocuments(seminarBaseFilter()),
             PaymentHistory.countDocuments({ paymentType: { $ne: "refund" } }),
             PaymentHistory.countDocuments({ paymentType: "refund" }),
@@ -863,7 +872,7 @@ function mapEventPlatformItem(ev: any) {
     };
 }
 
-function mapGroupChatPlatformItem(g: any) {
+function mapGroupChatPlatformItem(g: any, student?: any) {
     const isSeminar = g.type === "seminar";
     const adminUser = g.admin || g.createdBy;
     return {
@@ -880,10 +889,35 @@ function mapGroupChatPlatformItem(g: any) {
                 email: adminUser.email,
             }
             : null,
-        customer: null,
+        customer: student
+            ? {
+                id: String(student._id),
+                username: student.username,
+                email: student.email,
+            }
+            : null,
         groupChatType: g.type,
         participantCount: Array.isArray(g.participants) ? g.participants.length : 0,
     };
+}
+
+async function oneToOneStudents(gcs: any[]): Promise<Map<string, any>> {
+    const studentIdByGc = new Map<string, string>();
+    for (const g of gcs) {
+        if (g.type !== "individual") continue;
+        const expertId = String(g.admin?._id ?? g.admin ?? "");
+        const studentId = (g.participants || []).map((id: any) => String(id?._id ?? id)).find((id: string) => id && id !== expertId);
+        if (studentId) studentIdByGc.set(String(g._id), studentId);
+    }
+    if (!studentIdByGc.size) return new Map();
+    const students = await User.find({ _id: { $in: [...new Set(studentIdByGc.values())] } }).select("username email").lean();
+    const byId = new Map(students.map((u: any) => [String(u._id), u]));
+    const out = new Map<string, any>();
+    for (const [gcId, studentId] of studentIdByGc) {
+        const student = byId.get(studentId);
+        if (student) out.set(gcId, student);
+    }
+    return out;
 }
 
 function groupChatTypeFilter(includeSeminar: boolean, includeOneToOne: boolean) {
@@ -922,8 +956,7 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
         const startRange = applyDateRange && (dateFrom || dateTo)
             ? startInRangeFilter(dateFrom, dateTo)
             : null;
-        const status = req.query.status ? String(req.query.status) : "";
-        const statusFilter = status ? { status } : null;
+        const statusFilter = statusListFilter(req.query.status);
         const search = String(req.query.q || "").trim();
         let eventSearch: Record<string, unknown> | null = null;
         let gcSearch: Record<string, unknown> | null = null;
@@ -937,7 +970,12 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
                 $or: [{ title: rx }, { expert: { $in: ids } }, { customer: { $in: ids } }],
             };
             gcSearch = {
-                $or: [{ name: rx }, { admin: { $in: ids } }, { createdBy: { $in: ids } }],
+                $or: [
+                    { name: rx },
+                    { admin: { $in: ids } },
+                    { createdBy: { $in: ids } },
+                    { ...oneToOneGroupFilter(), participants: { $in: ids } },
+                ],
             };
         }
 
@@ -969,7 +1007,8 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
                 .sort({ start: sortOrder })
                 .skip(skip)
                 .limit(limit);
-            for (const g of gcs) items.push(mapGroupChatPlatformItem(g));
+            const students = await oneToOneStudents(gcs);
+            for (const g of gcs) items.push(mapGroupChatPlatformItem(g, students.get(String(g._id))));
         } else if (eventQuery && gcQuery) {
             const [eventHeads, gcHeads] = await Promise.all([
                 Event.find(eventQuery).select("start").lean(),
@@ -1004,7 +1043,8 @@ const getAdminPlatformEvents = async (req: Request, res: Response) => {
             ]);
             const byId = new Map<string, any>();
             for (const ev of events) byId.set(String(ev._id), mapEventPlatformItem(ev));
-            for (const g of gcs) byId.set(String(g._id), mapGroupChatPlatformItem(g));
+            const students = await oneToOneStudents(gcs as any[]);
+            for (const g of gcs) byId.set(String(g._id), mapGroupChatPlatformItem(g, students.get(String(g._id))));
             for (const head of pageHeads) {
                 const item = byId.get(head.id);
                 if (item) items.push(item);
@@ -1083,26 +1123,62 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
             return res.status(404).json({ message: "Pending User not found" });
         }
 
-        const newUser = new User({
-            username: pendingUser.username,
-            title: pendingUser.title,
-            description: pendingUser.description,
-            services: pendingUser.services,
-            keywords: pendingUser.keywords,
-            country: pendingUser.country,
-            state: pendingUser.state,
-            city: pendingUser.city,
-            phoneNumber: pendingUser.phoneNumber,
-            email: pendingUser.email.toLowerCase(),
-            password: pendingUser.password,
-            resume: pendingUser.resume,
-            role: pendingUser.role,
-            timeSlots: pendingUser.timeSlots,
-            price: pendingUser.price,
-            status: "active"
-        });
+        const emailKey = pendingUser.email.toLowerCase();
+        const gatedTerms = await assertPendingSignupCanCreateAccount(pendingUser.termsAcceptance);
+        if (!gatedTerms.ok) {
+            return res.status(400).json({ message: gatedTerms.error });
+        }
+        // Retry only the user this conversion already created. Do not stamp the
+        // signature onto a different account that shares the email.
+        let user = null;
+        if (gatedTerms.acceptance && pendingUser.createdUserId) {
+            user = await User.findById(pendingUser.createdUserId);
+            if (!user) {
+                return res.status(500).json({ message: safeErrorMessage(new Error('created user missing')) });
+            }
+        }
+        if (!user) {
+            const newUser = new User({
+                username: pendingUser.username,
+                title: pendingUser.title,
+                description: pendingUser.description,
+                services: pendingUser.services,
+                keywords: pendingUser.keywords,
+                country: pendingUser.country,
+                state: pendingUser.state,
+                city: pendingUser.city,
+                phoneNumber: pendingUser.phoneNumber,
+                email: emailKey,
+                password: pendingUser.password,
+                resume: pendingUser.resume,
+                role: pendingUser.role,
+                timeSlots: pendingUser.timeSlots,
+                price: pendingUser.price,
+                status: "active"
+            });
+            try {
+                user = await newUser.save();
+            } catch (saveErr: any) {
+                if (saveErr?.code === 11000) {
+                    console.error('[convertPendingUserToUserByAdmin] email already registered', emailKey);
+                    return res.status(500).json({ message: safeErrorMessage(saveErr) });
+                }
+                throw saveErr;
+            }
+            if (gatedTerms.acceptance) {
+                pendingUser.createdUserId = user._id;
+                await pendingUser.save();
+            }
+        }
 
-        await newUser.save();
+        if (gatedTerms.acceptance) {
+            try {
+                await recordSignupAcceptance(user._id, gatedTerms.acceptance);
+            } catch (acceptErr) {
+                console.error('[convertPendingUserToUserByAdmin] terms acceptance', acceptErr);
+                return res.status(500).json({ message: safeErrorMessage(acceptErr) });
+            }
+        }
 
         await PendingUser.findByIdAndDelete(String(pendingUserId));
 
@@ -1110,9 +1186,9 @@ const convertPendingUserToUserByAdmin = async (req, res) => {
             actor: req.user,
             action: "convert_pending_user",
             targetType: "user",
-            targetId: newUser._id,
-            targetEmail: newUser.email,
-            meta: { pendingUserId, role: newUser.role },
+            targetId: user._id,
+            targetEmail: user.email,
+            meta: { pendingUserId, role: user.role },
         });
 
         return res.status(200).json({ message: "Pending User converted to a regular User successfully" });
@@ -1483,7 +1559,7 @@ const getPaymentIntegrityReport = async (req, res) => {
             status: { $in: ['active', 'pending'] },
             createdAt: { $gte: since },
         })
-            .select('_id name type price status start admin participants seriesId paymentDeadline')
+            .select('_id name type price status start end duration admin participants seriesId paymentDeadline')
             .limit(INTEGRITY_MAX_BOOKINGS)
             .lean();
 
@@ -1501,12 +1577,22 @@ const getPaymentIntegrityReport = async (req, res) => {
 
         const chargeBookingIds = new Set<string>(bookings.map((b: any) => String(b._id)));
         for (const sibling of seriesSiblings) chargeBookingIds.add(String(sibling._id));
-        const chargeRows = chargeBookingIds.size
+        const recordedCharges: any[] = chargeBookingIds.size
             ? await PaymentHistory.find({
                 groupChat: { $in: [...chargeBookingIds] },
-                paymentType: 'charge',
+                // A paid retry link is the "take payment again" this list asks for.
+                $or: [{ paymentType: 'charge' }, { paymentType: 'retry', status: 'completed' }],
             }).select('groupChat customer status amount paymentIntent').lean()
             : [];
+        const chargeIntents = [...new Set(recordedCharges.map((row: any) => String(row.paymentIntent || '')).filter(Boolean))];
+        const refundedIntents = new Set<string>(chargeIntents.length
+            ? (await PaymentHistory.distinct('paymentIntent', {
+                paymentType: 'refund',
+                paymentIntent: { $in: chargeIntents },
+            })).map(String)
+            : []);
+        const chargeRows = markRefundedCharges(recordedCharges, refundedIntents);
+        const now = Date.now();
 
         // (bookingId|studentId) -> charge rows
         const rowsByPair = new Map<string, any[]>();
@@ -1536,6 +1622,9 @@ const getPaymentIntegrityReport = async (req, res) => {
                 const seriesHasCompletedCharge = seriesGroupIds.some((id) =>
                     (rowsByPair.get(`${id}|${studentId}`) || []).some((row: any) => row?.status === 'completed'),
                 );
+                const seriesHasRefundedCharge = seriesGroupIds.some((id) =>
+                    (rowsByPair.get(`${id}|${studentId}`) || []).some((row: any) => row?.status === 'refunded'),
+                );
                 const priceCents = Math.round(Number(booking.price ?? 0) * 100);
                 const check = checkSeat({
                     type: booking.type,
@@ -1544,6 +1633,8 @@ const getPaymentIntegrityReport = async (req, res) => {
                     priceCents,
                     ownCharges,
                     seriesHasCompletedCharge,
+                    seriesHasRefundedCharge,
+                    sessionEnded: sessionHasEnded(booking, now),
                 });
                 if (check.verdict !== 'waiting') verdicts.push(check.verdict);
                 if (onlyActionable && !check.list) continue;

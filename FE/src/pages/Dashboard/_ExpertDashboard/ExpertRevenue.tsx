@@ -55,6 +55,7 @@ type PaymentRow = {
   paymentIntent?: string;
   balanceTransaction?: string;
   paymentKind?: PaymentKind;
+  expertNetCents?: number;
   createdAt?: string;
   customer?: { username?: string; email?: string };
   groupChat?: { name?: string; type?: string };
@@ -166,9 +167,7 @@ export default function ExpertRevenue() {
               Revenue
             </h1>
             <p className="mt-1 max-w-xl text-[14px] text-slate-600">
-              Payments received from students for 1:1 sessions and seminars. Amounts
-              reflect successful charges; history includes descriptions and payer
-              where available.
+              Amounts are what you keep after the platform commission.
             </p>
           </div>
           <button
@@ -189,10 +188,10 @@ export default function ExpertRevenue() {
           <StatCard
             label="Total received"
             value={loading ? '…' : totalDisplay}
-            subline="Completed payments"
+            subline="After platform commission"
             icon={Wallet}
             color="primary"
-            tooltip="Sum of all completed charges in your history"
+            tooltip="What you keep from completed sessions"
           />
           <StatCard
             label="1:1 sessions"
@@ -381,7 +380,11 @@ export default function ExpertRevenue() {
                             isRefund ? 'text-red-700' : 'text-slate-900'
                           }`}
                         >
-                          {formatMoney(r.amount, r.currency, isRefund)}
+                          {formatMoney(
+                            typeof r.expertNetCents === 'number' ? r.expertNetCents : r.amount,
+                            r.currency,
+                            isRefund,
+                          )}
                         </td>
                       </tr>
                     );

@@ -59,8 +59,10 @@ const {
 import { safeErrorMessage, safeHttp500Message } from '../utils/httpUserFacingCopy';
 import { isChatAdminOf } from '../utils/adminChatAccess';
 import { bookingEmailTo } from '../utils/emailPreferences';
-import { computeBookingPriceCents, extractHourlyRate, dollarsToCents, assertPaymentMatchesExpected, assertIntentMatchesBooking, voluntaryCancellationRefundCents, capturedAmountCents, balanceTransactionId } from '../utils/bookingPrice';
+import { computeBookingPriceCents, extractHourlyRate, dollarsToCents, assertPaymentMatchesExpected, assertIntentMatchesBooking, cancellationRefundCents, capturedAmountCents, balanceTransactionId, historyPricing, pricingSnapshotFromMetadata, settlementMatchCents, snapshotChargeCents } from '../utils/bookingPrice';
+import { chargeForAdvertised, loadPricingSettings } from '../utils/pricingSettings';
 import { resolvePendingPayment, resolveOrphanedIntent } from '../utils/pendingPayment';
+import { sessionHasEnded } from '../utils/paymentIntegrity';
 import {
     BOOKING_PAYMENT_WRONG_BOOKING,
     BOOKING_PAYMENT_UNVERIFIED,
@@ -73,6 +75,11 @@ import {
 
 /** Stored in RC; FE shows as centered pill (see ChatSystemNotice). */
 const WL_COMMUNITY_SYS_PREFIX = '__WL_COMMUNITY_SYS__::';
+
+const chargeDueForGroup = async (groupChat: any) => {
+    const sessionType = groupChat?.type === 'seminar' ? 'seminar' : 'oneToOne';
+    return chargeForAdvertised(sessionType, dollarsToCents(groupChat?.price));
+};
 
 const isCommunityModerator = (groupChat: any, userId: string): boolean => {
     const me = String(userId || "");
@@ -186,7 +193,7 @@ const {
     escapeHtml: emailEscape,
 } = require('../services/emailTemplate')
 const { sendEmailMeetingRequestToCustomer, sendEmailMeetingRequestToExpert, sendEmailSessionPaidToExpert, sendEmailSessionOfferSentToExpert, sendEmailMeetingAcceptance, sendNotificationEmail } = require('../services/notifications')
-const { assertBookingLeadTime, expertSchedulingPastStartError } = require("../utils/bookingLeadTime");
+const { assertBookingLeadTime, expertSchedulingPastStartError, seminarRegistrationClosedError } = require("../utils/bookingLeadTime");
 const { assertBookingSlotValid, assertDurationAllowed } = require("../utils/bookingValidation");
 import { buildRemovedUserNotice, normalizeModerationReason } from '../utils/videoModerationNotice';
 import { sanitizeDecisionNote, decisionNoteEmailBlock } from '../utils/decisionNote';
@@ -713,7 +720,9 @@ const createGroupChatByUser = async (req, res) => {
         }
 
         const currentUser = await User.findById(userId);
-        const expectedCents = computeBookingPriceCents(Number(duration), extractHourlyRate(expertUser.price));
+        const advertisedCents = computeBookingPriceCents(Number(duration), extractHourlyRate(expertUser.price));
+        const oneToOneQuote = await chargeForAdvertised('oneToOne', advertisedCents);
+        const expectedCents = oneToOneQuote.chargeCents;
         const paymentMode = normalizePaymentMode(req.body.paymentMode);
         // Wallets can't authorize, so a wallet booking carries no money at this point:
         // it is a request the expert answers first, and only then does the student pay.
@@ -730,6 +739,7 @@ const createGroupChatByUser = async (req, res) => {
             : await resolveBookingPayment({
                 payment_intent,
                 expectedCents,
+                advertisedCents,
                 boundTo: { userId: String(userId), expertId: String(expertUser._id) },
                 name,
                 customer: currentUser,
@@ -788,7 +798,7 @@ const createGroupChatByUser = async (req, res) => {
                 start: start,
                 end: end,
                 duration: duration,
-                price: expectedCents / 100,
+                price: advertisedCents / 100,
                 participants: [userId, expert],
                 admin: expert,
                 type: 'individual',
@@ -822,7 +832,7 @@ const createGroupChatByUser = async (req, res) => {
 
         if (walletRequest) {
             Promise.resolve(
-                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, 'wallet', { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline, studentNote, requestId: String(chat._id) }),
+                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, advertisedCents / 100, true, expertUser.timeZone, 'wallet', { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline, studentNote, requestId: String(chat._id) }),
             ).catch((emailErr) => console.log('[createGroupChatByUser] expert notification failed', emailErr));
 
             if (currentUser?.email) {
@@ -887,7 +897,7 @@ const createGroupChatByUser = async (req, res) => {
             chat.decisionDeadline = parked.decisionDeadline;
 
             Promise.resolve(
-                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, 'hold', { studentName: currentUser.username, decisionDeadline: parked.decisionDeadline, studentNote, requestId: String(chat._id) }),
+                sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, advertisedCents / 100, true, expertUser.timeZone, 'hold', { studentName: currentUser.username, decisionDeadline: parked.decisionDeadline, studentNote, requestId: String(chat._id) }),
             ).catch((emailErr) => console.log('[createGroupChatByUser] expert notification failed', emailErr));
 
             if (currentUser?.email) {
@@ -944,6 +954,7 @@ const createGroupChatByUser = async (req, res) => {
                 customer: userId.toString(),
                 expert: expert.toString(),
                 groupChat: chat._id.toString(),
+                ...historyPricing(charge),
             };
             if (pendingPaymentId) {
                 // Settle the row written before capture rather than adding a second one.
@@ -991,7 +1002,7 @@ const createGroupChatByUser = async (req, res) => {
         }
 
         Promise.resolve(
-            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, expectedCents / 100, true, expertUser.timeZone, charge ? 'paid' : undefined, { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline, studentNote, requestId: String(chat._id) }),
+            sendEmailMeetingRequestToExpert(expertUser.email, expertUser.username, name, chat.start, duration, advertisedCents / 100, true, expertUser.timeZone, charge ? 'paid' : undefined, { studentName: currentUser.username, decisionDeadline: chat.decisionDeadline, studentNote, requestId: String(chat._id) }),
         ).catch((emailErr) => {
             console.log('[createGroupChatByUser] expert notification email failed', emailErr);
         });
@@ -1404,7 +1415,9 @@ const joinGroupChat = async (req, res) => {
         if (!currentUser) return res.status(404).send("User not found");
 
         if (currentUser.role === 'customer') {
-            const expectedCents = dollarsToCents(groupChat.price);
+            const quote = await chargeDueForGroup(groupChat);
+            const expectedCents = quote.chargeCents;
+            const advertisedCents = quote.advertisedCents;
             if (expectedCents > 0 && await paymentIntentAlreadyConsumed(payment_intent)) {
                 return res.status(409).send("This payment has already been used for a booking.");
             }
@@ -1412,6 +1425,7 @@ const joinGroupChat = async (req, res) => {
             const charge = await verifyBookingChargeOrRefund({
                 payment_intent,
                 expectedCents,
+                advertisedCents,
                 name: groupChat.name,
                 customer: currentUser,
                 expert: null,
@@ -1433,6 +1447,7 @@ const joinGroupChat = async (req, res) => {
                     customer: userId.toString(),
                     expert: groupChat.admin.toString(),
                     groupChat: groupChatId.toString(),
+                    ...historyPricing(charge),
                 })
             }
         }
@@ -1951,7 +1966,8 @@ const AUTO_SEAT_OFFER_NOTE_FREE =
 
 /**
  * When a real seat exists under maxAttendees, offer it to the oldest pending
- * interest waitlist entry (FIFO by createdAt). Free → enroll; paid → awaiting_payment.
+ * interest waitlist entry (FIFO by createdAt). A charge above 0, including the
+ * free-session platform fee, becomes awaiting_payment. A quote of 0 enrolls.
  * Does not enroll past capacity. No-op when full or no pending rows.
  */
 const offerNextWaitlistedSeat = async (groupChatId: any): Promise<boolean> => {
@@ -2001,7 +2017,12 @@ const offerNextWaitlistedSeat = async (groupChatId: any): Promise<boolean> => {
                 continue;
             }
 
-            const priceCents = dollarsToCents(groupChat.price);
+            const quote = await chargeDueForGroup(groupChat);
+            // Same total as any other student checkout: advertised price, capped
+            // platform fee, and tax. A $0 advertised seminar still owes the
+            // free-session platform fee (and tax on that fee). Only a quote of 0
+            // enrolls with no payment.
+            const priceCents = quote.chargeCents;
             const studentDeepLink = seminarStudentDashboardUrl(String(groupChat._id));
 
             if (priceCents > 0) {
@@ -2275,6 +2296,7 @@ const enrollAndConfirmSeminar = async ({ groupChat, customer, expert, charge, pa
                 customer: customer._id.toString(),
                 expert: expert._id.toString(),
                 groupChat: groupChat._id.toString(),
+                ...historyPricing(charge),
             };
             let recorded = await appendPaymentHistory(record);
             if (!recorded) recorded = await appendPaymentHistory(record);
@@ -2325,7 +2347,40 @@ const registerForSeminar = async (req, res) => {
         const customer = await User.findById(userId);
         const expert = await User.findById(groupChat.admin.toString());
 
-        const expectedCents = dollarsToCents(groupChat.price);
+        const quote = await chargeDueForGroup(groupChat);
+        const expectedCents = quote.chargeCents;
+        const advertisedCents = quote.advertisedCents;
+
+        // A full seminar is a waitlist join, not a checkout. Do not require the
+        // platform fee before the student has a seat to pay for.
+        const softHeldNow = typeof groupChat.maxAttendees === 'number'
+            ? await countSoftHeldSeats(groupChat._id)
+            : 0;
+        if (
+            seminarIsFull(groupChat, softHeldNow)
+            && groupChat.status === 'active'
+            && String(groupChat.admin) !== String(userId)
+            && !(groupChat.participants || []).some((p: any) => p.toString() === String(userId))
+        ) {
+            const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
+            if (seatRequestWindowOpen(startMs) || !seatRequestUnavailableMessage(startMs)) {
+                const pending = await SeminarSeatRequest.findOne({
+                    customer: userId,
+                    groupChat: groupChat._id,
+                    status: { $in: ['pending', 'awaiting_payment'] },
+                });
+                if (!pending) {
+                    const recorded = await recordSeatRequest({ groupChat, userId });
+                    if (!recorded.duplicate) {
+                        return res.status(200).json({
+                            success: true,
+                            status: 'pending',
+                            requestId: recorded.request._id,
+                        });
+                    }
+                }
+            }
+        }
 
         let charge: any = null;
         let held = false;
@@ -2342,6 +2397,7 @@ const registerForSeminar = async (req, res) => {
             const payment = await resolveBookingPayment({
                 payment_intent,
                 expectedCents,
+                advertisedCents,
                 boundTo: { userId: String(userId), groupChatId: String(groupChat._id) },
                 name: groupChat.name,
                 customer,
@@ -2427,10 +2483,9 @@ const registerForSeminar = async (req, res) => {
             return refundAndFail(404, "User not found", "Student account not found");
         }
 
-        try {
-            assertBookingLeadTime(expert, groupChat.start, "Seminar registrations");
-        } catch (leadErr: any) {
-            return refundAndFail(400, safeHttp500Message(leadErr), leadErr?.message || "Registration lead time not met");
+        const registrationClosed = seminarRegistrationClosedError(groupChat.start);
+        if (registrationClosed) {
+            return refundAndFail(400, registrationClosed, "Seminar already started");
         }
 
         const claimed = await claimSeminarSeat(groupChat._id, userId, groupChat.maxAttendees);
@@ -2537,6 +2592,7 @@ const registerForSeminar = async (req, res) => {
                         customer: customer._id,
                         expert: expert._id,
                         groupChat: groupChat._id,
+                        ...historyPricing(charge),
                     });
                     await ph.save();
                     pendingPaymentId = ph._id;
@@ -2719,6 +2775,24 @@ const sessionHasLivePayment = async (groupChatId: string) => {
         && !refundedIntents.has(String(row.paymentIntent)));
 };
 
+const refundedSessionReleasedEmail = (chat: any) => {
+    const sessionName = chat.name || '1:1 session';
+    const startLabel = chat.start ? new Date(chat.start).toLocaleString() : '';
+    return {
+        heading: 'Session released — the payment was refunded',
+        previewText: 'This session is no longer confirmed.',
+        blocks: [
+            emailParagraph(`The payment for <strong>${emailEscape(sessionName)}</strong>${startLabel ? ` on <strong>${emailEscape(startLabel)}</strong>` : ''} was refunded, so the session is no longer confirmed and the time slot has been released.`),
+            emailFacts([
+                ['Session', sessionName],
+                ['Date & time', startLabel],
+                ['Reference', String(chat._id)],
+            ]),
+            emailCallout('No money is owed. If this session should still go ahead, please book it again or contact the administrator through WisdomLinked.', 'bad'),
+        ],
+    };
+};
+
 const reconcileRefundedSession = async (groupChatId: any, reason: string) => {
     if (!groupChatId || !mongoose.isValidObjectId(String(groupChatId))) return;
     const chat = await GroupChat.findById(String(groupChatId))
@@ -2736,22 +2810,9 @@ const reconcileRefundedSession = async (groupChatId: any, reason: string) => {
     console.error('[reconcileRefundedSession] refunded session was still confirmed — released', String(chat._id), reason);
 
     const sessionName = chat.name || '1:1 session';
-    const startLabel = chat.start ? new Date(chat.start).toLocaleString() : '';
     const expertId = String(chat.admin);
     const studentId = groupMemberIds(chat).find((id: string) => id !== expertId) || String(chat.createdBy);
-    const body = {
-        heading: 'Session released — the payment was refunded',
-        previewText: 'This session is no longer confirmed.',
-        blocks: [
-            emailParagraph(`The payment for <strong>${emailEscape(sessionName)}</strong>${startLabel ? ` on <strong>${emailEscape(startLabel)}</strong>` : ''} was refunded, so the session is no longer confirmed and the time slot has been released.`),
-            emailFacts([
-                ['Session', sessionName],
-                ['Date & time', startLabel],
-                ['Reference', String(chat._id)],
-            ]),
-            emailCallout('No money is owed. If this session should still go ahead, please book it again or contact the administrator through WisdomLinked.', 'bad'),
-        ],
-    };
+    const body = refundedSessionReleasedEmail(chat);
 
     for (const id of [expertId, studentId]) {
         if (!id || !mongoose.isValidObjectId(id)) continue;
@@ -2760,6 +2821,106 @@ const reconcileRefundedSession = async (groupChatId: any, reason: string) => {
         await sendSeminarEmail(person.email, `Session released — ${sessionName}`, body)
             .catch((emailErr: any) => console.log('[reconcileRefundedSession] notice failed', emailErr?.message));
     }
+};
+
+/** Whether the student still has money on these sessions that no refund row has given back. */
+const studentStillPaidFor = async (studentId: string, groupChatIds: any[]): Promise<boolean> => {
+    const rows = await PaymentHistory.find({
+        customer: studentId,
+        groupChat: { $in: groupChatIds },
+        $or: [
+            { paymentType: 'charge', status: { $in: ['completed', 'withheld', 'pending'] } },
+            { paymentType: 'retry', status: 'completed' },
+        ],
+    }).select('paymentIntent status');
+    const intents = rows.map((row: any) => String(row.paymentIntent || '')).filter(Boolean);
+    const refunded = new Set<string>(intents.length
+        ? (await PaymentHistory.distinct('paymentIntent', { paymentType: 'refund', paymentIntent: { $in: intents } })).map(String)
+        : []);
+    return rows.some((row: any) => (row.paymentIntent
+        ? !refunded.has(String(row.paymentIntent))
+        : row.status === 'completed'));
+};
+
+export type AdminRefundSeatRelease = {
+    released: boolean;
+    type?: 'individual' | 'seminar';
+    sessionName?: string;
+    skipped?: 'no_session' | 'not_enrolled' | 'already_cancelled' | 'ended' | 'still_paid';
+};
+
+const releaseSeatAfterAdminRefund = async (payment: any): Promise<AdminRefundSeatRelease> => {
+    const groupChatId = String(payment?.groupChat?._id ?? payment?.groupChat ?? '');
+    const studentId = String(payment?.customer?._id ?? payment?.customer ?? '');
+    if (!mongoose.isValidObjectId(groupChatId) || !mongoose.isValidObjectId(studentId)) {
+        return { released: false, skipped: 'no_session' };
+    }
+    const chat = await GroupChat.findById(groupChatId)
+        .select('name type status start end duration admin participants createdBy seriesId');
+    if (!chat || (chat.type !== 'individual' && chat.type !== 'seminar')) {
+        return { released: false, skipped: 'no_session' };
+    }
+    const sessionName = chat.name || (chat.type === 'seminar' ? 'Seminar' : '1:1 session');
+    const isParticipant = (doc: any) => (doc.participants || []).some((p: any) => normalizeId(p) === studentId);
+    const now = Date.now();
+
+    if (chat.type === 'individual') {
+        if (!isParticipant(chat) || normalizeId(chat.admin) === studentId) return { released: false, sessionName, skipped: 'not_enrolled' };
+        if (chat.status === 'cancelled') return { released: false, sessionName, skipped: 'already_cancelled' };
+        if (sessionHasEnded(chat, now)) return { released: false, sessionName, skipped: 'ended' };
+        if (await studentStillPaidFor(studentId, [chat._id])) return { released: false, sessionName, skipped: 'still_paid' };
+
+        const cancelled = await GroupChat.findOneAndUpdate(
+            { _id: chat._id, status: { $ne: 'cancelled' } },
+            { $set: { status: 'cancelled', paymentDeadline: null, decisionDeadline: null } },
+        );
+        if (!cancelled) return { released: false, sessionName, skipped: 'already_cancelled' };
+
+        const expert = await User.findById(normalizeId(chat.admin)).catch(() => null);
+        if (expert?.email) {
+            await sendSeminarEmail(expert.email, `Session released — ${sessionName}`, refundedSessionReleasedEmail(chat))
+                .catch((emailErr: any) => console.log('[releaseSeatAfterAdminRefund] expert notice failed', emailErr?.message));
+        }
+        return { released: true, type: 'individual', sessionName };
+    }
+
+    const seriesFilter: any = chat.seriesId
+        ? { $or: [{ _id: chat._id }, { seriesId: chat.seriesId, type: 'seminar' }] }
+        : { _id: chat._id };
+    const occurrences = await GroupChat.find(seriesFilter).select('_id start end duration participants');
+    const enrolled = occurrences.filter(isParticipant);
+    if (!enrolled.length) return { released: false, sessionName, skipped: 'not_enrolled' };
+    const remaining = enrolled.filter((occ: any) => !sessionHasEnded(occ, now));
+    if (!remaining.length) return { released: false, sessionName, skipped: 'ended' };
+    if (await studentStillPaidFor(studentId, occurrences.map((occ: any) => occ._id))) {
+        return { released: false, sessionName, skipped: 'still_paid' };
+    }
+
+    await unenrollSeminarSeries(chat, studentId);
+    // The waitlist only fills dates that have not started, so offer the next of those.
+    const nextUnstarted = remaining
+        .filter((occ: any) => occ.start && new Date(occ.start).getTime() > now)
+        .sort((a: any, b: any) => new Date(a.start).getTime() - new Date(b.start).getTime())[0];
+    if (nextUnstarted) await maybeOfferWaitlistAfterCapacityChange(nextUnstarted._id);
+
+    const [host, student] = await Promise.all([
+        User.findById(normalizeId(chat.admin)).catch(() => null),
+        User.findById(studentId).catch(() => null),
+    ]);
+    if (host?.email) {
+        await sendSeminarEmail(host.email, `Seat released — ${sessionName}`, {
+            heading: 'A seat was released — the payment was refunded',
+            previewText: 'One student is no longer enrolled.',
+            blocks: [
+                emailParagraph(`${emailEscape(student?.username || 'A student')}'s payment for <strong>${emailEscape(sessionName)}</strong> was refunded, so they are no longer enrolled and their seat is open again.`),
+                emailFacts([
+                    ['Seminar', sessionName],
+                    ['Reference', String(chat._id)],
+                ]),
+            ],
+        }).catch((emailErr: any) => console.log('[releaseSeatAfterAdminRefund] host notice failed', emailErr?.message));
+    }
+    return { released: true, type: 'seminar', sessionName };
 };
 
 const refundBookingCharge = async ({ payment_intent, charge, name, customer, expert, groupChatId, reason, recordStatus }: any) => {
@@ -2871,7 +3032,7 @@ const releaseOrphanBookingIntent = async (payment_intent: string, userId: string
     await refundOrphanBookingCharge(payment_intent, userId, reason);
 };
 
-const verifyBookingChargeOrRefund = async ({ payment_intent, expectedCents, name, customer, expert, groupChatId, boundTo }: any) => {
+const verifyBookingChargeOrRefund = async ({ payment_intent, expectedCents, advertisedCents = 0, name, customer, expert, groupChatId, boundTo }: any) => {
     let succeededTest: any = false;
     let succeededLive: any = false;
     if (expectedCents > 0) {
@@ -2884,7 +3045,10 @@ const verifyBookingChargeOrRefund = async ({ payment_intent, expectedCents, name
     if (captured && boundTo) {
         assertIntentMatchesBooking(captured, boundTo);
     }
-    if (captured && captured.amount !== expectedCents) {
+    const matchCents = captured
+        ? settlementMatchCents(captured.amount, expectedCents, advertisedCents, snapshotChargeCents(captured.metadata))
+        : expectedCents;
+    if (captured && captured.amount !== matchCents) {
         await refundBookingCharge({
             payment_intent,
             charge: { paidBy: succeededTest ? 'test' : 'live', amount: captured.amount, currency: captured.currency },
@@ -2896,7 +3060,7 @@ const verifyBookingChargeOrRefund = async ({ payment_intent, expectedCents, name
             recordStatus: 'refunded',
         });
     }
-    return assertPaymentMatchesExpected(expectedCents, payment_intent, succeededTest, succeededLive);
+    return assertPaymentMatchesExpected(matchCents, payment_intent, succeededTest, succeededLive);
 };
 
 const expandedCharge = (intent: any): any =>
@@ -2921,6 +3085,7 @@ export type BookingPaymentResolution = {
 const resolveBookingPayment = async ({
     payment_intent,
     expectedCents,
+    advertisedCents = 0,
     boundTo,
     name,
     customer,
@@ -2932,6 +3097,15 @@ const resolveBookingPayment = async ({
 
     const serverMode = await resolveServerStripeMode();
     const authProbe = await checkPaymentIntentAuthorized(payment_intent, serverMode);
+    // Existing authorizations settle at the amount Stripe already authorized when
+    // that is today's total, the advertised price, or the total stored on the
+    // intent. A different amount is still rejected against today's total.
+    const matchCents = (probe: any) => settlementMatchCents(
+        probe?.amount,
+        expectedCents,
+        advertisedCents,
+        snapshotChargeCents(probe?.metadata),
+    );
 
     if (authProbe) {
         try {
@@ -2944,7 +3118,7 @@ const resolveBookingPayment = async ({
         let charge: any = null;
         try {
             charge = assertPaymentMatchesExpected(
-                expectedCents,
+                matchCents(authProbe),
                 payment_intent,
                 serverMode === 'test' ? authProbe : false,
                 serverMode === 'live' ? authProbe : false,
@@ -2967,7 +3141,7 @@ const resolveBookingPayment = async ({
         }
         try {
             const charge = assertPaymentMatchesExpected(
-                expectedCents,
+                matchCents(settlingProbe),
                 payment_intent,
                 serverMode === 'test' ? settlingProbe : false,
                 serverMode === 'live' ? settlingProbe : false,
@@ -2985,6 +3159,7 @@ const resolveBookingPayment = async ({
         const charge = await verifyBookingChargeOrRefund({
             payment_intent,
             expectedCents,
+            advertisedCents,
             name,
             customer,
             expert,
@@ -3014,6 +3189,7 @@ const captureBookingHold = async ({ payment_intent, charge, customer, expert, gr
             customer: customer?._id,
             expert: expert?._id,
             groupChat: groupChat?._id,
+            ...historyPricing(charge),
         });
         await ph.save();
         pendingPaymentId = ph._id;
@@ -3083,6 +3259,7 @@ const parkBookingHold = async ({ payment_intent, charge, customer, expert, group
             customer: customer?._id,
             expert: expert?._id,
             groupChat: groupChat?._id,
+            ...historyPricing(charge),
         });
         await ph.save();
         return {
@@ -3162,6 +3339,7 @@ const recordSeatRequest = async ({ groupChat, userId }: any) => {
     const customer = await User.findById(String(userId));
     const studentDeepLink = seminarStudentDashboardUrl(String(groupChat._id));
     const expertDeepLink = seminarExpertDashboardUrl();
+    const waitlistChargeCents = (await chargeDueForGroup(groupChat)).chargeCents;
 
     if (customer?.email) {
         await sendSeminarEmail(
@@ -3180,7 +3358,7 @@ const recordSeatRequest = async ({ groupChat, userId }: any) => {
                     emailCallout('<strong>Nothing has been charged.</strong> You’ll only pay if a seat opens and you confirm.'),
                     emailBullets([
                         'When a seat opens, the oldest waitlist entry is offered automatically — the host does not need to approve.',
-                        dollarsToCents(groupChat.price) > 0
+                        waitlistChargeCents > 0
                             ? 'If offered a paid seat, you’ll get an email and homepage notice with a link to pay and confirm.'
                             : 'If offered a free seat, you’ll be enrolled automatically and notified by email.',
                     ]),
@@ -3370,7 +3548,8 @@ const approveSeminarSeatRequest = async (req, res) => {
             return res.status(rejection.code).send(rejection.msg);
         }
 
-        if (walletRequest && currentPriceCents > 0) {
+        const walletQuote = await chargeForAdvertised('seminar', currentPriceCents);
+        if (walletRequest && walletQuote.chargeCents > 0) {
             const appState = await AppState.findOne();
             const payBy = paymentWindowDeadline({
                 sessionStartMs: groupChat.start ? new Date(groupChat.start).getTime() : 0,
@@ -3381,7 +3560,7 @@ const approveSeminarSeatRequest = async (req, res) => {
                 {
                     $set: {
                         status: 'awaiting_payment',
-                        amount: currentPriceCents,
+                        amount: walletQuote.chargeCents,
                         paymentDeadline: payBy,
                         decisionNote,
                         decisionNoteAt: new Date(),
@@ -3406,12 +3585,12 @@ const approveSeminarSeatRequest = async (req, res) => {
                             ['Seminar', groupChat.name],
                             ['Hosted by', expert.username],
                             ['Date & time', emailWhen(groupChat.start, customer.timeZone)],
-                            ['Payment due', `${emailMoneyFromCents(currentPriceCents)} by Alipay or WeChat Pay`],
+                            ['Payment due', `${emailMoneyFromCents(walletQuote.chargeCents)} by Alipay or WeChat Pay`],
                             ['Payment deadline', emailWhen(payBy, customer.timeZone)],
                         ]),
                         emailCallout(`Your seat is confirmed only once payment completes. If it is not received by <strong>${emailEscape(emailWhen(payBy, customer.timeZone))}</strong>, this approval expires automatically, the seat is released and no charge is made.`, 'warn'),
                         emailExpertNote(decisionNote, "Host's note"),
-                        emailButton(`Pay ${emailMoneyFromCents(currentPriceCents)}`),
+                        emailButton(`Pay ${emailMoneyFromCents(walletQuote.chargeCents)}`),
                     ],
                 },
             );
@@ -3458,13 +3637,19 @@ const approveSeminarSeatRequest = async (req, res) => {
                 const chargeObj = captured.latest_charge && typeof captured.latest_charge === 'object'
                     ? captured.latest_charge
                     : null;
+                const snap = pricingSnapshotFromMetadata(captured.metadata);
+                const snapTotal = snap
+                    ? Number(snap.advertisedCents) + Number(snap.platformFeeCents) + Number(snap.taxCents)
+                    : null;
+                const capturedCents = capturedAmountCents(captured);
                 charge = {
                     paidBy: request.stripeMode,
-                    amount: capturedAmountCents(captured),
+                    amount: capturedCents,
                     currency: captured.currency,
                     receiptUrl: chargeObj?.receipt_url ?? null,
                     receiptNumber: chargeObj?.receipt_number ?? null,
                     balanceTransaction: balanceTransactionId(chargeObj),
+                    ...(snap && snapTotal === capturedCents ? { pricing: snap } : {}),
                 };
             }
         }
@@ -3541,6 +3726,7 @@ const approveSeminarSeatRequest = async (req, res) => {
                     receiptUrl: charge.receiptUrl,
                     receiptNumber: charge.receiptNumber,
                     balanceTransaction: charge.balanceTransaction ?? null,
+                    ...historyPricing(charge),
                 });
             } catch (historyErr) {
                 console.log('[approveSeminarSeatRequest] payment record update failed after enrollment', historyErr);
@@ -3767,6 +3953,7 @@ const paySeminarSeatRequest = async (req, res) => {
                     customer: customer._id,
                     expert: expert._id,
                     groupChat: groupChat._id,
+                    ...historyPricing(charge),
                 });
                 await ph.save();
                 paymentHistoryId = ph._id;
@@ -3925,7 +4112,7 @@ const inviteToSeminar = async (req, res) => {
             return res.status(409).send("This seminar has been cancelled.");
         }
         const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
-        const priceCents = dollarsToCents(groupChat.price);
+        const priceCents = (await chargeDueForGroup(groupChat)).chargeCents;
         const durationMin = Number(groupChat.duration) || 0;
         const endMs = startMs && durationMin > 0 ? startMs + durationMin * 60_000 : 0;
         const now = Date.now();
@@ -3985,8 +4172,15 @@ const inviteToSeminar = async (req, res) => {
                 continue;
             }
 
-            // A free seminar has nothing to accept, so the invitation is the enrolment.
-            if (priceCents <= 0) {
+            // An expert is not a student checkout: do not charge the platform fee
+            // and do not block enrollment because the advertised price is 0.
+            // A student on a $0 seminar still owes the platform fee.
+            const dueCents = String(student.role || '').toLowerCase() === 'expert' && !(dollarsToCents(groupChat.price) > 0)
+                ? 0
+                : priceCents;
+
+            // Nothing to collect, so the invitation is the enrolment.
+            if (dueCents <= 0) {
                 try {
                     await enrollAndConfirmSeminar({
                         groupChat,
@@ -4409,6 +4603,8 @@ const sweepExpiredSessionHolds = async () => {
                     ).catch(() => null);
                     continue;
                 }
+                // Advertised $0 with no parked hold is a legacy free request. A new
+                // $0 checkout parks the platform fee, so it is settled above.
                 const freeRequest = !(dollarsToCents(chat.price) > 0);
                 if (isWallet(chat.paymentMode) || freeRequest || sessionPassed) {
                     const lapsed = await GroupChat.findOneAndUpdate(
@@ -4818,11 +5014,15 @@ const orphanIntentWasDelivered = async (intent: any, meta: any): Promise<boolean
         return isParticipant;
     }
     if (!meta.expertId || !intent.createdMs) return false;
+    // Stored price is the advertised dollars. A fee-inclusive charge is higher
+    // than that, so matching on the charged total would miss a paid booking.
+    const snap = pricingSnapshotFromMetadata(meta);
+    const priceDollars = snap ? Number(snap.advertisedCents) / 100 : Number(intent.amount || 0) / 100;
     return !!(await GroupChat.exists({
         type: 'individual',
         createdBy: meta.userId,
         admin: meta.expertId,
-        price: intent.amount / 100,
+        price: priceDollars,
         status: { $ne: 'cancelled' },
         createdAt: {
             $gte: new Date(intent.createdMs - ORPHAN_MATCH_BEFORE_MS),
@@ -4871,6 +5071,8 @@ const sweepOrphanedBookingIntentsForMode = async (stripeMode: 'test' | 'live') =
                 : meta.expertId;
 
             if (action === 'record') {
+                const snap = pricingSnapshotFromMetadata(meta);
+                const snapTotal = snapshotChargeCents(meta);
                 await appendPaymentHistory({
                     stripeMode,
                     paymentType: 'charge',
@@ -4882,6 +5084,7 @@ const sweepOrphanedBookingIntentsForMode = async (stripeMode: 'test' | 'live') =
                     customer: meta.userId,
                     expert: expertId,
                     groupChat: meta.groupChatId,
+                    ...(snap && snapTotal === intent.amount ? snap : {}),
                 });
                 handled += 1;
                 console.log('[sweepOrphanedBookingIntents] recorded enrolled-but-unrecorded charge', intent.id);
@@ -4892,6 +5095,8 @@ const sweepOrphanedBookingIntentsForMode = async (stripeMode: 'test' | 'live') =
             const refund: any = await refundPaymentIntent(intent.id, null, stripeMode);
             if (refund) {
                 const preExisting = !!refund.alreadyRefunded;
+                const refundSnap = pricingSnapshotFromMetadata(meta);
+                const refundSnapTotal = snapshotChargeCents(meta);
                 await appendPaymentHistory({
                     stripeMode,
                     paymentType: 'refund',
@@ -4905,6 +5110,7 @@ const sweepOrphanedBookingIntentsForMode = async (stripeMode: 'test' | 'live') =
                     customer: meta.userId,
                     expert: expertId,
                     groupChat: meta.groupChatId,
+                    ...(refundSnap && refundSnapTotal === intent.amount ? refundSnap : {}),
                 });
                 handled += 1;
                 console.log(
@@ -5120,10 +5326,15 @@ const handleBookingPaymentIntentEvent = async (event: any): Promise<string> => {
         ? (await GroupChat.findById(String(meta.groupChatId)).select('admin'))?.admin
         : meta.expertId;
 
+    const capturedCents = capturedAmountCents(intent);
+    const snap = pricingSnapshotFromMetadata(intent.metadata);
+    const snapTotal = snap
+        ? Number(snap.advertisedCents) + Number(snap.platformFeeCents) + Number(snap.taxCents)
+        : null;
     await appendPaymentHistory({
         stripeMode,
         paymentType: 'charge',
-        amount: capturedAmountCents(intent),
+        amount: capturedCents,
         currency: intent.currency,
         description: 'Booking payment confirmed by Stripe webhook',
         paymentIntent: String(intent.id),
@@ -5131,6 +5342,7 @@ const handleBookingPaymentIntentEvent = async (event: any): Promise<string> => {
         customer: meta.userId,
         expert: expertId,
         groupChat: meta.groupChatId,
+        ...(snap && snapTotal === capturedCents ? snap : {}),
     });
     return 'recorded';
 };
@@ -5149,6 +5361,9 @@ const acceptIndividualAppointment = async (req, res) => {
             await releaseOrphanBookingIntent(payment_intent, userId, "Session no longer exists");
             return res.status(404).send("Sorry, the group chat doesn't exist");
         }
+        const quote = await chargeDueForGroup(groupChat);
+        const chargeCents = quote.chargeCents;
+        const advertisedCents = quote.advertisedCents;
 
         if (role !== 'customer' && String(groupChat.createdBy) === String(userId)) {
             return res.status(403).send("The student must accept and pay for a session you proposed.");
@@ -5230,7 +5445,7 @@ const acceptIndividualAppointment = async (req, res) => {
             // A wallet booking holds no funds, so accepting it does not confirm the
             // session — it opens the student's window to pay, and the session stays
             // pending until they do.
-            if (!parkedRow && isWallet(groupChat.paymentMode) && dollarsToCents(groupChat.price) > 0) {
+            if (!parkedRow && isWallet(groupChat.paymentMode) && chargeCents > 0) {
                 if (groupChat.paymentDeadline) {
                     return res.status(409).send("You have already accepted this request. It is waiting for the student to pay.");
                 }
@@ -5270,13 +5485,13 @@ const acceptIndividualAppointment = async (req, res) => {
                                     emailFacts([
                                         ['Session', groupChat.name],
                                         ['Date & time', emailWhen(groupChat.start, student.timeZone)],
-                                        ['Payment due', `${emailMoney(groupChat.price)} by Alipay or WeChat Pay`],
+                                        ['Payment due', `${emailMoneyFromCents(chargeCents)} by Alipay or WeChat Pay`],
                                         ['Payment deadline', emailWhen(deadline, student.timeZone)],
                                     ]),
                                     emailCallout(`Your session is confirmed only once payment completes. If it is not received by <strong>${emailEscape(emailWhen(deadline, student.timeZone))}</strong>, the approval expires automatically, the time slot is released and no charge is made.`, 'warn'),
                                     emailStudentNote(bookingNote, 'Your note'),
                                     emailExpertNote(decisionNote),
-                                    emailButton(`Pay ${emailMoney(groupChat.price)}`),
+                                    emailButton(`Pay ${emailMoneyFromCents(chargeCents)}`),
                                 ],
                             },
                         );
@@ -5292,12 +5507,11 @@ const acceptIndividualAppointment = async (req, res) => {
                 });
             }
 
-            // A card booking is confirmed by capturing the student's hold. If no hold is
-            // left to capture — the capture failed, or it lapsed or was released — there
-            // is nothing to collect, and activating anyway would confirm the session for
-            // free. A first attempt that fails marks its row 'failed', so without this
-            // guard simply pressing Accept a second time buys the session for nothing.
-            if (!parkedRow && dollarsToCents(groupChat.price) > 0) {
+            // A card booking with an advertised price is confirmed by capturing the
+            // student's hold. Advertised $0 with no hold is a legacy free request:
+            // nothing was authorized, so accepting it does not invent a platform fee.
+            // A new $0 checkout already parked the $1 (or current) fee as a hold.
+            if (!parkedRow && advertisedCents > 0) {
                 const securedPayment = await PaymentHistory.exists({
                     groupChat: String(groupChat._id),
                     paymentType: 'charge',
@@ -5312,7 +5526,7 @@ const acceptIndividualAppointment = async (req, res) => {
             payer = await User.findById(userId);
             expertUser = await User.findById(groupChat.admin.toString());
 
-            const expectedCents = dollarsToCents(groupChat.price);
+            const expectedCents = chargeCents;
 
             // Paying a wallet booking is only possible in the window the expert's
             // acceptance opened — before that there is no sale, after it the slot is gone.
@@ -5330,6 +5544,7 @@ const acceptIndividualAppointment = async (req, res) => {
             const payment = await resolveBookingPayment({
                 payment_intent,
                 expectedCents,
+                advertisedCents,
                 boundTo: { userId: String(userId), groupChatId: String(groupChat._id) },
                 name: groupChat.name,
                 customer: payer,
@@ -5468,6 +5683,7 @@ const acceptIndividualAppointment = async (req, res) => {
                     customer: String(userId),
                     expert: groupChat.admin.toString(),
                     groupChat: groupChatId,
+                    ...historyPricing(charge),
                 })
             }
 
@@ -5814,6 +6030,43 @@ const deleteGroup = async (req, res) => {
     }
 };
 
+/** Student-facing copy for the cents actually refunded on a cancellation. */
+const cancellationRefundCopy = (refundCents: number, chargeCents: number, currency?: string) => {
+    const refunded = emailMoneyFromCents(refundCents, currency);
+    const charged = emailMoneyFromCents(chargeCents, currency);
+    const full = refundCents > 0 && refundCents >= chargeCents;
+    if (full) {
+        return {
+            responseSuffix: ' The payment has been refunded in full.',
+            preview: 'Your payment has been refunded in full.',
+            subject: `Session cancelled — ${charged} refunded`,
+            fact: charged,
+            callout: `Your payment of <strong>${charged}</strong> has been refunded in full. It will be credited to your original payment method and may take 5–10 business days to appear. No action is required from you.`,
+        };
+    }
+    if (!(refundCents > 0)) {
+        return {
+            responseSuffix: ' A fee was retained, so nothing was refunded.',
+            preview: 'A fee was retained, so nothing was refunded.',
+            subject: 'Session cancelled — a fee was retained',
+            fact: emailMoneyFromCents(0, currency),
+            callout: 'A fee was retained, so nothing was refunded.',
+        };
+    }
+    return {
+        responseSuffix: ` You have been refunded ${refunded}; a fee was retained.`,
+        preview: 'A fee was retained from your refund.',
+        subject: `Session cancelled — ${refunded} refunded`,
+        fact: refunded,
+        callout: `You have been refunded <strong>${refunded}</strong>. A fee was retained. It will be credited to your original payment method and may take 5–10 business days to appear.`,
+    };
+};
+
+const refundCentsForCancellation = async (sessionType: 'seminar' | 'oneToOne', payment: any) => {
+    const settings = await loadPricingSettings();
+    return cancellationRefundCents(settings[sessionType].cancellationRefund, payment);
+};
+
 const cancelIndividualAppointment = async (req, res) => {
     try {
         const { userId } = req.user;
@@ -5961,43 +6214,48 @@ const cancelIndividualAppointment = async (req, res) => {
                 paymentType: 'refund',
             });
             if (!alreadyRefunded) {
-                const refund = await refundPaymentIntent(payment.paymentIntent, payment.amount, payment.stripeMode)
-                if (!refund) {
-                    await restorePending();
-                    return res.status(502).send("We couldn't refund the payment, so the session was not cancelled. Please try again or contact support.");
+                const chargeCents = Math.max(0, Math.round(Number(payment.amount) || 0));
+                const refundCents = await refundCentsForCancellation('oneToOne', payment);
+                const copy = cancellationRefundCopy(refundCents, chargeCents, payment.currency);
+                if (refundCents > 0) {
+                    const refund = await refundPaymentIntent(payment.paymentIntent, refundCents, payment.stripeMode)
+                    if (!refund) {
+                        await restorePending();
+                        return res.status(502).send("We couldn't refund the payment, so the session was not cancelled. Please try again or contact support.");
+                    }
+                    await appendPaymentHistory({
+                        stripeMode: payment.stripeMode,
+                        amount: refundCents,
+                        currency: payment.currency,
+                        description: payment.description,
+                        customer: payment.customer,
+                        expert: payment.expert,
+                        groupChat: payment.groupChat,
+                        event: payment.event,
+                        paymentType: 'refund',
+                        paymentIntent: refund.payment_intent,
+                        status: 'refunded',
+                    })
+                    await PaymentHistory.findByIdAndUpdate(payment._id, { status: 'refunded' });
                 }
-                await appendPaymentHistory({
-                    stripeMode: payment.stripeMode,
-                    amount: payment.amount,
-                    currency: payment.currency,
-                    description: payment.description,
-                    customer: payment.customer,
-                    expert: payment.expert,
-                    groupChat: payment.groupChat,
-                    event: payment.event,
-                    paymentType: 'refund',
-                    paymentIntent: refund.payment_intent,
-                    status: 'refunded',
-                })
-                await PaymentHistory.findByIdAndUpdate(payment._id, { status: 'refunded' });
-                refundMessage = ' The payment has been refunded in full.';
+                refundMessage = copy.responseSuffix;
                 if (student?.email) {
                     await sendSeminarEmail(
                         student.email,
-                        `Session cancelled — ${emailMoneyFromCents(payment.amount, payment.currency)} refunded`,
+                        copy.subject,
                         {
-                            heading: cancelledByExpert ? 'Your session has been cancelled' : 'Your session has been cancelled',
-                            previewText: 'Your payment has been refunded in full.',
+                            heading: 'Your session has been cancelled',
+                            previewText: copy.preview,
                             blocks: [
                                 emailParagraph(`<strong>${emailEscape(sessionName)}</strong> has been cancelled${cancelledByExpert ? ' by the expert' : ''}.`),
                                 emailFacts([
                                     ['Session', sessionName],
                                     ['Date & time', emailWhen(groupChat.start, student.timeZone)],
-                                    ['Refunded', emailMoneyFromCents(payment.amount, payment.currency)],
+                                    ['Refunded', copy.fact],
                                     ['Reference', String(groupChat._id)],
                                     ['Transaction ID', payment.paymentIntent],
                                 ]),
-                                emailCallout(`Your payment of <strong>${emailMoneyFromCents(payment.amount, payment.currency)}</strong> has been refunded in full. It will be credited to your original payment method and may take 5–10 business days to appear. No action is required from you.`, 'bad'),
+                                emailCallout(copy.callout, 'bad'),
                                 noteBlock || '',
                                 emailParagraph('If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the reference above.', { muted: true }),
                             ],
@@ -6149,7 +6407,9 @@ const leftSeminar = async (req, res) => {
                 paymentType: 'refund',
             });
             if (!alreadyRefunded) {
-                const refundCents = voluntaryCancellationRefundCents(payment.amount);
+                const chargeCents = Math.max(0, Math.round(Number(payment.amount) || 0));
+                const refundCents = await refundCentsForCancellation('seminar', payment);
+                const copy = cancellationRefundCopy(refundCents, chargeCents, payment.currency);
                 if (refundCents > 0) {
                     const refund = await refundPaymentIntent(payment.paymentIntent, refundCents, payment.stripeMode);
                     if (!refund) {
@@ -6170,10 +6430,8 @@ const leftSeminar = async (req, res) => {
                         status: 'refunded',
                     });
                     await PaymentHistory.findByIdAndUpdate(payment._id, { status: 'refunded' });
-                    refundMessage = refundCents < Number(payment.amount || 0)
-                        ? ` You have been refunded $${(refundCents / 100).toFixed(2)}; a payment-processing fee was retained.`
-                        : ' Your payment has been refunded.';
                 }
+                refundMessage = copy.responseSuffix.trim() ? ` ${copy.responseSuffix.trim()}` : '';
             }
         }
 
@@ -6294,6 +6552,7 @@ module.exports = {
     sweepOrphanedBookingIntents,
     handleBookingPaymentIntentEvent,
     reconcileRefundedSession,
+    releaseSeatAfterAdminRefund,
     acceptIndividualAppointment,
     leaveGroup,
     deleteGroup,

@@ -9,6 +9,8 @@ const {
     setStripeMode,
     setSeminarApprovalDeadline,
     setPaymentWindow,
+    getPricingSettings,
+    setPricingSettings,
     sendPaymentLinkToUser,
     processRefund,
     sendAdHocPaymentLink
@@ -68,8 +70,33 @@ const {
 } = require("../controllers/featuredExpert.controller");
 
 const { uploadsGeneral } = require("../middlewares/multerConfig");
+const {
+    listPayroll,
+    recordPayrollCheque,
+    updatePayrollCheque,
+    listExpertPayroll,
+    listPayrollCheques,
+} = require("../controllers/payroll.controller");
+
+const {
+    previewTerms,
+    publishTerms,
+    listTermsVersions,
+    getTermsVersion,
+    downloadTermsDocx,
+    listVersionAcceptances,
+    searchTermsUsersHandler,
+    getUserTermsAcceptances,
+} = require("../controllers/terms.controller");
 
 router.post("/setStripeMode", adminAuth, setStripeMode)
+router.get("/pricingSettings", adminAuth, getPricingSettings)
+router.post("/pricingSettings", adminAuth, setPricingSettings)
+router.get("/payroll", adminAuth, listPayroll)
+router.post("/payroll", adminAuth, recordPayrollCheque)
+router.get("/payroll/cheques", adminAuth, listPayrollCheques)
+router.get("/payroll/expert/:expertId", adminAuth, listExpertPayroll)
+router.patch("/payroll/:id", adminAuth, updatePayrollCheque)
 router.post("/setSeminarApprovalDeadline", adminAuth, setSeminarApprovalDeadline)
 router.post("/setPaymentWindow", adminAuth, setPaymentWindow)
 router.post("/sendPaymentLinkToUser", adminAuth, sendPaymentLinkToUser)
@@ -114,5 +141,14 @@ router.post("/experts/reorder", adminAuth, reorderFeaturedExpert)
 router.post("/experts", adminAuth, createFeaturedExpert)
 router.put("/experts/:id", adminAuth, updateFeaturedExpert)
 router.delete("/experts/:id", adminAuth, deleteFeaturedExpert)
+
+router.get("/terms/search", adminAuth, searchTermsUsersHandler);
+router.get("/terms/users/:userId/acceptances", adminAuth, getUserTermsAcceptances);
+router.post("/terms/:audience/preview", adminAuth, uploadsGeneral, previewTerms);
+router.post("/terms/:audience/publish", adminAuth, uploadsGeneral, publishTerms);
+router.get("/terms/:audience/versions", adminAuth, listTermsVersions);
+router.get("/terms/:audience/versions/:version/docx", adminAuth, downloadTermsDocx);
+router.get("/terms/:audience/versions/:version/acceptances", adminAuth, listVersionAcceptances);
+router.get("/terms/:audience/versions/:version", adminAuth, getTermsVersion);
 
 module.exports = router;
