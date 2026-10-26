@@ -1354,6 +1354,7 @@ export default function ExpertProfile({
           <StudentBookingCheckout
             type="Seminar"
             price={seminarCheckout.price}
+            holdsFunds
             returnUrl={studentBookingReturnUrl}
             pendingDetails={{
               groupChatId: seminarCheckout.id,

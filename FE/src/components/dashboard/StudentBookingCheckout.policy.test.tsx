@@ -21,7 +21,9 @@ vi.mock('@stripe/react-stripe-js', () => ({
   Elements: ({ children }: any) => <div>{children}</div>,
   PaymentElement: () => <div data-testid="payment-element" />,
   useStripe: () => ({}),
-  useElements: () => ({}),
+  useElements: () => ({
+    submit: async () => ({ error: { message: 'Your card was declined.' } }),
+  }),
 }));
 
 const pendingDetails = {
@@ -68,4 +70,15 @@ describe('StudentBookingCheckout cancellation notice', () => {
     expect(screen.queryByRole('checkbox')).toBeNull();
     expect(payButton).not.toBeDisabled();
   });
+
+  it('keeps a payment error on screen after 4 seconds', async () => {
+    renderCheckout();
+    const payButton = await screen.findByRole('button', { name: /pay \$40/i });
+    fireEvent.click(payButton);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Your card was declined.');
+
+    await new Promise((resolve) => setTimeout(resolve, 4100));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Your card was declined.');
+  }, 10000);
 });

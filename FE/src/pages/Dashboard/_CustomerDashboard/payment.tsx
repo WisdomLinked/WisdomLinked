@@ -92,6 +92,7 @@ const CheckoutForm = ({
         if (!stripe || !elements) {
             return;
         }
+        set_errorMessage('');
 
         try {
             if (price === 0) {
@@ -146,15 +147,6 @@ const CheckoutForm = ({
             SetLoadingStatus(false);
         }
     };
-
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            set_errorMessage('')
-        }, 4000)
-        return () => {
-            clearTimeout(timer)
-        }
-    }, [errorMessage])
 
     return (
         <form onSubmit={handleSubmit}>

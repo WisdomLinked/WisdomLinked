@@ -164,6 +164,7 @@ const CheckoutForm = ({
     e.preventDefault();
     if (!stripe || !elements) return;
     if (policyNotice && !acknowledged) return;
+    setErrorMessage('');
 
     try {
       if (price === 0) {
@@ -255,12 +256,6 @@ const CheckoutForm = ({
       endProgress(false);
     }
   };
-
-  useEffect(() => {
-    if (!errorMessage) return;
-    const timer = setTimeout(() => setErrorMessage(''), 4000);
-    return () => clearTimeout(timer);
-  }, [errorMessage]);
 
   return (
     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
