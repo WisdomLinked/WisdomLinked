@@ -30,6 +30,7 @@ import {
   setStripeMode,
 } from '../../../api/api';
 import Payment from './payment';
+import { notify } from '../../../utils/notify';
 
 const ALL_ROWS = [
   {
@@ -509,6 +510,37 @@ describe('Admin Payment Management', () => {
       expect(setStripeMode).not.toHaveBeenCalled();
       expect(modeFilterLabel()).toBe('Test');
       expect(requestedModes()).not.toContain('live');
+      confirm.mockRestore();
+    });
+
+    it('shows no success message after a switch, so nothing covers the toggle', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const success = vi.spyOn(notify, 'success');
+      renderPayment();
+      await screen.findByText(/Showing 4 of 4 histories/);
+      fireEvent.click(screen.getByRole('button', { name: 'Live' }));
+      expect(await screen.findByText(/Showing 2 of 2 histories/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+      expect(await screen.findByText(/Showing 4 of 4 histories/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Live' }));
+      expect(await screen.findByText(/Showing 2 of 2 histories/)).toBeInTheDocument();
+      expect(setStripeMode).toHaveBeenCalledTimes(3);
+      expect(success).not.toHaveBeenCalled();
+      success.mockRestore();
+      confirm.mockRestore();
+    });
+
+    it('still shows the error message when a switch fails', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const error = vi.spyOn(notify, 'error');
+      vi.mocked(setStripeMode).mockResolvedValue({ status: 'FAIL', error: 'Stripe is unavailable' });
+      renderPayment();
+      await screen.findByText(/Showing 4 of 4 histories/);
+      fireEvent.click(screen.getByRole('button', { name: 'Live' }));
+      await waitFor(() => {
+        expect(error).toHaveBeenCalledWith('Stripe is unavailable');
+      });
+      error.mockRestore();
       confirm.mockRestore();
     });
 

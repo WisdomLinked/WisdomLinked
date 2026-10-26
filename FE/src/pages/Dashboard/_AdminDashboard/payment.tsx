@@ -269,7 +269,6 @@ const Payment = () => {
     }
     setPlatformStripeMode(next);
     patchFilters({ mode: next });
-    notify.success(`Stripe mode set to ${next}.`);
   };
 
   const saveApprovalDeadline = async () => {
