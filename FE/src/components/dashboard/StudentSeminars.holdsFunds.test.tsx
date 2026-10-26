@@ -21,6 +21,7 @@ vi.mock('../../api/api', () => ({
   registerForSeminar: vi.fn(),
   requestSeminarSeat: vi.fn(),
   paySeminarSeatRequest: vi.fn(),
+  quoteBookingCharge: vi.fn(async () => null),
 }));
 
 vi.mock('../../api/chatApi', () => ({
@@ -32,6 +33,11 @@ vi.mock('./StudentBookingCheckout', () => ({
     checkoutProps.calls.push(props);
     return <div data-testid="student-checkout" />;
   },
+  quoteRequestBody: (details: { groupChatId?: string }, priceDollars = 0) => ({
+    groupChatId: details?.groupChatId,
+    advertisedCents: Math.max(0, Math.round(Number(priceDollars) * 100)),
+  }),
+  ChargeLines: () => null,
 }));
 
 const seminarRow = {
