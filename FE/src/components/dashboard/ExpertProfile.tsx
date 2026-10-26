@@ -17,7 +17,11 @@ import { useAppSelector } from '../../store';
 import FilePreviewModal from '../../pages/Dashboard/FilePreviewModal';
 import { hasResumeForPreview, resolveResumePublicUrl } from '../../utils/resumeUrl';
 import StudentExpertBookingPicker from './StudentExpertBookingPicker';
-import StudentBookingCheckout, { quoteRequestBody } from './StudentBookingCheckout';
+import StudentBookingCheckout, {
+  ChargeLines,
+  quoteRequestBody,
+  type BookingQuote,
+} from './StudentBookingCheckout';
 import { purposeOptionsFromServices, PURPOSE_OTHER } from '../../constants/serviceOptions';
 import { createGroupChatByUser, getExpertById, getMySeatRequests, profileImageFetch, quoteBookingCharge, registerForSeminar, requestSeminarSeat } from '../../api/api';
 import {
@@ -243,26 +247,46 @@ export default function ExpertProfile({
     return computeBookingPriceDollars(pickedDuration, hourly);
   }, [pickedDuration, expertDetails?.price]);
 
-  const [oneToOneQuoteCents, setOneToOneQuoteCents] = useState<number | null>(null);
+  const [oneToOneQuote, setOneToOneQuote] = useState<BookingQuote | null>(null);
+  const [oneToOneQuoteFailed, setOneToOneQuoteFailed] = useState(false);
 
   useEffect(() => {
-    if (bookingStep !== 'review' || oneToOneSessionPrice > 0 || !pickedDuration) {
-      setOneToOneQuoteCents(null);
+    if (bookingStep !== 'review' || !pickedDuration) {
+      setOneToOneQuote(null);
+      setOneToOneQuoteFailed(false);
       return;
     }
     let cancelled = false;
+    setOneToOneQuote(null);
+    setOneToOneQuoteFailed(false);
     const expertId = String(expertDetails?._id ?? mentor.id);
     (async () => {
-      const response = await quoteBookingCharge(
-        quoteRequestBody(
-          { expert: expertId, duration: pickedDuration, price: oneToOneSessionPrice },
-          oneToOneSessionPrice,
-        ),
-      );
-      if (cancelled) return;
-      setOneToOneQuoteCents(
-        response && typeof response.chargeCents === 'number' ? response.chargeCents : null,
-      );
+      try {
+        const response = await quoteBookingCharge(
+          quoteRequestBody(
+            { expert: expertId, duration: pickedDuration, price: oneToOneSessionPrice },
+            oneToOneSessionPrice,
+          ),
+        );
+        if (cancelled) return;
+        if (!response || typeof response.chargeCents !== 'number') {
+          setOneToOneQuote(null);
+          setOneToOneQuoteFailed(true);
+          return;
+        }
+        setOneToOneQuote({
+          sessionType: response.sessionType,
+          advertisedCents: Number(response.advertisedCents) || 0,
+          platformFeeCents: Number(response.platformFeeCents) || 0,
+          taxCents: Number(response.taxCents) || 0,
+          chargeCents: response.chargeCents,
+        });
+        setOneToOneQuoteFailed(false);
+      } catch {
+        if (cancelled) return;
+        setOneToOneQuote(null);
+        setOneToOneQuoteFailed(true);
+      }
     })();
     return () => {
       cancelled = true;
@@ -1233,17 +1257,28 @@ export default function ExpertProfile({
                 <dt className="text-[#7A7A72]">Appointment duration</dt>
                 <dd className="font-semibold">{pickedDuration} min</dd>
               </div>
+              {oneToOneQuote ? (
+                <ChargeLines quote={oneToOneQuote} />
+              ) : oneToOneSessionPrice > 0 ? (
+                <div className="flex justify-between gap-2">
+                  <dt className="text-[#7A7A72]">Price</dt>
+                  <dd className="font-semibold tabular-nums">
+                    {formatDollarsFromCents(Math.round(oneToOneSessionPrice * 100))}
+                  </dd>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-2 border-t border-[#E5E2DB] pt-2">
                 <dt className="text-[#7A7A72]">Total</dt>
                 <dd className="font-serif text-lg font-semibold">
-                  {oneToOneSessionPrice > 0
-                    ? `$${oneToOneSessionPrice.toFixed(2)}`
-                    : oneToOneQuoteCents != null
-                      ? formatDollarsFromCents(oneToOneQuoteCents)
-                      : '…'}
+                  {oneToOneQuote ? formatDollarsFromCents(oneToOneQuote.chargeCents) : '…'}
                 </dd>
               </div>
             </dl>
+            {oneToOneQuoteFailed ? (
+              <p className="text-xs font-medium text-rose-700">
+                Could not load the amount due. Please try again.
+              </p>
+            ) : null}
 
             <div className="space-y-3 border-t border-[#E5E2DB] pt-3">
               <div>
@@ -1320,7 +1355,7 @@ export default function ExpertProfile({
             ) : null}
             <button
               type="button"
-              disabled={!!bookingFormError}
+              disabled={!!bookingFormError || (oneToOneSessionPrice <= 0 && !oneToOneQuote)}
               onClick={async () => {
                 if (!isExpertSetupComplete(expertDetails)) {
                   // The expert may have finished setup since this page loaded.
@@ -1400,6 +1435,7 @@ export default function ExpertProfile({
           <StudentBookingCheckout
             type="Seminar"
             price={seminarCheckout.price}
+            holdsFunds
             returnUrl={studentBookingReturnUrl}
             pendingDetails={{
               groupChatId: seminarCheckout.id,
