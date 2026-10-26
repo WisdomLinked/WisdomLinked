@@ -4,17 +4,19 @@ import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import StudentSeminars from './StudentSeminars';
 
-const { doFilterSeminars, quoteBookingCharge, registerForSeminar } = vi.hoisted(() => ({
+const { doFilterSeminars, quoteBookingCharge, registerForSeminar, getMySeatRequests, checkoutProps } = vi.hoisted(() => ({
   doFilterSeminars: vi.fn(),
   quoteBookingCharge: vi.fn(),
   registerForSeminar: vi.fn(),
+  getMySeatRequests: vi.fn(async () => ({ result: [] as unknown[] })),
+  checkoutProps: { calls: [] as Array<Record<string, unknown>> },
 }));
 
 vi.mock('../../api/api', () => ({
   doFilterSeminars: (...args: unknown[]) => doFilterSeminars(...args),
   doGetKeywordsAndServices: vi.fn(async () => ({ keywords: [], services: [] })),
   getExpertById: vi.fn(async () => ({ result: { groupChats: [] } })),
-  getMySeatRequests: vi.fn(async () => ({ result: [] })),
+  getMySeatRequests: (...args: unknown[]) => getMySeatRequests(...args),
   profileImageFetch: vi.fn(async () => null),
   registerForSeminar: (...args: unknown[]) => registerForSeminar(...args),
   requestSeminarSeat: vi.fn(),
@@ -49,7 +51,10 @@ vi.mock('./StudentBookingCheckout', () => {
     </dl>
   );
   return {
-    default: () => <div data-testid="student-checkout" />,
+    default: (props: Record<string, unknown>) => {
+      checkoutProps.calls.push(props);
+      return <div data-testid="student-checkout" />;
+    },
     quoteRequestBody: (details: { groupChatId?: string }, priceDollars = 0) => ({
       groupChatId: details.groupChatId,
       advertisedCents: Math.max(0, Math.round(Number(priceDollars) * 100)),
@@ -89,6 +94,9 @@ describe('StudentSeminars $0 advertised price', () => {
     doFilterSeminars.mockReset();
     quoteBookingCharge.mockReset();
     registerForSeminar.mockReset();
+    getMySeatRequests.mockReset();
+    getMySeatRequests.mockResolvedValue({ result: [] });
+    checkoutProps.calls.length = 0;
     doFilterSeminars.mockResolvedValue({ result: [freeSeminar] });
     quoteBookingCharge.mockResolvedValue({
       sessionType: 'seminar',
@@ -112,5 +120,32 @@ describe('StudentSeminars $0 advertised price', () => {
     expect(await screen.findByTestId('student-checkout')).toBeTruthy();
     expect(registerForSeminar).not.toHaveBeenCalled();
     expect(quoteBookingCharge).toHaveBeenCalled();
+    expect(checkoutProps.calls).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'Seminar', holdsFunds: true })]),
+    );
+    expect(checkoutProps.calls.some((props) => props.type === 'Seminar seat')).toBe(false);
+  });
+
+  it('opens an approved seat checkout without holdsFunds', async () => {
+    getMySeatRequests.mockResolvedValue({
+      result: [{
+        _id: 'req-1',
+        status: 'awaiting_payment',
+        amount: 2500,
+        paymentDeadline: new Date(Date.now() + 86_400_000).toISOString(),
+        origin: 'student',
+        groupChat: { _id: 'sem-free' },
+      }],
+    });
+
+    renderSeminars();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^view details$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /pay \$25 to confirm your seat/i }));
+
+    expect(await screen.findByTestId('student-checkout')).toBeTruthy();
+    const seat = checkoutProps.calls.find((props) => props.type === 'Seminar seat');
+    expect(seat).toBeTruthy();
+    expect(seat?.holdsFunds).toBeFalsy();
   });
 });

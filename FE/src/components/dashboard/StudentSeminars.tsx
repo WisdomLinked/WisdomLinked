@@ -1077,6 +1077,7 @@ export default function StudentSeminars({
                 <StudentBookingCheckout
                   type="Seminar"
                   price={s.price}
+                  holdsFunds
                   returnUrl={seminarReturnUrl}
                   pendingDetails={{ groupChatId: s.id, price: s.price, name: s.title }}
                   walletOption={{ kind: 'charge' }}
