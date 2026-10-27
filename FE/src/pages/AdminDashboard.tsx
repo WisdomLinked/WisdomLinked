@@ -60,7 +60,7 @@ import Feedback from '../components/getFeedback';
 import GetContactedUs from '../components/getContactedUs';
 import RegisterUserByAdmin from '../components/registerUserByAdmin';
 import ChatBotQA from './Dashboard/_AdminDashboard/chatBotQA';
-import TermsAgreementPage from './Dashboard/_AdminDashboard/termsAgreement';
+import TermsAgreementPage from './Dashboard/_AdminDashboard/terms';
 import UserMgmt from './Dashboard/_AdminDashboard/usermgmt';
 import Payment from './Dashboard/_AdminDashboard/payment';
 import AdminRevenue from './Dashboard/_AdminDashboard/revenue';
