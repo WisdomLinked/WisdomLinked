@@ -81,14 +81,14 @@ export default function StudentProfileCompletionCard({ onOpenSection }: Props) {
   const sections: ProfileCompletionSectionView[] = completion.sections.map((section) => {
     const copy = SECTION_COPY[section.id];
     const partial =
-      section.filled > 0 && !section.isComplete
-        ? `${section.filled} of ${section.total}`
+      !section.isComplete && section.total > 1
+        ? `${section.filled} of ${section.total} fields`
         : undefined;
     return {
       ...section,
       description: copy.description,
       actionLabel: copy.actionLabel,
-      reviewLabel: section.id === 'terms' ? 'View' : undefined,
+      reviewLabel: section.id === 'terms' ? 'View' : 'Edit',
       progressBadge: partial,
     };
   });

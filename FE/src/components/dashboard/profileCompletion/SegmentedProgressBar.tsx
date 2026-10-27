@@ -1,12 +1,13 @@
 type Segment = {
   /** Fill ratio from 0 to 1. */
   ratio: number;
-  /** Optional flex weight so segments can mirror section weights. */
-  weight?: number;
 };
 
 type Props = {
-  segments: Segment[];
+  /** Expert setup: one part per step. Omit when `percent` is set. */
+  segments?: Segment[];
+  /** Student profile: a single 0–100 fill. Takes precedence over `segments`. */
+  percent?: number;
   label: string;
   /** Shown under the bar on the left when provided. */
   valueText?: string;
@@ -19,12 +20,23 @@ type Props = {
   ariaValueText?: string;
 };
 
+function Labels({ valueText, percentText }: { valueText?: string; percentText?: string }) {
+  if (!valueText && !percentText) return null;
+  return (
+    <div className="mt-2 flex items-center justify-between text-xs" aria-hidden>
+      <span className="font-medium text-slate-700">{valueText}</span>
+      <span className="text-slate-500">{percentText}</span>
+    </div>
+  );
+}
+
 /**
- * Multi-segment progress bar. Expert setup uses fully filled/empty segments;
- * student profile completion fills each segment by its own ratio.
+ * Expert setup uses equal-width segments. Student profile uses `percent` for
+ * one continuous 0–100% navy fill over a slate track.
  */
 export default function SegmentedProgressBar({
-  segments,
+  segments = [],
+  percent,
   label,
   valueText,
   percentText,
@@ -32,12 +44,15 @@ export default function SegmentedProgressBar({
   ariaValueMax = 100,
   ariaValueText,
 }: Props) {
-  const ratios = segments.map((s) => Math.max(0, Math.min(1, s.ratio)));
-  const average = ratios.length ? ratios.reduce((sum, r) => sum + r, 0) / ratios.length : 0;
+  const continuous = percent != null;
+  const clampedPercent = Math.max(0, Math.min(100, percent ?? 0));
+  const ratios = segments.map(segment => Math.max(0, Math.min(1, segment.ratio)));
+  const average = ratios.length ? ratios.reduce((sum, ratio) => sum + ratio, 0) / ratios.length : 0;
+  const now = ariaValueNow ?? (continuous ? Math.round(clampedPercent) : Math.round(average * 100));
   const valuetext =
     ariaValueText ??
     valueText ??
-    (percentText ? percentText : `${Math.round(average * 100)}% complete`);
+    (percentText ? percentText : `${now}% complete`);
 
   return (
     <div>
@@ -46,29 +61,28 @@ export default function SegmentedProgressBar({
         aria-label={label}
         aria-valuemin={0}
         aria-valuemax={ariaValueMax}
-        aria-valuenow={ariaValueNow ?? Math.round(average * 100)}
+        aria-valuenow={now}
         aria-valuetext={valuetext}
-        className="flex gap-1.5"
+        className={continuous ? 'relative h-1.5 overflow-hidden rounded-full bg-slate-200' : 'flex gap-1.5'}
       >
-        {segments.map((segment, i) => (
+        {continuous ? (
           <span
-            key={i}
-            className="relative h-1.5 overflow-hidden rounded-full bg-gray-200"
-            style={{ flex: `${segment.weight ?? 1} 1 0%` }}
-          >
-            <span
-              className="absolute inset-y-0 left-0 rounded-full bg-[#234C6A] transition-[width]"
-              style={{ width: `${ratios[i] * 100}%` }}
-            />
-          </span>
-        ))}
+            className="absolute inset-y-0 left-0 rounded-full bg-wl-brand"
+            style={{ width: `${clampedPercent}%` }}
+            data-testid="progress-fill"
+          />
+        ) : (
+          segments.map((_, index) => (
+            <span key={index} className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-200">
+              <span
+                className="absolute inset-y-0 left-0 rounded-full bg-wl-brand"
+                style={{ width: `${ratios[index] * 100}%` }}
+              />
+            </span>
+          ))
+        )}
       </div>
-      {valueText || percentText ? (
-        <div className="mt-2 flex items-center justify-between text-xs" aria-hidden>
-          <span className="font-medium text-gray-700">{valueText}</span>
-          <span className="text-gray-500">{percentText}</span>
-        </div>
-      ) : null}
+      <Labels valueText={valueText} percentText={percentText} />
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MapPin, Briefcase, GraduationCap, Users } from 'lucide-react';
 import { isDisplayImageUrl } from '../utils/profileImage';
+import { lowestHourlyRate } from '../utils/formatPrice';
+import PriceTag from './common/PriceTag';
 
 export interface ExpertCardProps {
   id: string | number;
@@ -20,6 +22,8 @@ export interface ExpertCardProps {
   resume?: string | null;
   /** Account status from the BE; only 'active' experts can be booked. */
   status?: string;
+  /** Hourly rate in dollars. BE stores `User.price` as a number or `[number]`. */
+  price?: number | number[];
   onViewProfile?: (mentor: ExpertCardProps) => void;
   isFollowing?: boolean;
   onToggleFollow?: (mentorId: string | number) => void;
@@ -46,6 +50,7 @@ const ExpertCard: React.FC<ExpertCardProps> = ({
   followerCount = 0,
   resume = null,
   status,
+  price,
   onViewProfile,
   id,
   isFollowing = false,
@@ -82,6 +87,7 @@ const ExpertCard: React.FC<ExpertCardProps> = ({
     followerCount,
     resume,
     status,
+    price,
   };
 
   const canView = Boolean(onViewProfile) && isBookable;
@@ -102,7 +108,7 @@ const ExpertCard: React.FC<ExpertCardProps> = ({
           handleView();
         }
       }}
-      className={`group relative flex flex-col rounded-xl border border-[#E5E2DB] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(26,58,74,0.18)] ${
+      className={`group relative flex h-full flex-col rounded-xl border border-[#E5E2DB] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(26,58,74,0.18)] ${
         compact ? 'p-4' : 'p-5'
       }`}
     >
@@ -192,29 +198,32 @@ const ExpertCard: React.FC<ExpertCardProps> = ({
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-end gap-2">
-        {isBookable ? (
-          <button
-            type="button"
-            className="rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[0.78rem] font-semibold text-white hover:bg-[#122635]"
-            onClick={e => {
-              e.stopPropagation();
-              handleView();
-            }}
-          >
-            View Profile
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled
-            title="This expert is not yet available for booking"
-            className="cursor-not-allowed rounded-[4px] bg-[#E5E2DB] px-3 py-1.5 text-[0.78rem] font-semibold text-[#7A7A72]"
-            onClick={e => e.stopPropagation()}
-          >
-            In review
-          </button>
-        )}
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+        <PriceTag label="Starting at" amount={lowestHourlyRate(price)} suffix="/ hr" />
+        <div className="ml-auto flex w-full min-[400px]:w-auto flex-wrap items-center justify-end gap-2">
+          {isBookable ? (
+            <button
+              type="button"
+              className="rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[0.78rem] font-semibold text-white hover:bg-[#122635]"
+              onClick={e => {
+                e.stopPropagation();
+                handleView();
+              }}
+            >
+              View Profile
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled
+              title="This expert is not yet available for booking"
+              className="cursor-not-allowed rounded-[4px] bg-[#E5E2DB] px-3 py-1.5 text-[0.78rem] font-semibold text-[#7A7A72]"
+              onClick={e => e.stopPropagation()}
+            >
+              In review
+            </button>
+          )}
+        </div>
       </div>
     </article>
   );

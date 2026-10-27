@@ -72,8 +72,7 @@ describe('AlertNotification', () => {
         expect(toast).toHaveAttribute('aria-live', 'assertive');
         expect(screen.getByLabelText('Close notification')).toBeInTheDocument();
         const stack = toast.closest('.wl-toast-stack');
-        expect(stack).toHaveStyle({ top: 'calc(var(--header-height, 4.5rem) + 16px)' });
-        expect(stack).toHaveClass('fixed');
+        expect(stack).toHaveClass('fixed', 'top-20', 'right-6', 'z-50');
     });
 
     it('uses status role for success toasts', () => {

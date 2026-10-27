@@ -83,9 +83,11 @@ export default function TopBar({
     >
       {/* pl-14 on small screens reserves room for the fixed menu button (Sidebar.tsx). */}
       <div className="flex h-14 items-center justify-between gap-3 pl-14 pr-6 lg:px-6">
-        <span className="shrink-0 font-sans text-[14px] font-semibold text-slate-800">
-          {title}
-        </span>
+        {title ? (
+          <span className="shrink-0 font-sans text-sm font-semibold text-slate-800">{title}</span>
+        ) : (
+          <span className="shrink-0" />
+        )}
         <div className="min-w-0 flex-1 max-w-md">
           <SiteSearchBox audience={siteSearchAudienceForRole(role)} />
         </div>

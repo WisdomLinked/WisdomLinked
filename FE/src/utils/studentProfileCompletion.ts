@@ -1,11 +1,11 @@
 import { canonicalLabelsFromMixedServiceEntries } from '../constants/serviceOptions';
 
-/** Weights sum to 100 so `percent` is a direct weighted sum of section fill ratios. */
+/** Kept for section identity; overall % is filled fields ÷ total fields. */
 export const STUDENT_PROFILE_SECTION_WEIGHTS = {
-  academic: 35,
-  preferences: 25,
-  resume: 25,
-  terms: 15,
+  academic: 1,
+  preferences: 1,
+  resume: 1,
+  terms: 1,
 } as const;
 
 export type StudentProfileSectionId = keyof typeof STUDENT_PROFILE_SECTION_WEIGHTS;
@@ -94,21 +94,17 @@ export function getStudentProfileCompletion(
 
   const academicFilled = ACADEMIC_FIELDS.filter((key) => isFilled(source[key])).length;
   const academicTotal = ACADEMIC_FIELDS.length;
-  const academicRatio = academicTotal ? academicFilled / academicTotal : 0;
 
   const serviceDone = hasCanonicalService(source.services);
   const interestDone = hasInterest(source.keywords, source.customKeywords);
   const preferencesFilled = Number(serviceDone) + Number(interestDone);
   const preferencesTotal = 2;
-  const preferencesRatio = preferencesFilled / preferencesTotal;
 
   const hasResume = isFilled(source.resume);
   const resumeFilled = hasResume ? 1 : 0;
   const resumeTotal = 1;
-  const resumeRatio = resumeFilled / resumeTotal;
 
   const termsDone = source.roleTermsSigned === true;
-  const termsRatio = termsDone ? 1 : 0;
 
   const sections: StudentProfileSectionCompletion[] = [
     {
@@ -149,12 +145,9 @@ export function getStudentProfileCompletion(
     },
   ];
 
-  const percent = Math.round(
-    STUDENT_PROFILE_SECTION_WEIGHTS.academic * academicRatio +
-      STUDENT_PROFILE_SECTION_WEIGHTS.preferences * preferencesRatio +
-      STUDENT_PROFILE_SECTION_WEIGHTS.resume * resumeRatio +
-      STUDENT_PROFILE_SECTION_WEIGHTS.terms * termsRatio,
-  );
+  const filledFields = sections.reduce((sum, section) => sum + section.filled, 0);
+  const totalFields = sections.reduce((sum, section) => sum + section.total, 0);
+  const percent = totalFields ? Math.round((filledFields / totalFields) * 100) : 0;
 
   return { percent, sections };
 }

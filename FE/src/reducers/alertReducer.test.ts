@@ -19,6 +19,12 @@ describe('alertReducer', () => {
         expect(next.toasts[0].durationMs).toBe(6500);
     });
 
+    it('auto-dismisses success toasts after 4 seconds', () => {
+        const next = alertReducer(undefined, showSuccessAlert('Academic background saved'));
+        expect(next.toasts[0].durationMs).toBe(4000);
+        expect(next.toasts[0].variant).toBe('success');
+    });
+
     it('hideAlert clears all toasts', () => {
         const open = alertReducer(undefined, showSuccessAlert('Saved'));
         const closed = alertReducer(open, hideAlert());

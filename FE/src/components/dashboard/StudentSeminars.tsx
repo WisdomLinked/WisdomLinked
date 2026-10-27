@@ -35,6 +35,9 @@ import { usePeerProfileModal } from '../../hooks/usePeerProfileModal';
 import seminarFallbackImg from '../../assets/images/dashboard_img1.png';
 import { recurrenceLabel } from '../../utils/recurrenceLabel';
 import { DASHBOARD_PAGE_TITLE } from './pageTitle';
+import PriceTag from '../common/PriceTag';
+import { formatDuration } from '../../utils/formatPrice';
+import { sessionDurationMinutes } from '../../utils/sessionDuration';
 
 
 
@@ -60,6 +63,8 @@ type Seminar = {
   maxAttendees: number | null;
   isFull: boolean;
   price: number;
+  durationMinutes: number | null;
+  currency: string;
   seriesId: string | null;
   recurrenceLabel: string | undefined;
   occurrenceCount: number;
@@ -142,7 +147,9 @@ async function mapSeminar(g: any): Promise<Seminar> {
     attendees: enrolled,
     maxAttendees,
     isFull: maxAttendees != null && (maxAttendees <= 0 || enrolled >= maxAttendees),
-    price: typeof g?.price === 'number' ? g.price : 0,
+    price: typeof g?.price === 'number' && Number.isFinite(g.price) ? g.price : 0,
+    durationMinutes: sessionDurationMinutes(g),
+    currency: typeof g?.currency === 'string' && g.currency.trim() ? g.currency.trim().toUpperCase() : 'USD',
     seriesId: g?.seriesId ? String(g.seriesId) : null,
     recurrenceLabel: recurrenceLabel(g),
     occurrenceCount: 1,
@@ -560,6 +567,7 @@ export default function StudentSeminars({
 
   const renderSeminarCard = (s: Seminar) => {
     const cardWaitingList = seatRequestWindow(s.startMs);
+    const durationLabel = formatDuration(s.durationMinutes);
     return (
     <article
       key={s.id}
@@ -675,30 +683,38 @@ export default function StudentSeminars({
           ))}
         </div>
       </div>
-      <div className="mt-auto px-5 pb-4 flex justify-end gap-2">
-        {onEnterSeminarChat && seminarRegistered(s) ? (
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 pb-4 pt-4">
+        <PriceTag
+          label={seminarRegistered(s) ? 'You paid' : 'Per seat'}
+          amount={s.price}
+          currency={s.currency}
+          suffix={durationLabel ? `· ${durationLabel}` : undefined}
+        />
+        <div className="ml-auto flex w-full min-[400px]:w-auto flex-wrap items-center justify-end gap-2">
+          {onEnterSeminarChat && seminarRegistered(s) ? (
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation();
+                onEnterSeminarChat(s.id);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#234C6A] bg-white px-3 py-1.5 text-xs font-semibold text-[#234C6A] hover:bg-[#F5F3EF]"
+            >
+              <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+              Enter chat
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={e => {
               e.stopPropagation();
-              onEnterSeminarChat(s.id);
+              openSeminar(s);
             }}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#234C6A] bg-white px-3 py-1.5 text-xs font-semibold text-[#234C6A] hover:bg-[#F5F3EF]"
+            className="inline-flex items-center justify-center rounded-lg bg-[#234C6A] px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110"
           >
-            <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-            Enter chat
+            View details
           </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={e => {
-            e.stopPropagation();
-            openSeminar(s);
-          }}
-          className="inline-flex items-center justify-center rounded-lg bg-[#234C6A] px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110"
-        >
-          View details
-        </button>
+        </div>
       </div>
     </article>
     );

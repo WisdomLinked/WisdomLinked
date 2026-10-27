@@ -56,6 +56,44 @@ describe('UpcomingCountdownCard session details', () => {
     expect(screen.queryByRole('button', { name: 'Weekly Dev Catchup' })).toBeNull();
   });
 
+  it('shows a live pill only after the session has started', () => {
+    render(
+      <UpcomingCountdownCard
+        nextSeminar={{
+          title: 'Weekly Dev Catchup',
+          startAt: Date.now() - 60_000,
+          durationMinutes: 45,
+        }}
+      />,
+    );
+    expect(screen.getByText('Live')).toBeInTheDocument();
+    expect(screen.getByText('In progress')).toBeInTheDocument();
+  });
+
+  it('keeps a future session from looking live', () => {
+    render(
+      <UpcomingCountdownCard
+        nextSeminar={{
+          title: 'Weekly Dev Catchup',
+          startAt: Date.now() + 3_600_000,
+          durationMinutes: 45,
+        }}
+      />,
+    );
+    expect(screen.queryByText('Live')).toBeNull();
+    expect(screen.getByText(/Starts in/)).toBeInTheDocument();
+  });
+
+  it('shows an empty state with a find-experts action', async () => {
+    const actor = userEvent.setup();
+    const onFindExperts = vi.fn();
+    render(<UpcomingCountdownCard onFindExperts={onFindExperts} />);
+    expect(screen.getByText('No upcoming sessions')).toBeInTheDocument();
+    expect(screen.queryByText('Next seminar')).toBeNull();
+    await actor.click(screen.getByRole('button', { name: 'Find experts' }));
+    expect(onFindExperts).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the join buttons working beside a clickable title', async () => {
     const actor = userEvent.setup();
     const onJoinSeminar = vi.fn();
