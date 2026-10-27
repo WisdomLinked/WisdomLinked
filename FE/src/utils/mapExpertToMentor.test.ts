@@ -58,6 +58,12 @@ describe('mapExpertToMentor', () => {
     expect(m.majors).toEqual([]);
     expect(m.field).toBe('General');
   });
+
+  it('keeps the expert hourly rate from User.price', () => {
+    expect(mapExpertToMentor({ ...expert, price: [60] }).price).toEqual([60]);
+    expect(mapExpertToMentor({ ...expert, price: 40 }).price).toBe(40);
+    expect(mapExpertToMentor(expert).price).toBeUndefined();
+  });
 });
 
 describe('mapExpertToMentorWithImage', () => {

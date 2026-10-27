@@ -1,40 +1,44 @@
 import React, { useEffect, useState } from 'react';
-import { BookOpen, Clock, UserCheck } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { formatSessionDuration, formatSessionWhen } from '../../utils/sessionDuration';
 import type { UpcomingModalSession } from './UpcomingSessionModal';
 
-const pad2 = (n: number) => String(n).padStart(2, '0');
+const FOCUS =
+  'focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand focus-visible:ring-offset-2';
 
-
-function formatDuration(ms: number) {
+function formatStartsIn(ms: number) {
   const safe = Math.max(0, ms);
-  const totalSeconds = Math.floor(safe / 1000);
-  const seconds = totalSeconds % 60;
-  const minutes = Math.floor(totalSeconds / 60) % 60;
-  const hours = Math.floor(totalSeconds / (60 * 60)) % 24;
-  const days = Math.floor(totalSeconds / (60 * 60 * 24));
+  const totalMinutes = Math.floor(safe / 60000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `Starts in ${days}d ${hours}h`;
+  if (hours > 0) return `Starts in ${hours}h ${minutes}m`;
+  return `Starts in ${minutes}m`;
+}
 
-  return days > 0
-    ? `${days}d ${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`
-    : `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
+function isLive(session: UpcomingSession, now: number) {
+  if (session.pending || session.startAt > now) return false;
+  const endAt =
+    typeof session.durationMinutes === 'number' && session.durationMinutes > 0
+      ? session.startAt + session.durationMinutes * 60_000
+      : session.startAt + 60 * 60_000;
+  return now < endAt;
 }
 
 export type UpcomingSession = {
   title: string;
-  startAt: number; // epoch ms
+  startAt: number;
   durationMinutes?: number;
   id?: string;
   peerUserId?: string;
   pending?: boolean;
-  /** Same session details the dashboard's session lists open, when the session has them. */
   detail?: UpcomingModalSession['detail'];
   briefLabel?: string;
 };
 
-function CountdownRow({
-  icon: Icon,
-  iconClass,
-  label,
+function SessionRow({
+  typeLabel,
   emptyLabel,
   joinLabel,
   session,
@@ -42,9 +46,7 @@ function CountdownRow({
   onJoin,
   onOpenDetails,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean }>;
-  iconClass: string;
-  label: string;
+  typeLabel: string;
   emptyLabel: string;
   joinLabel: string;
   session: UpcomingSession | null;
@@ -52,74 +54,63 @@ function CountdownRow({
   onJoin?: () => void;
   onOpenDetails?: (session: UpcomingSession) => void;
 }) {
-  return (
-    <div className="relative rounded-xl border-2 border-[#234C6A]/60 bg-[#F8FAFC] p-4">
-      {session?.pending && (
-        <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-          <Clock className="h-3 w-3" aria-hidden />
-          Pending
-        </span>
-      )}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${iconClass}`}>
-              <Icon className="h-4 w-4" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900">{label}</p>
-              {session?.detail && onOpenDetails ? (
-                <button
-                  type="button"
-                  onClick={() => onOpenDetails(session)}
-                  title={session.briefLabel ? `View ${session.briefLabel.toLowerCase()}` : 'View session details'}
-                  className="block max-w-full truncate text-left text-[12px] font-semibold text-slate-700 hover:underline"
-                >
-                  {session.title}
-                </button>
-              ) : (
-                <p className="truncate text-[12px] font-semibold text-slate-700">
-                  {session ? session.title : emptyLabel}
-                </p>
-              )}
-              {session ? (
-                <p className="text-[11px] text-slate-500">
-                  {[formatSessionWhen(session.startAt), formatSessionDuration(session.durationMinutes)]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-              ) : null}
-            </div>
-          </div>
-
-          {session ? (
-            <div className="mt-3">
-              <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                <Clock className="h-3 w-3" aria-hidden />
-                Starts in
-              </p>
-              <div className="mt-1 font-mono text-[18px] font-semibold tabular-nums text-[#234C6A]">
-                {formatDuration(session.startAt - now)}
-              </div>
-            </div>
-          ) : (
-            <p className="mt-3 text-[12px] text-slate-500">Nothing scheduled yet.</p>
-          )}
-        </div>
-
-        {session && !session.pending && (
-          <div className="mt-3 flex justify-end">
-            <button
-              type="button"
-              onClick={() => onJoin?.()}
-              className="inline-flex items-center justify-center rounded-[4px] bg-[#234C6A] px-3 py-1.5 text-[11px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
-              disabled={!onJoin}
-            >
-              {joinLabel}
-            </button>
-          </div>
-        )}
+  if (!session) {
+    return (
+      <div className="px-5 py-5">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{typeLabel}</p>
+        <p className="mt-1 text-sm text-slate-600">{emptyLabel}</p>
       </div>
+    );
+  }
+
+  const live = isLive(session, now);
+  const when = [formatSessionWhen(session.startAt), formatSessionDuration(session.durationMinutes)]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <div className="px-5 py-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{typeLabel}</p>
+        {live ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Live
+          </span>
+        ) : null}
+        {session.pending ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+            <Clock className="h-3 w-3" aria-hidden />
+            Pending
+          </span>
+        ) : null}
+      </div>
+      {session.detail && onOpenDetails ? (
+        <button
+          type="button"
+          onClick={() => onOpenDetails(session)}
+          title={session.briefLabel ? `View ${session.briefLabel.toLowerCase()}` : 'View session details'}
+          className={`mt-1 block max-w-full truncate text-left text-sm font-semibold text-slate-900 hover:underline ${FOCUS}`}
+        >
+          {session.title}
+        </button>
+      ) : (
+        <p className="mt-1 truncate text-sm font-semibold text-slate-900">{session.title}</p>
+      )}
+      {when ? <p className="mt-1 text-sm text-slate-600">{when}</p> : null}
+      <p className="mt-1 text-sm font-medium text-slate-700">
+        {live ? 'In progress' : formatStartsIn(session.startAt - now)}
+      </p>
+      {!session.pending ? (
+        <button
+          type="button"
+          onClick={() => onJoin?.()}
+          className={`mt-4 inline-flex w-full items-center justify-center rounded-lg bg-wl-brand px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-800 disabled:opacity-60 ${FOCUS}`}
+          disabled={!onJoin}
+        >
+          {joinLabel}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -130,10 +121,12 @@ export default function UpcomingCountdownCard({
   nextSeminar = null,
   nextOneToOne = null,
   onOpenDetails,
+  onFindExperts,
 }: {
   onJoinSeminar?: () => void;
   onJoinOneToOne?: () => void;
   onOpenDetails?: (session: UpcomingSession) => void;
+  onFindExperts?: () => void;
   nextSeminar?: UpcomingSession | null;
   nextOneToOne?: UpcomingSession | null;
 }) {
@@ -143,44 +136,62 @@ export default function UpcomingCountdownCard({
     return () => window.clearInterval(t);
   }, []);
 
+  const rows = [
+    {
+      key: 'seminar',
+      typeLabel: 'Next seminar',
+      emptyLabel: 'No upcoming seminar',
+      joinLabel: 'Join seminar chat',
+      session: nextSeminar,
+      onJoin: onJoinSeminar,
+    },
+    {
+      key: 'oneToOne',
+      typeLabel: 'Next 1:1',
+      emptyLabel: 'No upcoming 1:1 session',
+      joinLabel: 'Join chat',
+      session: nextOneToOne,
+      onJoin: onJoinOneToOne,
+    },
+  ];
+  const hasSession = Boolean(nextSeminar || nextOneToOne);
+
   return (
-    <aside className="flex h-full flex-col min-h-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900">
-            Upcoming sessions
-          </h3>
-        </div>
-        <span className="inline-flex items-center gap-2 rounded-full bg-[#E8EEF4] px-3 py-1 text-[11px] font-semibold text-[#234C6A]">
-          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-          Live
-        </span>
+    <aside className="flex h-full min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
+      <div className="px-5 pt-5">
+        <h2 className="text-lg font-semibold text-slate-900">Upcoming sessions</h2>
       </div>
 
-      <div className="mt-5 space-y-4">
-        <CountdownRow
-          icon={BookOpen}
-          iconClass="bg-emerald-50 text-emerald-700"
-          label="Next seminar"
-          emptyLabel="No upcoming seminar"
-          joinLabel="Join seminar chat"
-          session={nextSeminar}
-          now={now}
-          onJoin={onJoinSeminar}
-          onOpenDetails={onOpenDetails}
-        />
-        <CountdownRow
-          icon={UserCheck}
-          iconClass="bg-blue-50 text-[#234C6A]"
-          label="Next 1:1"
-          emptyLabel="No upcoming 1:1 session"
-          joinLabel="Join chat"
-          session={nextOneToOne}
-          now={now}
-          onJoin={onJoinOneToOne}
-          onOpenDetails={onOpenDetails}
-        />
-      </div>
+      {hasSession ? (
+        <div className="mt-2 divide-y divide-slate-200">
+          {rows.map(row => (
+            <SessionRow
+              key={row.key}
+              typeLabel={row.typeLabel}
+              emptyLabel={row.emptyLabel}
+              joinLabel={row.joinLabel}
+              session={row.session}
+              now={now}
+              onJoin={row.onJoin}
+              onOpenDetails={onOpenDetails}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="px-5 py-8">
+          <p className="text-sm font-medium text-slate-900">No upcoming sessions</p>
+          <p className="mt-1 text-sm text-slate-500">Book a 1:1 or seminar to see it here.</p>
+          {onFindExperts ? (
+            <button
+              type="button"
+              onClick={onFindExperts}
+              className={`mt-4 text-sm font-medium text-wl-brand hover:underline ${FOCUS}`}
+            >
+              Find experts
+            </button>
+          ) : null}
+        </div>
+      )}
     </aside>
   );
 }

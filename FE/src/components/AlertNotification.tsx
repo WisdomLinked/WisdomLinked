@@ -3,15 +3,7 @@ import { useDispatch } from 'react-redux';
 import { dismissToast } from '../actions/alertActions';
 import { useAppSelector } from '../store';
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
-import {
-    HEADER_HEIGHT_VAR,
-    TOAST_GAP_BELOW_HEADER_PX,
-    TOAST_MOBILE_GUTTER_PX,
-    TOAST_RIGHT_OFFSET_PX,
-    TOAST_WIDTH_PX,
-    type AlertVariant,
-    type ToastItem,
-} from '../types/alert';
+import { type AlertVariant, type ToastItem } from '../types/alert';
 
 const VARIANT_UI: Record<
     AlertVariant,
@@ -208,26 +200,11 @@ const AlertNotification: React.FC = () => {
     if (!toasts.length) return null;
 
     return (
-        <div
-            className="wl-toast-stack pointer-events-none fixed z-[10000001] flex flex-col gap-2.5"
-            style={{
-                top: `calc(var(${HEADER_HEIGHT_VAR}, 4.5rem) + ${TOAST_GAP_BELOW_HEADER_PX}px)`,
-            }}
-        >
+        <div className="wl-toast-stack pointer-events-none fixed top-20 right-6 z-50 flex w-full max-w-sm flex-col gap-2.5">
             {toasts.map(toast => (
                 <ToastCard key={`${toast.id}-${toast.createdAt}`} toast={toast} />
             ))}
             <style>{`
-        .wl-toast-stack {
-          right: ${TOAST_MOBILE_GUTTER_PX}px;
-          width: min(${TOAST_WIDTH_PX}px, calc(100% - ${TOAST_MOBILE_GUTTER_PX * 2}px));
-        }
-        @media (min-width: 640px) {
-          .wl-toast-stack {
-            right: ${TOAST_RIGHT_OFFSET_PX}px;
-            width: ${TOAST_WIDTH_PX}px;
-          }
-        }
         @keyframes wlToastIn {
           from { opacity: 0; transform: translateY(-8px); }
           to { opacity: 1; transform: translateY(0); }

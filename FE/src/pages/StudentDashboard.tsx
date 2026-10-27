@@ -1579,7 +1579,7 @@ export default function StudentDashboard() {
                         ? 'Seminars'
                         : activeItem === 'history'
                           ? 'Payment History'
-                          : 'Student Dashboard'
+                          : ''
             }
             userName={studentName}
             avatarUrl={avatarUrl}
@@ -1713,23 +1713,23 @@ export default function StudentDashboard() {
           ) : activeItem === 'history' ? (
             <StudentPaymentHistory />
           ) : (
-            <div className="px-6 pt-4 pb-7">
-              <AccountReviewBanner className="mb-4" />
-              <header className="mb-5">
-                <h2 className={DASHBOARD_PAGE_TITLE}>
+            <div className="px-6 pb-24 pt-4">
+              <AccountReviewBanner className="mb-6" />
+              <header className="mb-6">
+                <h1 className={DASHBOARD_PAGE_TITLE}>
                   {greeting}, {studentName.split(' ')[0]}!
-                </h2>
-                <p className="mt-1 max-w-xl font-sans text-[13px] text-slate-500">
+                </h1>
+                <p className="mt-1 max-w-xl font-sans text-sm text-slate-500">
                   Here&apos;s what&apos;s happening with your WisdomLinked sessions today.
                 </p>
               </header>
 
-              <div className="mb-5">
+              <div className="mb-6">
                 <StudentProfileCompletionCard onOpenSection={openProfileSection} />
               </div>
 
-              <div className="grid items-stretch gap-5 lg:grid-cols-[1fr_380px]">
-                <section className="min-w-0">
+              <div className="grid items-stretch gap-6 lg:grid-cols-3 xl:grid-cols-1">
+                <section className="min-w-0 lg:col-span-2">
                   <StatsGrid cards={cards} fill />
                 </section>
                 <div className="min-w-0">
@@ -1737,6 +1737,7 @@ export default function StudentDashboard() {
                     nextSeminar={nextSeminar}
                     nextOneToOne={nextOneToOne}
                     onOpenDetails={setCountdownDetail}
+                    onFindExperts={() => setActiveItem('experts')}
                     onJoinSeminar={() => openSeminarChat(nextSeminar?.id)}
                     onJoinOneToOne={() => {
                       if (nextOneToOne?.id) openAppointmentChat(
@@ -1779,13 +1780,16 @@ export default function StudentDashboard() {
           />
         ) : null}
         {paySuccessToast && (
-          <div className="fixed right-4 top-4 z-[70] flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-3 shadow-lg">
+          <div
+            role="status"
+            className="fixed right-6 top-20 z-50 flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-3"
+          >
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">✓</span>
             <span className="text-sm font-semibold text-[#1A3A4A]">Payment successful — your session is confirmed.</span>
             <button
               type="button"
               onClick={() => setPaySuccessToast(false)}
-              className="ml-1 text-slate-400 hover:text-slate-600"
+              className="ml-1 rounded-md text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand"
               aria-label="Dismiss"
             >
               ✕
@@ -1793,7 +1797,10 @@ export default function StudentDashboard() {
           </div>
         )}
         {seatRequestToast && (
-          <div className="fixed right-4 top-4 z-[70] flex items-start gap-2 rounded-xl border border-amber-200 bg-white px-4 py-3 shadow-lg">
+          <div
+            role="status"
+            className="fixed right-6 top-20 z-50 flex items-start gap-2 rounded-xl border border-amber-200 bg-white px-4 py-3"
+          >
             <span className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 text-amber-700">⏳</span>
             <span className="max-w-xs text-sm font-semibold text-[#1A3A4A]">
               Seat requested — your card is authorized but not charged. You'll only be charged if the host approves.
@@ -1801,7 +1808,7 @@ export default function StudentDashboard() {
             <button
               type="button"
               onClick={() => setSeatRequestToast(false)}
-              className="ml-1 text-slate-400 hover:text-slate-600"
+              className="ml-1 rounded-md text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand"
               aria-label="Dismiss"
             >
               ✕

@@ -53,7 +53,7 @@ export default function CarouselSection({
   onCompleteProfile,
 }: DiscoverySectionProps) {
   return (
-    <section className="mt-8">
+    <section className="mt-6">
       <div className="mb-3 flex items-start justify-between gap-4">
         <div>
           <h2 className={DASHBOARD_PAGE_TITLE}>What&apos;s New For You</h2>

@@ -36,6 +36,7 @@ export default function StatCard({
   className,
   alignStart,
   labelClassName,
+  compact,
 }: {
   label: string;
   value: string | number;
@@ -50,8 +51,44 @@ export default function StatCard({
   alignStart?: boolean;
   /** Overrides the default label font size. */
   labelClassName?: string;
+  /** Student dashboard tiles: short card, icon in the top-right. */
+  compact?: boolean;
 }) {
   const colors = colorMap[color] || colorMap.primary;
+  const focusRing =
+    'focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand focus-visible:ring-offset-2';
+
+  if (compact) {
+    return (
+      <div
+        className={`relative rounded-xl border border-slate-200 bg-white p-5 text-left ${
+          onClick ? `cursor-pointer hover:border-slate-300 hover:bg-slate-50 ${focusRing}` : ''
+        } ${className || ''}`}
+        role={onClick ? 'button' : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        onClick={onClick}
+        onKeyDown={e => {
+          if (!onClick) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick();
+          }
+        }}
+        aria-label={onClick ? `Open ${label}` : undefined}
+        title={tooltip}
+      >
+        <div
+          className={`absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-lg ${colors.iconBg} ${colors.iconText}`}
+        >
+          <Icon size={20} aria-hidden="true" />
+        </div>
+        <p className="pr-12 text-sm text-slate-600">{label}</p>
+        <p className="mt-2 font-sans text-3xl font-semibold tabular-nums text-slate-900">{value}</p>
+        {subline ? <p className="mt-1 text-sm text-slate-500">{subline}</p> : null}
+        {trend ? <p className="mt-1 text-xs font-medium text-emerald-600">{trend}</p> : null}
+      </div>
+    );
+  }
 
   return (
     <div

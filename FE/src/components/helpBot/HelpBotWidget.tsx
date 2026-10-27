@@ -27,17 +27,17 @@ export default function HelpBotWidget() {
   }, [bot.open, bot.closeWidget]);
 
   return (
-    <div className="fixed bottom-4 right-4 z-50">
+    <div className="fixed bottom-4 right-4 z-40">
       {!bot.open ? (
         <button
           ref={bot.launcherRef}
           type="button"
           onClick={bot.openWidget}
-          className="inline-flex items-center gap-2 rounded-lg border border-[#234C6A] bg-[#234C6A] px-3 py-2 shadow-[0_12px_30px_rgba(26,58,74,0.16)] transition-shadow hover:shadow-[0_18px_45px_rgba(26,58,74,0.22)]"
+          className="inline-flex items-center gap-2 rounded-lg border border-wl-brand bg-wl-brand px-3 py-2 text-sm font-semibold text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand focus-visible:ring-offset-2"
           aria-label="Open HelpBot"
         >
           <MessageSquare className="h-4 w-4 text-white" aria-hidden />
-          <span className="text-[13px] font-semibold text-white">HelpBot</span>
+          <span>HelpBot</span>
         </button>
       ) : (
         <div

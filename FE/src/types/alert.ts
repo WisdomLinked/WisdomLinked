@@ -3,7 +3,7 @@ export type AlertVariant = 'error' | 'success' | 'warning' | 'info';
 export const DEFAULT_ALERT_VARIANT: AlertVariant = 'info';
 
 export const TOAST_DURATION_MS: Record<AlertVariant, number> = {
-    success: 6500,
+    success: 4000,
     info: 6500,
     warning: 8500,
     error: 11000,

@@ -188,7 +188,7 @@ export default function FindExpertsPage({
               {newlyJoined.map(mentor => (
                 <div
                   key={String(mentor.id)}
-                  className="snap-start min-w-[260px] md:min-w-0 md:w-auto"
+                  className="flex h-full snap-start min-w-[260px] md:min-w-0 md:w-auto"
                 >
                   <ExpertCard
                     {...mentor}

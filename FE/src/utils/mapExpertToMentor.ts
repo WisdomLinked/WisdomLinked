@@ -53,6 +53,7 @@ export function mapExpertToMentor(expert: any): ExpertCardProps {
           ? expert.followers.length
           : 0,
     isFollowing: !!expert.isFollowing,
+    price: expert.price,
   };
 }
 

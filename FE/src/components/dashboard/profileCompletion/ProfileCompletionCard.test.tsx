@@ -33,7 +33,7 @@ describe('ProfileCompletionCard', () => {
             isComplete: false,
             href: '#profile-academic',
             actionLabel: 'Finish section',
-            progressBadge: '3 of 6',
+            progressBadge: '3 of 6 fields',
           },
           {
             id: 'preferences',
@@ -61,17 +61,75 @@ describe('ProfileCompletionCard', () => {
       />,
     );
 
-    expect(screen.getByRole('progressbar', { name: 'Profile completion' })).toHaveAttribute(
-      'aria-valuenow',
-      '20',
-    );
+    const bar = screen.getByRole('progressbar', { name: 'Profile completion' });
+    expect(bar).toHaveAttribute('aria-valuenow', '20');
+    expect(bar).toHaveAttribute('aria-valuemax', '100');
+    expect(screen.getByTestId('progress-fill')).toHaveStyle({ width: '20%' });
     expect(screen.getByText('Finish your student profile')).toBeInTheDocument();
-    expect(screen.getByText('3 of 6')).toBeInTheDocument();
-    expect(screen.getByText('0 of 3 complete')).toBeInTheDocument();
+    expect(screen.getByText('3 of 6 fields')).toBeInTheDocument();
+    expect(screen.getByText('0 of 3 sections complete')).toBeInTheDocument();
     // Percent appears once under the bar (not also as a large header figure).
     expect(screen.getAllByText('20%')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Finish section: Academic background' }));
     expect(onSectionAction).toHaveBeenCalledWith('#profile-academic');
+  });
+
+  it('lists the unfinished section first with a finish button and quiet edit links on done rows', () => {
+    const onSectionAction = vi.fn();
+    render(
+      <ProfileCompletionCard
+        title="Complete your profile"
+        helperText="Helper"
+        percent={80}
+        onSectionAction={onSectionAction}
+        sections={[
+          {
+            id: 'preferences',
+            label: 'Preferences and services',
+            description: 'Services',
+            weight: 1,
+            filled: 2,
+            total: 2,
+            isComplete: true,
+            href: '#profile-preferences',
+            actionLabel: 'Add preferences',
+            reviewLabel: 'Edit',
+          },
+          {
+            id: 'academic',
+            label: 'Academic background',
+            description: 'Degree and school',
+            weight: 1,
+            filled: 4,
+            total: 6,
+            isComplete: false,
+            href: '#profile-academic',
+            actionLabel: 'Finish section',
+            progressBadge: '4 of 6 fields',
+          },
+          {
+            id: 'terms',
+            label: 'Terms',
+            description: 'Sign the current student agreement.',
+            weight: 1,
+            filled: 1,
+            total: 1,
+            isComplete: true,
+            href: '#terms-agreement',
+            actionLabel: 'Sign',
+            reviewLabel: 'View',
+          },
+        ]}
+      />,
+    );
+
+    const items = screen.getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent('Academic background');
+    expect(items[0]).toHaveTextContent('4 of 6 fields');
+    expect(screen.getByText('2 of 3 sections complete')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Finish section: Academic background' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit: Preferences and services' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'View: Terms' })).toBeInTheDocument();
   });
 
 });
@@ -110,15 +168,15 @@ describe('StudentProfileCompletionCard', () => {
       expect(getRequiredContracts).toHaveBeenCalled();
     });
 
-    expect(screen.getByRole('progressbar', { name: 'Profile completion' })).toHaveAttribute(
-      'aria-valuenow',
-      '18',
-    );
+    const bar = screen.getByRole('progressbar', { name: 'Profile completion' });
+    expect(bar).toHaveAttribute('aria-valuenow', '30');
+    expect(bar).toHaveAttribute('aria-valuemax', '100');
+    expect(screen.getByTestId('progress-fill')).toHaveStyle({ width: '30%' });
     expect(screen.getByText('Finish your student profile')).toBeInTheDocument();
-    expect(screen.getByText('3 of 6')).toBeInTheDocument();
-    expect(screen.getByText('0 of 4 complete')).toBeInTheDocument();
+    expect(screen.getByText('3 of 6 fields')).toBeInTheDocument();
+    expect(screen.getByText('0 of 4 sections complete')).toBeInTheDocument();
     expect(screen.getByText('Terms')).toBeInTheDocument();
-    expect(screen.getAllByText('18%')).toHaveLength(1);
+    expect(screen.getAllByText('30%')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Finish section: Academic background' }));
     expect(onOpenSection).toHaveBeenCalledWith('#profile-academic');
   });
