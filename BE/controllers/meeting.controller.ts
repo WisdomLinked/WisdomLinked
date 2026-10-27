@@ -27,6 +27,7 @@ import {
 import { appendJitsiMobileWebOverrides } from '../utils/jitsiUrl';
 import { isMeetingModerator, isMeetingModeratorWithDelegates } from '../utils/meetingRoleRules';
 import { resolveGroupMeetingScopeIds, resolveGroupRocketChannelId } from '../utils/groupRocketChannel';
+import { MEETING_MAX_ACTIVE_MS } from '../utils/appointmentActivity';
 import {
     MEETING_CANNOT_REVOKE_HOST_ROLE,
     MEETING_EXPERT_CANNOT_REVOKE_SELF,
@@ -58,10 +59,6 @@ const JITSI_JWT_SECRET = process.env.JITSI_JWT_SECRET || '';
 const JITSI_APP_ID = process.env.JITSI_APP_ID || 'wisdomlinked';
 const JITSI_AUD = process.env.JITSI_AUD || 'jitsi';
 const JITSI_ISS = process.env.JITSI_ISS || JITSI_APP_ID;
-const MEETING_MAX_ACTIVE_MS = Math.max(
-    30 * 60 * 1000,
-    Number(process.env.MEETING_MAX_ACTIVE_HOURS || 12) * 60 * 60 * 1000,
-);
 
 const MEETING_CHAT_SYNC_RL_MAX = Math.max(10, Math.min(120, Number(process.env.MEETING_CHAT_SYNC_RL_PER_MIN || 50)));
 const MEETING_CHAT_SYNC_RL_WINDOW_MS = 60_000;
@@ -365,9 +362,14 @@ const meetingStartedMs = (meeting: any): number => {
 const isMeetingStale = (meeting: any): boolean =>
     meeting?.status === 'active' && Date.now() - meetingStartedMs(meeting) > MEETING_MAX_ACTIVE_MS;
 
-const markMeetingEnded = async (meeting: any, endedAt = new Date()): Promise<boolean> => {
+const markMeetingEnded = async (
+    meeting: any,
+    endedAt = new Date(),
+    { autoClosed = false }: { autoClosed?: boolean } = {},
+): Promise<boolean> => {
     if (!meeting || meeting.status === 'ended') return false;
     meeting.endedAt = endedAt;
+    if (autoClosed) meeting.autoClosed = true;
     meeting.duration = Math.max(0, Math.round((endedAt.getTime() - meetingStartedMs(meeting)) / 1000));
     meeting.status = 'ended';
     if (typeof meeting.save === 'function') await meeting.save();
@@ -376,7 +378,7 @@ const markMeetingEnded = async (meeting: any, endedAt = new Date()): Promise<boo
 
 const expireStaleMeetingIfNeeded = async (meeting: any): Promise<boolean> => {
     if (!isMeetingStale(meeting)) return false;
-    await markMeetingEnded(meeting);
+    await markMeetingEnded(meeting, new Date(), { autoClosed: true });
     return true;
 };
 
@@ -440,7 +442,7 @@ const closeActiveMeetingsForScope = async (scope: {
             : null;
     if (!query) return;
     const activeMeetings = await MeetingThread.find(query);
-    await Promise.all(activeMeetings.map((meeting: any) => markMeetingEnded(meeting)));
+    await Promise.all(activeMeetings.map((meeting: any) => markMeetingEnded(meeting, new Date(), { autoClosed: true })));
 };
 
 /** Join an existing active Meet — used by header Join when host already started. No RC start message. */

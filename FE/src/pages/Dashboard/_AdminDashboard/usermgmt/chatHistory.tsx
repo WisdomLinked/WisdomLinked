@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { doGetDirectChatHistory, doGetGroupChatHistory } from '../../../../api/api';
+import { doGetGroupChatActivity, doGetGroupChatHistory } from '../../../../api/api';
+import type { GroupActivityState } from './audit/GroupActivity';
 import ConversationList from './audit/ConversationList';
 import ConversationPane from './audit/ConversationPane';
 import {
@@ -45,6 +46,7 @@ const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
   const [failedIds, setFailedIds] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState('');
   const [segment, setSegment] = useState<SegmentFilter>('all');
+  const [activityById, setActivityById] = useState<Record<string, GroupActivityState>>({});
 
   const buckets = useMemo(() => buildConversations(userDetails), [userDetails]);
 
@@ -60,22 +62,13 @@ const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
           setError(false);
         }
       }
-      const response: any = conversation.fetchAsGroup
-        ? await doGetGroupChatHistory(
-            {
-              currentPage: pageNum,
-              groupChatId: conversation.id,
-            },
-            { notify: false },
-          )
-        : await doGetDirectChatHistory(
-            {
-              currentPage: pageNum,
-              senderId: userDetails._id,
-              receiverId: conversation.receiverId || conversation.id,
-            },
-            { notify: false },
-          );
+      const response: any = await doGetGroupChatHistory(
+        {
+          currentPage: pageNum,
+          groupChatId: conversation.id,
+        },
+        { notify: false },
+      );
 
       if (response) {
         if (!pageNum) {
@@ -101,6 +94,25 @@ const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
     },
     [userDetails?._id],
   );
+
+  const loadGroupActivity = useCallback(async (groupChatId: string) => {
+    setActivityById(prev => ({ ...prev, [groupChatId]: { status: 'loading' } }));
+    const response: any = await doGetGroupChatActivity(groupChatId, { notify: false });
+    setActivityById(prev => ({
+      ...prev,
+      [groupChatId]: response?.status === 'SUCCESS' ? { status: 'ready', data: response } : { status: 'error' },
+    }));
+  }, []);
+
+  const selectedGroupId =
+    selectedChat?.kind === 'group' || selectedChat?.kind === 'seminar' || selectedChat?.kind === 'private'
+      ? selectedChat.id
+      : undefined;
+  const selectedActivity = selectedGroupId ? activityById[selectedGroupId] : undefined;
+
+  useEffect(() => {
+    if (selectedGroupId && !selectedActivity) void loadGroupActivity(selectedGroupId);
+  }, [selectedGroupId, selectedActivity, loadGroupActivity]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     if (e.currentTarget.scrollTop === 0 && e.currentTarget.scrollHeight !== e.currentTarget.clientHeight) {
@@ -135,6 +147,7 @@ const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
     set_messages([]);
     setError(false);
     setFailedIds({});
+    setActivityById({});
   }, [userDetails?._id]);
 
   useEffect(() => {
@@ -154,7 +167,7 @@ const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
       {showList ? (
         <ConversationList
           group={buckets.group}
-          privateChats={buckets.privateChats}
+          appointments={buckets.appointments}
           seminars={buckets.seminars}
           selectedId={selectedChat?.id}
           failedIds={failedIds}
@@ -178,6 +191,8 @@ const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
           onRetry={() => selectedChat && getChatHistory(0, selectedChat, 'retry')}
           onMessagesScroll={handleScroll}
           messagesEndRef={messagesEndRef}
+          groupActivity={selectedGroupId ? selectedActivity ?? { status: 'loading' } : undefined}
+          onRetryGroupActivity={() => selectedGroupId && loadGroupActivity(selectedGroupId)}
         />
       ) : null}
     </div>

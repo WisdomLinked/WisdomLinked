@@ -46,6 +46,16 @@ const Event = require("../models/Event");
 const PaymentHistory = require("../models/PaymentHistory");
 const Conversation = require("../models/Conversation");
 const GroupChat = require("../models/GroupChat");
+const MeetingThread = require("../models/MeetingThread");
+const { mapRCMessagesToWL } = require("./chat.controller");
+const {
+    findGroupChannelIdReadOnly,
+    getRCChannelHistoryAsAdmin,
+    toRocketChatUsername,
+} = require("../services/rocketchat.service");
+const { groupRocketChannelKey } = require("../utils/groupRocketChannel");
+const { combineSeriesSessions, communityMembers, computeCommunityActivity } = require("../utils/communityActivity");
+const { appointmentSummary } = require("../utils/appointmentActivity");
 const Keyword = require("../models/Keyword");
 const Service = require("../models/Service");
 const MajorConsolidation = require("../models/MajorConsolidation");
@@ -474,18 +484,35 @@ const getDirectChatHistory = async (req, res) => {
     }
 }
 
+const ADMIN_GROUP_HISTORY_PAGE_SIZE = 20;
+const GROUP_ACTIVITY_PAGE_SIZE = 100;
+const GROUP_ACTIVITY_MAX_PAGES = 50;
+const GROUP_MEMBER_FIELDS = 'email username rocketChatUsername image role status';
+
+/** Rocket.Chat room for a group, without creating it or touching its members. */
+const readOnlyGroupRoomId = async (groupChat: any): Promise<string | null> => {
+    if (groupChat?.rcChannelId) return String(groupChat.rcChannelId);
+    return findGroupChannelIdReadOnly(groupRocketChannelKey(groupChat));
+};
+
+const rcSlugsForUser = (user: any): string[] => [
+    user?.email ? toRocketChatUsername(String(user.email)) : '',
+    user?.rocketChatUsername ? String(user.rocketChatUsername) : '',
+];
+
+/** Messages now live only in Rocket.Chat; the GroupChat.messages array is no longer written. */
 const getGroupChatHistory = async (req, res) => {
     try {
-        const { groupChatId, currentPage } = req.body
-        const groupChat = await GroupChat.findById(String(groupChatId)).populate({
-            path: "messages",
-            model: "Message",
-            populate: {
-                path: "author",
-                select: "username _id image role status",
-                model: "User"
-            }
-        });
+        const { groupChatId } = req.body
+        const page = Math.max(Number.parseInt(String(req.body?.currentPage ?? 0), 10) || 0, 0);
+        if (!isLookupId(groupChatId)) {
+            return res.status(200).json({ result: [], gotAllChats: true });
+        }
+        const groupChat = await GroupChat.findById(String(groupChatId))
+            .populate('participants', GROUP_MEMBER_FIELDS)
+            .populate('admin', GROUP_MEMBER_FIELDS)
+            .populate('coModerators', GROUP_MEMBER_FIELDS)
+            .populate('chatAdmins', GROUP_MEMBER_FIELDS);
 
         if (!groupChat) {
             return res.status(200).json({
@@ -494,13 +521,116 @@ const getGroupChatHistory = async (req, res) => {
             });
         }
 
-        const limit = 20
-        const messages = groupChat.messages.reverse().slice(currentPage * limit, (currentPage + 1) * limit)
-        const gotAllChats = groupChat.messages.length <= (currentPage + 1) * limit
+        const roomId = await readOnlyGroupRoomId(groupChat);
+        if (!roomId) {
+            return res.status(200).json({ result: [], gotAllChats: true });
+        }
+
+        const limit = ADMIN_GROUP_HISTORY_PAGE_SIZE
+        const rcMessages = await getRCChannelHistoryAsAdmin(roomId, limit, page * limit);
+        const people = [groupChat.admin, ...(groupChat.participants || []), ...(groupChat.coModerators || []), ...(groupChat.chatAdmins || [])]
+            .filter(Boolean);
+        const oldestFirst = [...rcMessages].sort(
+            (a: any, b: any) => new Date(a?.ts?.$date ?? a?.ts).getTime() - new Date(b?.ts?.$date ?? b?.ts).getTime()
+        );
+        const messages = await mapRCMessagesToWL(oldestFirst, undefined, people);
 
         return res.status(200).json({
-            result: messages.reverse(),
-            gotAllChats: gotAllChats
+            result: messages,
+            gotAllChats: rcMessages.length < limit
+        });
+    } catch (err) {
+        console.log(err)
+        return res.status(500).send(safeErrorMessage(err));
+    }
+}
+
+/** Members, video calls and message counts for a community, seminar series or 1:1 appointment, for the admin audit view. */
+const getGroupChatActivity = async (req, res) => {
+    try {
+        const { groupChatId } = req.body || {};
+        if (!isLookupId(groupChatId)) {
+            return res.status(400).json({ status: 'FAIL', error: 'groupChatId is required' });
+        }
+        const populateGroup = (query: any) => query
+            .populate('participants', GROUP_MEMBER_FIELDS)
+            .populate('admin', GROUP_MEMBER_FIELDS)
+            .populate('coModerators', GROUP_MEMBER_FIELDS)
+            .populate('chatAdmins', GROUP_MEMBER_FIELDS)
+            .populate('keywords', 'value label approved')
+            .populate('services', 'value label')
+            .lean();
+        const group = await populateGroup(
+            GroupChat.findOne({ _id: String(groupChatId), type: { $in: ['community', 'seminar', 'individual'] } })
+        );
+        if (!group) {
+            return res.status(404).json({ status: 'FAIL', error: 'Group chat not found' });
+        }
+
+        // Every session of a recurring seminar shares one room and one set of calls.
+        const sessions = group.type === 'seminar' && group.seriesId
+            ? await populateGroup(GroupChat.find({ seriesId: group.seriesId, type: 'seminar' }))
+            : [group];
+        const combined = combineSeriesSessions(sessions.length ? sessions : [group]);
+        const sessionIds = (sessions.length ? sessions : [group]).map((doc: any) => doc._id);
+
+        const members = communityMembers(combined, rcSlugsForUser);
+        const meetings = await MeetingThread.find({ groupChatId: { $in: sessionIds } })
+            .select('startedBy joinEvents startedAt endedAt duration status autoClosed')
+            .lean();
+
+        let messages: any[] | null = [];
+        let messagesCapped = false;
+        try {
+            const roomId = await readOnlyGroupRoomId(group);
+            if (roomId) {
+                for (let page = 0; page < GROUP_ACTIVITY_MAX_PAGES; page++) {
+                    const batch = await getRCChannelHistoryAsAdmin(
+                        roomId,
+                        GROUP_ACTIVITY_PAGE_SIZE,
+                        page * GROUP_ACTIVITY_PAGE_SIZE,
+                    );
+                    messages.push(...batch);
+                    if (batch.length < GROUP_ACTIVITY_PAGE_SIZE) break;
+                    if (page === GROUP_ACTIVITY_MAX_PAGES - 1) messagesCapped = true;
+                }
+            }
+        } catch (err) {
+            console.log('[admin.getGroupChatActivity] message history unavailable', err?.message || err);
+            messages = null;
+        }
+
+        const activity = computeCommunityActivity({
+            members,
+            meetings,
+            messages,
+            createdAt: combined.createdAt,
+            now: Date.now(),
+        });
+        const statsById: Record<string, object> = {};
+        for (const entry of activity.members) statsById[entry._id] = entry;
+
+        return res.status(200).json({
+            status: 'SUCCESS',
+            community: {
+                _id: String(group._id),
+                type: group.type,
+                name: group.name,
+                description: group.description || '',
+                isOpenToAll: !!group.isOpenToAll,
+                createdAt: combined.createdAt,
+                keywords: group.keywords || [],
+                services: group.services || [],
+                participants: members.map(member => member._id),
+                sessionCount: sessionIds.length,
+            },
+            members: members.map(({ rcSlugs, ...member }) => ({ ...member, ...statsById[member._id] })),
+            totals: activity.totals,
+            appointment: group.type === 'individual'
+                ? appointmentSummary({ appointment: group, meetings, messages })
+                : null,
+            messagesAvailable: messages !== null,
+            messagesCapped,
         });
     } catch (err) {
         console.log(err)
@@ -2049,6 +2179,7 @@ module.exports = {
     filterPaymentHistories,
     getDirectChatHistory,
     getGroupChatHistory,
+    getGroupChatActivity,
     getUserFeedbacks,
     getAllFeedbacks,
     getContactedUs,

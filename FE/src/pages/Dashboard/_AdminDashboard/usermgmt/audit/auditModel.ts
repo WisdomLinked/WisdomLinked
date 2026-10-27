@@ -23,6 +23,88 @@ export type SeminarDetailsData = {
   chatStatus?: string;
 };
 
+export type CommunityMemberRole = 'owner' | 'co-moderator' | 'member' | 'platform-admin';
+
+export type AuditCommunityMember = AuditParticipant & {
+  _id: string;
+  role?: string;
+  status?: string;
+  communityRole: CommunityMemberRole;
+};
+
+export type AuditGroupBasics = {
+  name: string;
+  description: string;
+  isOpenToAll: boolean;
+  createdAt?: string;
+  members: AuditCommunityMember[];
+  /** The seminar as stored, for the same details popup users see. */
+  seminarSource?: any;
+};
+
+export type MemberActivityStats = {
+  _id: string;
+  callsJoined: number;
+  callsStarted: number;
+  callsPerWeek: number;
+  messages: number | null;
+  messagesPerWeek: number | null;
+};
+
+export type CommunityActivityTotals = {
+  calls: number;
+  callsPerWeek: number;
+  messages: number | null;
+  messagesPerWeek: number | null;
+  messagesFromOthers: number | null;
+  weeks: number;
+  since: string | null;
+};
+
+export type GroupActivityData = {
+  community: {
+    _id: string;
+    type?: 'community' | 'seminar';
+    sessionCount?: number;
+    name?: string;
+    description?: string;
+    isOpenToAll?: boolean;
+    createdAt?: string;
+    keywords?: unknown[];
+    services?: unknown[];
+    participants?: string[];
+  };
+  members: Array<AuditCommunityMember & MemberActivityStats>;
+  totals: CommunityActivityTotals;
+  appointment?: AppointmentSummary | null;
+  messagesAvailable: boolean;
+  messagesCapped: boolean;
+};
+
+export type AppointmentSummary = {
+  bookedMinutes: number | null;
+  calledMinutes: number;
+  timeStatus: 'recorded' | 'unconfirmed' | 'in-progress' | 'no-call';
+  callsDuring: number;
+  callsAfter: number;
+  messagesAfter: number | null;
+  scheduledEnd: string | null;
+};
+
+/** "29 of 30 min" — the video call's length against the booked length. */
+export function formatCallTime(summary: AppointmentSummary): string {
+  if (summary.timeStatus === 'no-call') return 'No call';
+  if (summary.timeStatus === 'in-progress') return 'Call in progress';
+  const booked = summary.bookedMinutes != null ? ` of ${summary.bookedMinutes}` : '';
+  return `${summary.calledMinutes}${booked} min`;
+}
+
+export function formatAfterAppointment(summary: AppointmentSummary): string {
+  const calls = `${summary.callsAfter} ${summary.callsAfter === 1 ? 'call' : 'calls'}`;
+  if (summary.messagesAfter == null) return `${calls} · messages unavailable`;
+  return `${calls} · ${summary.messagesAfter} ${summary.messagesAfter === 1 ? 'message' : 'messages'}`;
+}
+
 export type AuditConversation = {
   id: string;
   kind: ConversationKind;
@@ -33,9 +115,10 @@ export type AuditConversation = {
   image?: string;
   participants: AuditParticipant[];
   startedAt?: string;
-  fetchAsGroup: boolean;
-  receiverId?: string;
+  /** The 1:1 appointment as stored, for the same details popup users see. */
+  appointmentSource?: any;
   seminar?: SeminarDetailsData;
+  group?: AuditGroupBasics;
 };
 
 export type PaymentDisplayStatus = {
@@ -208,15 +291,15 @@ function durationMinutes(chat: any): number | undefined {
 }
 
 export function conversationKindLabel(kind: ConversationKind): string {
-  if (kind === 'group') return 'Group';
+  if (kind === 'group') return 'Community';
   if (kind === 'seminar') return 'Seminar';
-  return 'Private';
+  return '1:1';
 }
 
 export function emptySectionCopy(kind: ConversationKind): string {
-  if (kind === 'group') return 'No group chats on this account.';
+  if (kind === 'group') return 'No community chats on this account.';
   if (kind === 'seminar') return 'No seminars on this account.';
-  return 'No private chats on this account.';
+  return 'No 1:1 appointments on this account.';
 }
 
 function previewFromChat(chat: any, fallback: string): string {
@@ -226,59 +309,117 @@ function previewFromChat(chat: any, fallback: string): string {
   return fromMessage || description || fallback;
 }
 
+/**
+ * Everyone in a community, each once, strongest role first. The owner is also
+ * stored in `participants`, so a plain concatenation would list them twice.
+ * Mirrors `communityMembers` in BE/utils/communityActivity.ts.
+ */
+export function communityMembersFromChat(chat: any): AuditCommunityMember[] {
+  const ordered: Array<[any, CommunityMemberRole]> = [
+    [chat?.admin, 'owner'],
+    ...((chat?.coModerators || []) as any[]).map(user => [user, 'co-moderator'] as [any, CommunityMemberRole]),
+    ...((chat?.participants || []) as any[]).map(user => [user, 'member'] as [any, CommunityMemberRole]),
+    ...((chat?.chatAdmins || []) as any[]).map(user => [user, 'platform-admin'] as [any, CommunityMemberRole]),
+  ];
+  const seen = new Set<string>();
+  const members: AuditCommunityMember[] = [];
+  for (const [user, communityRole] of ordered) {
+    const id = String(user?._id ?? user ?? '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const doc = user && typeof user === 'object' ? user : {};
+    members.push({
+      _id: id,
+      username: doc.username,
+      email: doc.email,
+      image: doc.image,
+      role: doc.role,
+      status: doc.status,
+      communityRole,
+    });
+  }
+  return members;
+}
+
+export function communityRoleLabel(role: CommunityMemberRole, kind: ConversationKind = 'group'): string {
+  if (role === 'owner') return kind === 'seminar' ? 'Host' : kind === 'private' ? 'Expert' : 'Owner';
+  if (role === 'co-moderator') return 'Co-moderator';
+  if (role === 'platform-admin') return 'WisdomLinked admin';
+  return 'Member';
+}
+
+/** Short tag shown beside a member's name; ordinary members get none. */
+export function communityMemberTag(
+  member: AuditCommunityMember,
+  auditedUserId?: string,
+  kind: ConversationKind = 'group',
+): string {
+  if (String(member._id) === String(auditedUserId || '')) return 'Audited';
+  return member.communityRole === 'member' ? '' : communityRoleLabel(member.communityRole, kind);
+}
+
+export function formatPerWeek(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return value.toLocaleString('en-US', { maximumFractionDigits: 1 });
+}
+
+export function formatCount(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return value.toLocaleString('en-US');
+}
+
 export function buildGroupConversations(userDetails: any): AuditConversation[] {
   const userId = String(userDetails?._id || '');
   return (userDetails?.generalChats || [])
     .filter((chat: any) => chat && !SKIP_GENERAL_CHAT_NAMES.has(chat.name))
     .map((chat: any) => {
       const isMine = String(chat?.admin?._id || chat?.admin) === userId;
-      const title = isMine ? 'General Chat' : String(chat?.name || 'Group chat');
+      const title = isMine ? 'General Chat' : String(chat?.name || 'Community chat');
       return {
         id: String(chat._id),
         kind: 'group' as const,
         title,
-        preview: previewFromChat(chat, 'Group chat'),
+        preview: previewFromChat(chat, 'Community chat'),
         date: latestDate(chat.updatedAt, chat.lastMessageAt, chat.createdAt),
         initials: initialsFromName(title),
         image: chat.image,
         participants: participantList(chat.participants),
         startedAt: asIso(chat.createdAt),
-        fetchAsGroup: true,
+        group: {
+          name: String(chat?.name || 'Community'),
+          description: String(chat?.description || ''),
+          isOpenToAll: Boolean(chat?.isOpenToAll),
+          createdAt: asIso(chat.createdAt),
+          members: communityMembersFromChat(chat),
+        },
       };
     });
 }
 
-export function buildPrivateConversations(userDetails: any): AuditConversation[] {
-  return (userDetails?.friends || [])
-    .filter(Boolean)
-    .map((friend: any) => {
-      const title = String(friend.username || friend.email || 'Private chat');
+/** 1:1 appointments are GroupChats of type `individual`; plain direct messages are not audited here. */
+export function buildAppointmentConversations(userDetails: any): AuditConversation[] {
+  return (userDetails?.groupChats || [])
+    .filter((chat: any) => chat?.type === 'individual')
+    .map((chat: any) => {
+      const title = String(chat.name || '1:1 appointment');
       return {
-        id: String(friend._id),
+        id: String(chat._id),
         kind: 'private' as const,
         title,
-        preview: String(friend.email || 'Direct message'),
-        date: latestDate(friend.updatedAt, friend.createdAt),
+        preview: previewFromChat(chat, '1:1 appointment'),
+        date: latestDate(chat.updatedAt, chat.lastMessageAt, chat.start, chat.createdAt),
         initials: initialsFromName(title),
-        image: friend.image,
-        participants: [
-          {
-            _id: friend._id,
-            username: friend.username,
-            email: friend.email,
-            image: friend.image,
-          },
-        ],
-        startedAt: asIso(friend.createdAt),
-        fetchAsGroup: false,
-        receiverId: String(friend._id),
+        image: chat.image,
+        participants: participantList(chat.participants),
+        startedAt: asIso(chat.start || chat.createdAt),
+        appointmentSource: chat,
       };
     });
 }
 
 export function buildSeminarConversations(userDetails: any): AuditConversation[] {
   return (userDetails?.groupChats || [])
-    .filter(Boolean)
+    .filter((chat: any) => chat && chat.type !== 'individual')
     .map((chat: any) => {
       const title = String(chat.name || 'Seminar');
       const participants = participantList(chat.participants);
@@ -292,7 +433,6 @@ export function buildSeminarConversations(userDetails: any): AuditConversation[]
         image: chat.image,
         participants,
         startedAt: asIso(chat.start || chat.createdAt),
-        fetchAsGroup: true,
         seminar: {
           start: asIso(chat.start),
           end: asIso(chat.end),
@@ -301,20 +441,28 @@ export function buildSeminarConversations(userDetails: any): AuditConversation[]
           status: seminarStatus(chat.start, chat.end),
           chatStatus: chat.status,
         },
+        group: {
+          name: title,
+          description: String(chat?.description || ''),
+          isOpenToAll: false,
+          createdAt: asIso(chat.createdAt),
+          members: communityMembersFromChat(chat),
+          seminarSource: chat,
+        },
       };
     });
 }
 
 export function buildConversations(userDetails: any): {
   group: AuditConversation[];
-  privateChats: AuditConversation[];
+  appointments: AuditConversation[];
   seminars: AuditConversation[];
   all: AuditConversation[];
 } {
   const group = buildGroupConversations(userDetails);
-  const privateChats = buildPrivateConversations(userDetails);
+  const appointments = buildAppointmentConversations(userDetails);
   const seminars = buildSeminarConversations(userDetails);
-  return { group, privateChats, seminars, all: [...group, ...privateChats, ...seminars] };
+  return { group, appointments, seminars, all: [...appointments, ...seminars, ...group] };
 }
 
 export function filterConversations(

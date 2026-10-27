@@ -109,6 +109,11 @@ const meetingThreadSchema = new mongoose.Schema(
         lastHeartbeatAt: {
             type: Date,
         },
+        /** Closed by the site (time limit, or a newer call replaced it), not by someone ending it. */
+        autoClosed: {
+            type: Boolean,
+            default: false,
+        },
         lastReportedRemoteCount: {
             type: Number,
         },

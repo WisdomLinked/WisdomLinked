@@ -129,7 +129,7 @@ const hiddenStateForUser = (doc: any, userId: string) => {
 // Helper to map Rocket.Chat messages to WisdomLinked format so the frontend React UI doesnt break
 /** For DMs, pass `dmParticipants` so RC login slugs always resolve to Mongo `author._id` (fixes expert vs student mismatch). */
 /** For group/community, pass `groupParticipants` (populated users with email) so RC slugs map to display names. */
-const mapRCMessagesToWL = async (
+export const mapRCMessagesToWL = async (
     rcMessages: any[],
     dmParticipants?: { me?: any; other?: any },
     groupParticipants?: any[]

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildConversations,
+  communityMemberTag,
+  communityMembersFromChat,
+  conversationKindLabel,
+  formatAfterAppointment,
+  formatCallTime,
+  formatCount,
+  formatPerWeek,
   emptySectionCopy,
   filterConversations,
   initialsFromName,
@@ -27,8 +34,14 @@ const user = {
       createdAt: '2024-04-01T00:00:00.000Z',
     },
   ],
-  friends: [{ _id: 'f-1', username: 'Priya Student', email: 'priya@x.com' }],
   groupChats: [
+    {
+      _id: 'a-1',
+      name: '1:1 with Priya',
+      type: 'individual',
+      start: '2024-01-03T18:00:00.000Z',
+      participants: [{ _id: 'f-1', username: 'Priya Student' }],
+    },
     {
       _id: 's-1',
       name: 'Essay workshop',
@@ -45,22 +58,26 @@ const user = {
 };
 
 describe('auditModel conversations', () => {
-  it('buckets group, private and seminar chats and skips Global Chat and Admin', () => {
+  it('buckets communities, 1:1 appointments and seminars and skips Global Chat and Admin', () => {
     const buckets = buildConversations(user);
     expect(buckets.group.map(item => item.id)).toEqual(['g-1']);
     expect(buckets.group[0].title).toBe('General Chat');
-    expect(buckets.privateChats.map(item => item.title)).toEqual(['Priya Student']);
+    expect(buckets.appointments.map(item => item.title)).toEqual(['1:1 with Priya']);
+    expect(buckets.appointments[0].appointmentSource?.type).toBe('individual');
     expect(buckets.seminars.map(item => item.title)).toEqual(['Essay workshop']);
     expect(buckets.seminars[0].seminar?.status).toBe('Completed');
     expect(buckets.seminars[0].seminar?.attendeeCount).toBe(2);
   });
 
   it('keeps empty sections addressable', () => {
-    const empty = buildConversations({ _id: 'x', generalChats: [], friends: [], groupChats: [] });
+    const empty = buildConversations({ _id: 'x', generalChats: [], groupChats: [] });
     expect(empty.group).toEqual([]);
-    expect(empty.privateChats).toEqual([]);
+    expect(empty.appointments).toEqual([]);
     expect(empty.seminars).toEqual([]);
-    expect(emptySectionCopy('private')).toBe('No private chats on this account.');
+    expect(emptySectionCopy('private')).toBe('No 1:1 appointments on this account.');
+    expect(emptySectionCopy('group')).toBe('No community chats on this account.');
+    expect(conversationKindLabel('group')).toBe('Community');
+    expect(conversationKindLabel('private')).toBe('1:1');
   });
 
   it('filters by title, preview and segment', () => {
@@ -209,3 +226,62 @@ describe('auditModel payments', () => {
     expect(paymentDisplayStatus({ status: 'refunded' }).label).toBe('Refunded');
   });
 });
+
+describe('community members', () => {
+  it('lists everyone once, strongest role first, even though the owner is also a participant', () => {
+    const members = communityMembersFromChat({
+      admin: { _id: 'o1', username: 'Owner' },
+      coModerators: [{ _id: 'm1', username: 'Mod' }],
+      participants: [{ _id: 'o1', username: 'Owner' }, { _id: 'm1', username: 'Mod' }, { _id: 's1', username: 'Sam' }],
+      chatAdmins: [{ _id: 'a1', username: 'Staff' }],
+    });
+    expect(members.map(m => [m._id, m.communityRole])).toEqual([
+      ['o1', 'owner'],
+      ['m1', 'co-moderator'],
+      ['s1', 'member'],
+      ['a1', 'platform-admin'],
+    ]);
+    expect(communityMembersFromChat({})).toEqual([]);
+  });
+
+  it('tags the audited user and anyone with a community role', () => {
+    const member = { _id: 's1', communityRole: 'member' as const };
+    expect(communityMemberTag(member, 's1')).toBe('Audited');
+    expect(communityMemberTag(member, 'x')).toBe('');
+    expect(communityMemberTag({ _id: 'o1', communityRole: 'owner' }, 'x')).toBe('Owner');
+    expect(communityMemberTag({ _id: 'm1', communityRole: 'co-moderator' }, 'x')).toBe('Co-moderator');
+  });
+
+  it('carries community details for the title popup', () => {
+    const buckets = buildConversations({
+      _id: 'x',
+      generalChats: [{ _id: 'g1', name: 'Cohort', description: 'About', isOpenToAll: true, admin: { _id: 'o1' }, participants: [{ _id: 'o1' }] }],
+    });
+    expect(buckets.group[0].group).toMatchObject({ name: 'Cohort', description: 'About', isOpenToAll: true });
+    expect(buckets.group[0].group?.members).toHaveLength(1);
+  });
+
+  it('shows unknown numbers as a dash, not zero', () => {
+    expect(formatCount(null)).toBe('—');
+    expect(formatCount(1234)).toBe('1,234');
+    expect(formatPerWeek(null)).toBe('—');
+    expect(formatPerWeek(2.25)).toBe('2.3');
+    expect(formatPerWeek(0)).toBe('0');
+  });
+});
+
+describe('1:1 appointment call time', () => {
+  const base = { bookedMinutes: 30, calledMinutes: 29, timeStatus: 'recorded' as const, callsDuring: 1, callsAfter: 0, messagesAfter: 0, scheduledEnd: null };
+  it('reads as call time against booked time', () => {
+    expect(formatCallTime(base)).toBe('29 of 30 min');
+    expect(formatCallTime({ ...base, bookedMinutes: null })).toBe('29 min');
+    expect(formatCallTime({ ...base, timeStatus: 'no-call', calledMinutes: 0 })).toBe('No call');
+    expect(formatCallTime({ ...base, timeStatus: 'in-progress' })).toBe('Call in progress');
+  });
+  it('summarises what happened after the booked end', () => {
+    expect(formatAfterAppointment({ ...base, callsAfter: 1, messagesAfter: 1 })).toBe('1 call · 1 message');
+    expect(formatAfterAppointment({ ...base, callsAfter: 2, messagesAfter: 7 })).toBe('2 calls · 7 messages');
+    expect(formatAfterAppointment({ ...base, messagesAfter: null })).toBe('0 calls · messages unavailable');
+  });
+});
+
