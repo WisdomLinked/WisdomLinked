@@ -55,6 +55,7 @@ paymentController.appendPaymentHistory = async (data: any) => {
 const groupController = require("../controllers/groupChat.controller");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
+const AppState = require("../models/AppState");
 const PaymentHistory = require("../models/PaymentHistory");
 const SeminarSeatRequest = require("../models/SeminarSeatRequest");
 
@@ -176,6 +177,7 @@ const withModels = ({
     seatFindOneAndUpdate: SeminarSeatRequest.findOneAndUpdate,
     seatUpdateOne: SeminarSeatRequest.updateOne,
     seatExists: SeminarSeatRequest.exists,
+    appStateFindOne: AppState.findOne,
   };
 
   GroupChat.findById = (id: any) => chainable(
@@ -223,6 +225,7 @@ const withModels = ({
     return { modifiedCount: 1 };
   };
   SeminarSeatRequest.exists = async () => null;
+  AppState.findOne = async () => ({ stripeMode: "test" });
 
   return () => Object.assign(GroupChat, {
     findById: original.groupFindById,
@@ -243,7 +246,7 @@ const withModels = ({
     findOneAndUpdate: original.seatFindOneAndUpdate,
     updateOne: original.seatUpdateOne,
     exists: original.seatExists,
-  });
+  }) && (AppState.findOne = original.appStateFindOne);
 };
 
 const resetCalls = () => {

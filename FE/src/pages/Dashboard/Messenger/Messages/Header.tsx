@@ -434,8 +434,12 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
 
     // Hover shortcut on the peer's name → appointment flow. A student jumps to the
     // expert's booking page to request a 1:1; an expert opens the appointments view
-    // for this person. Only offered for student↔expert DMs.
-    const canMakeAppointment = viewerIsStudent ? peerRoleLower === "expert" : peerRoleLower === "customer";
+    // for this person. Only offered for student↔expert DMs — an admin proposing would hit the
+    // expert-only endpoint, and its 401 logs them out.
+    const viewerIsExpert = String(userDetails?.role || "").toLowerCase() === "expert";
+    const canMakeAppointment = viewerIsStudent
+        ? peerRoleLower === "expert"
+        : viewerIsExpert && peerRoleLower === "customer";
     const handleNewAppointment = () => {
         if (!chosenChatDetails?.userId) return;
         if (viewerIsStudent) {

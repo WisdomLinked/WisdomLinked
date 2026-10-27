@@ -77,22 +77,133 @@ describe('auditModel conversations', () => {
 });
 
 describe('auditModel payments', () => {
-  it('excludes refunded rows from gross earnings and fees', () => {
+  it('excludes refunded rows and reports expert net from the current commission', () => {
     const summary = paymentSummary([
       { _id: '1', amount: 10000, status: 'completed', paymentType: 'charge' },
       { _id: '2', amount: 4000, status: 'refunded', paymentType: 'refund' },
       { _id: '3', amount: 2500, status: 'pending', paymentType: 'charge' },
       { _id: '4', amount: 1500, status: 'withheld', paymentType: 'charge' },
-    ]);
+    ], 'expert');
     expect(summary.gross).toBe(14000);
-    expect(summary.fees).toBe(0);
-    expect(summary.paidOut).toBe(10000);
-    expect(summary.pending).toBe(4000);
-    expect(summary.net).toBe(10000);
+    expect(summary.fees).toBe(2800);
+    expect(summary.paidOut).toBe(0);
+    expect(summary.readyToPay).toBe(8000);
+    expect(summary.pending).toBe(3200);
+    expect(summary.net).toBe(8000);
   });
 
-  it('maps statuses onto Paid out, Pending and Refunded pills', () => {
-    expect(paymentDisplayStatus({ status: 'completed' }).label).toBe('Paid out');
+  it('uses the stored snapshot for an expert, including a free session', () => {
+    const summary = paymentSummary([
+      {
+        _id: 'paid',
+        amount: 10300,
+        status: 'completed',
+        paymentType: 'charge',
+        sessionType: 'oneToOne',
+        advertisedCents: 10000,
+        platformFeeCents: 300,
+        taxCents: 0,
+        commissionCents: 2000,
+        expertNetCents: 8000,
+      },
+      {
+        _id: 'free',
+        amount: 100,
+        status: 'completed',
+        paymentType: 'charge',
+        sessionType: 'seminar',
+        advertisedCents: 0,
+        platformFeeCents: 100,
+        taxCents: 0,
+        commissionCents: 0,
+        expertNetCents: 0,
+      },
+    ], 'expert', { seminarCommissionPercent: 50, oneToOneCommissionPercent: 50 });
+    expect(summary.gross).toBe(10000);
+    expect(summary.fees).toBe(2000);
+    expect(summary.paidOut).toBe(0);
+    expect(summary.readyToPay).toBe(8000);
+  });
+
+  it('counts paid out as recorded cheques and leaves that month out of ready to pay', () => {
+    const summary = paymentSummary([
+      {
+        _id: 'mar',
+        amount: 1000,
+        status: 'completed',
+        paymentType: 'charge',
+        createdAt: '2026-03-15T00:00:00.000Z',
+      },
+      {
+        _id: 'apr',
+        amount: 1000,
+        status: 'completed',
+        paymentType: 'charge',
+        createdAt: '2026-04-02T00:00:00.000Z',
+      },
+      {
+        _id: 'pend',
+        amount: 1000,
+        status: 'pending',
+        paymentType: 'charge',
+        createdAt: '2026-03-20T00:00:00.000Z',
+      },
+    ], 'expert', undefined, [{ year: 2026, month: 3, amountCents: 800 }]);
+    expect(summary.paidOut).toBe(800);
+    expect(summary.readyToPay).toBe(800);
+    expect(summary.pending).toBe(800);
+    expect(summary.net).toBe(1600);
+  });
+
+  it('splits a student charge into price, platform fee and tax, including tax on a free session', () => {
+    const summary = paymentSummary([
+      {
+        _id: 'free',
+        amount: 100,
+        status: 'completed',
+        paymentType: 'charge',
+        advertisedCents: 0,
+        platformFeeCents: 100,
+        taxCents: 0,
+      },
+      {
+        _id: 'taxed',
+        amount: 108,
+        status: 'completed',
+        paymentType: 'charge',
+        advertisedCents: 0,
+        platformFeeCents: 100,
+        taxCents: 8,
+      },
+      {
+        _id: 'paid',
+        amount: 11124,
+        status: 'completed',
+        paymentType: 'charge',
+        advertisedCents: 10000,
+        platformFeeCents: 300,
+        taxCents: 824,
+        commissionCents: 2000,
+        expertNetCents: 8000,
+      },
+    ], 'student');
+    expect(summary.priceCollected).toBe(10000);
+    expect(summary.fees).toBe(500);
+    expect(summary.tax).toBe(832);
+    expect(summary.paidOut).toBe(11332);
+  });
+
+  it('does not invent a platform fee on a historical free student payment', () => {
+    const summary = paymentSummary([
+      { _id: 'old', amount: 0, status: 'completed', paymentType: 'charge' },
+    ], 'student');
+    expect(summary.priceCollected).toBe(0);
+    expect(summary.fees).toBe(0);
+    expect(summary.tax).toBe(0);
+  });
+
+  it('maps statuses onto Completed, Pending and Refunded pills', () => {
+    expect(paymentDisplayStatus({ status: 'completed' }).label).toBe('Completed');
     expect(paymentDisplayStatus({ status: 'pending' }).label).toBe('Pending');
     expect(paymentDisplayStatus({ status: 'withheld' }).label).toBe('Pending');
     expect(paymentDisplayStatus({ status: 'refunded' }).label).toBe('Refunded');

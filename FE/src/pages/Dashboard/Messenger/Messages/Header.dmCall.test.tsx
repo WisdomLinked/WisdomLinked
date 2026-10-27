@@ -86,6 +86,26 @@ describe("direct message call button", () => {
         await waitFor(() => expect(start).toHaveBeenCalledWith({ conversationId: "conv1" }));
     });
 
+    it.each([
+        ["an expert messaging a student", "expert", "customer", "Propose a new session"],
+        ["a student messaging an expert", "customer", "expert", "Make a new appointment"],
+    ] as const)("%s gets the appointment shortcut", (_label, role, peerRole, label) => {
+        renderDmHeader(role, peerRole);
+        expect(screen.getByText(label)).toBeInTheDocument();
+    });
+
+    it.each([
+        ["an admin messaging a student", "admin", "customer"],
+        ["an admin messaging an expert", "admin", "expert"],
+        ["a student messaging the admin", "customer", "admin"],
+        ["an expert messaging the admin", "expert", "admin"],
+    ] as const)("%s gets no appointment shortcut", (_label, role, peerRole) => {
+        renderDmHeader(role, peerRole);
+        expect(screen.getByText("Peer")).toBeInTheDocument();
+        expect(screen.queryByText("Propose a new session")).not.toBeInTheDocument();
+        expect(screen.queryByText("Make a new appointment")).not.toBeInTheDocument();
+    });
+
     it("an expert in a live scheduled session keeps the call button", async () => {
         renderDmHeader("expert", "customer", true);
         expect(screen.getByText("Live")).toBeInTheDocument();

@@ -17,6 +17,7 @@ import { connectToRC, isRCConnected } from './services/rcRealtime';
 import 'swiper/swiper.min.css';
 import LeaveFeedback from './components/LeaveFeedback';
 import AppBanners from './components/AppBanners';
+import TermsDashboardGate from './components/terms/TermsDashboardGate';
 import { useSyncHeaderHeight } from './hooks/useSyncHeaderHeight';
 import VerifyEmail from './pages/VerifyEmail';
 import VerifyEmailChange from './pages/VerifyEmailChange';
@@ -108,28 +109,36 @@ const UnauthenticatedRoutes = () => {
   )
 };
 
-const AuthenticatedRoutes = () => {
+export const AuthenticatedRoutes = () => {
   return (
     <Routes>
       {/* AUTHENTICATED ROUTES */}
       <Route path={'expertdashboard/*'} element={
         <PrivateRoute>
-          <ExpertDashboard />
+          <TermsDashboardGate>
+            <ExpertDashboard />
+          </TermsDashboardGate>
         </PrivateRoute>
       } />
       <Route path={'expertdashboard-legacy/*'} element={
         <PrivateRoute>
-          <LegacyExpertDashboard />
+          <TermsDashboardGate>
+            <LegacyExpertDashboard />
+          </TermsDashboardGate>
         </PrivateRoute>
       } />
       <Route path={'studentdashboard/*'} element={
         <PrivateRoute>
-          <StudentDashboard />
+          <TermsDashboardGate>
+            <StudentDashboard />
+          </TermsDashboardGate>
         </PrivateRoute>
       } />
       <Route path={'customerdashboard/*'} element={
         <PrivateRoute>
-          <CustomerDashboard />
+          <TermsDashboardGate>
+            <CustomerDashboard />
+          </TermsDashboardGate>
         </PrivateRoute>
       } />
       <Route path={'admindashboard/*'} element={

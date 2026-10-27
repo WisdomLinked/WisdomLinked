@@ -43,7 +43,8 @@ stripeController.refundPaymentIntent = async (pi: string, amount: any, mode: str
   return stubs.refund ? stubs.refund(pi, amount, mode) : { payment_intent: pi };
 };
 stripeController.sendBookingReceiptAndConfirmation = async () => {};
-stripeController.listReconcilableBookingIntents = async () => [];
+let reconcilableIntents: any[] = [];
+stripeController.listReconcilableBookingIntents = async () => reconcilableIntents;
 
 notifications.sendEmailMeetingRequestToExpert = async () => {};
 notifications.sendEmailMeetingRequestToCustomer = async () => {};
@@ -234,6 +235,7 @@ const withOneToOneModels = () => {
 
 const resetCalls = () => {
   stubs = {};
+  reconcilableIntents = [];
   for (const key of Object.keys(calls)) delete calls[key];
 };
 
@@ -331,6 +333,42 @@ test("1:1 booking is refused and the hold released when the amount does not matc
     assert.equal(res.statusCode, 400);
     assert.equal(calls.groupCreate, undefined, "no session may be created");
     assert.equal(calls.cancel?.length, 1, "the underpaying hold must be released");
+  } finally {
+    restore();
+  }
+});
+
+test("1:1 booking keeps a hold authorized at a previous fee-inclusive total", async () => {
+  resetCalls();
+  const restore = withOneToOneModels();
+  try {
+    // Advertised $100. This hold was authorized at $111.24 (fee + 8% tax).
+    // Today's default rates charge $103.00. The older authorization still settles.
+    stubs.authorized = () => heldIntent({
+      amount: 11124,
+      metadata: {
+        sessionType: "oneToOne",
+        advertisedCents: "10000",
+        platformFeeCents: "300",
+        taxCents: "824",
+        commissionCents: "2000",
+        expertNetCents: "8000",
+        expertCommissionPercent: "20",
+        studentFeePercent: "3",
+        studentFeeCapDollars: "5",
+        taxPercent: "8",
+        freeSessionPlatformFeeDollars: "1",
+      },
+    });
+
+    const req: any = { user: { userId: STUDENT_ID }, body: oneToOneBody };
+    const res = createRes();
+    await groupController.createGroupChatByUser(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(calls.groupCreate?.length, 1, "the session is created from the existing authorization");
+    assert.equal(calls.cancel, undefined, "the previous-rate hold is not released");
+    assert.equal(calls.historySave?.[0]?.[0]?.status, "withheld");
   } finally {
     restore();
   }
@@ -567,6 +605,59 @@ test("seminar registration is refused when the hold belongs to another account",
   } finally {
     GroupChat.findOne = originalFindOne;
     GroupChat.findOneAndUpdate = originalFindOneAndUpdate;
+    restore();
+  }
+});
+
+test("orphan recovery matches a 1:1 on the advertised price, not the charged total", async () => {
+  resetCalls();
+  const restore = withOneToOneModels();
+  const SeminarSeatRequest = require("../models/SeminarSeatRequest");
+  const originalExists = GroupChat.exists;
+  const originalSeatExists = SeminarSeatRequest.exists;
+  try {
+    GroupChat.exists = async (filter: any) => {
+      record("groupExists", [filter]);
+      return filter?.price === 100 ? { _id: CHAT_ID } : null;
+    };
+    SeminarSeatRequest.exists = async () => null;
+    reconcilableIntents = [{
+      id: "pi_orphan",
+      status: "succeeded",
+      amount: 10300,
+      currency: "usd",
+      createdMs: Date.now() - 2 * 60 * 60 * 1000,
+      metadata: {
+        bookingType: "oneToOne",
+        userId: STUDENT_ID,
+        expertId: EXPERT_ID,
+        sessionType: "oneToOne",
+        advertisedCents: "10000",
+        platformFeeCents: "300",
+        taxCents: "0",
+        commissionCents: "2000",
+        expertNetCents: "8000",
+        expertCommissionPercent: "20",
+        studentFeePercent: "3",
+        studentFeeCapDollars: "5",
+        taxPercent: "0",
+        freeSessionPlatformFeeDollars: "1",
+      },
+    }];
+
+    await groupController.sweepOrphanedBookingIntents();
+
+    const query = calls.groupExists?.[0]?.[0];
+    const row = calls.appendPaymentHistory?.[0]?.[0];
+    assert.equal(query?.price, 100, "the lookup uses the advertised dollars");
+    assert.notEqual(query?.price, 103);
+    assert.equal(calls.refund, undefined, "a paid booking is not refunded for the fee");
+    assert.equal(row?.amount, 10300);
+    assert.equal(row?.advertisedCents, 10000);
+    assert.equal(row?.expertNetCents, 8000);
+  } finally {
+    GroupChat.exists = originalExists;
+    SeminarSeatRequest.exists = originalSeatExists;
     restore();
   }
 });

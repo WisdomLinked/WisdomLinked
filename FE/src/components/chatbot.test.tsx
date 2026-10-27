@@ -214,4 +214,43 @@ describe('HelpBot', () => {
     expect(screen.getByRole('heading', { name: 'Contact Us' })).toBeInTheDocument();
     expect(screen.getByPlaceholderText('you@example.com')).toBeInTheDocument();
   });
+
+  it('labels the bubble from response.source', async () => {
+    askSite.mockImplementation(async (question: string) => {
+      if (question === 'How to accept a meeting?') {
+        return { answer: 'Accept it from the meeting card.', source: 'ai', similarQuestions: [] };
+      }
+      if (question === 'How do I book a session?') {
+        return { answer: 'Open the calendar, then choose a time.', source: 'faq', similarQuestions: [] };
+      }
+      if (question === 'What is a seminar?') {
+        return { answer: 'A seminar is a group session.', similarQuestions: [] };
+      }
+      throw new Error(`unexpected ${question}`);
+    });
+
+    renderBot();
+    fireEvent.click(screen.getByRole('button', { name: 'Open HelpBot' }));
+    fireEvent.click(screen.getByRole('button', { name: 'How to accept a meeting?' }));
+    expect(await screen.findByText('Accept it from the meeting card.')).toBeInTheDocument();
+    expect(screen.getByText('AI answer')).toBeInTheDocument();
+    expect(screen.queryByText('From HelpBot Q&A')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Ask a question…'), {
+      target: { value: 'How do I book a session?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByText('Open the calendar, then choose a time.')).toBeInTheDocument();
+    expect(screen.getByText('From HelpBot Q&A')).toBeInTheDocument();
+    expect(screen.getAllByText('AI answer')).toHaveLength(1);
+
+    fireEvent.change(screen.getByPlaceholderText('Ask a question…'), {
+      target: { value: 'What is a seminar?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByText('A seminar is a group session.')).toBeInTheDocument();
+    expect(screen.getAllByText('AI answer')).toHaveLength(2);
+    expect(screen.getAllByText('From HelpBot Q&A')).toHaveLength(1);
+  });
+
 });

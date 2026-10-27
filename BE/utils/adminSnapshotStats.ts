@@ -6,6 +6,7 @@ import {
     cancelledSessionFilter,
     createdAtFilter,
     fillMonthlySeries,
+    heldSessionFilter,
     heldStartFilter,
     monthlyFromAgg,
     monthsInRange,
@@ -14,7 +15,10 @@ import {
     paymentCompletedMatch,
     paymentCountMatch,
     refundMatch,
+    oneToOneGroupFilter,
     seminarBaseFilter,
+    sumMonthCountRows,
+    upcomingSessionFilter,
     upcomingStartFilter,
     currencyGroupId,
 } from "./adminSnapshot";
@@ -85,31 +89,36 @@ export async function computePeriodSnapshot(
     const createdAt = createdAtFilter(from, to);
     const held = heldStartFilter(from, to, now);
     const seminarHeld = { ...seminarBaseFilter(), ...held };
+    const sessionHeld = heldSessionFilter(from, to, now);
     const cancelled = cancelledSessionFilter(from, to, now);
     const refunds = refundMatch(createdAt);
 
     const [
         expertsJoined,
         customersJoined,
-        sessionsHeld,
+        legacySessionsHeld,
+        groupSessionsHeld,
         seminarsHeld,
         paymentsCount,
         refundsCount,
         paymentAmounts,
         refundAmounts,
-        sessionsCancelled,
+        legacySessionsCancelled,
+        groupSessionsCancelled,
         attendeeRows,
         refundsUnlinked,
     ] = await Promise.all([
         models.User.countDocuments({ role: "expert", ...createdAt }),
         models.User.countDocuments({ role: "customer", ...createdAt }),
-        models.Event.countDocuments(held),
+        models.Event.countDocuments(sessionHeld),
+        models.GroupChat.countDocuments({ ...oneToOneGroupFilter(), ...sessionHeld }),
         models.GroupChat.countDocuments(seminarHeld),
         models.PaymentHistory.countDocuments(paymentCountMatch(createdAt)),
         models.PaymentHistory.countDocuments(refunds),
         models.PaymentHistory.aggregate(currencyAmountPipeline(paymentCompletedMatch(createdAt))),
         models.PaymentHistory.aggregate(currencyAmountPipeline(refunds)),
         models.Event.countDocuments(cancelled),
+        models.GroupChat.countDocuments({ ...oneToOneGroupFilter(), ...cancelled }),
         models.GroupChat.aggregate([
             { $match: seminarHeld },
             {
@@ -131,13 +140,13 @@ export async function computePeriodSnapshot(
     return {
         expertsJoined,
         customersJoined,
-        sessionsHeld,
+        sessionsHeld: legacySessionsHeld + groupSessionsHeld,
         seminarsHeld,
         paymentsCount,
         refundsCount,
         paymentsAmountByCurrency: amountByCurrencyFromAgg(paymentAmounts),
         refundsAmountByCurrency: amountByCurrencyFromAgg(refundAmounts),
-        sessionsCancelled,
+        sessionsCancelled: legacySessionsCancelled + groupSessionsCancelled,
         seminarsAttendees: Number(attendeeRows?.[0]?.attendees) || 0,
         refundsUnlinked,
     };
@@ -152,12 +161,14 @@ export async function computeMonthlyBreakdown(
     const createdAt = createdAtFilter(from, to);
     const held = heldStartFilter(from, to, now);
     const seminarHeld = { ...seminarBaseFilter(), ...held };
+    const sessionHeld = heldSessionFilter(from, to, now);
     const keys = from && to ? monthsInRange(from, to) : null;
 
-    const [experts, customers, sessions, seminars, payments, refunds] = await Promise.all([
+    const [experts, customers, legacySessions, groupSessions, seminars, payments, refunds] = await Promise.all([
         models.User.aggregate(monthCountPipeline({ role: "expert", ...createdAt }, MONTH_GROUP_CREATED)),
         models.User.aggregate(monthCountPipeline({ role: "customer", ...createdAt }, MONTH_GROUP_CREATED)),
-        models.Event.aggregate(monthCountPipeline(held, MONTH_GROUP_START)),
+        models.Event.aggregate(monthCountPipeline(sessionHeld, MONTH_GROUP_START)),
+        models.GroupChat.aggregate(monthCountPipeline({ ...oneToOneGroupFilter(), ...sessionHeld }, MONTH_GROUP_START)),
         models.GroupChat.aggregate(monthCountPipeline(seminarHeld, MONTH_GROUP_START)),
         models.PaymentHistory.aggregate(monthPaymentPipeline(paymentCountMatch(createdAt), true)),
         models.PaymentHistory.aggregate(monthPaymentPipeline(refundMatch(createdAt), false)),
@@ -171,7 +182,7 @@ export async function computeMonthlyBreakdown(
     return {
         experts: mapCounts(experts, false),
         customers: mapCounts(customers, false),
-        sessions: mapCounts(sessions, false),
+        sessions: mapCounts(sumMonthCountRows(legacySessions, groupSessions), false),
         seminars: mapCounts(seminars, false),
         payments: mapCounts(payments, true),
         refunds: mapCounts(refunds, true),
@@ -188,12 +199,19 @@ export async function computeSnapshotExtras(
     upcomingSeminars: number;
 }> {
     const upcoming = upcomingStartFilter(now);
-    const [expertReviewCount, customerBlockedCount, upcomingSessions, upcomingSeminars] =
+    const sessionUpcoming = upcomingSessionFilter(now);
+    const [expertReviewCount, customerBlockedCount, legacyUpcoming, groupUpcoming, upcomingSeminars] =
         await Promise.all([
             models.User.countDocuments({ role: "expert", status: "review" }),
             models.User.countDocuments({ role: "customer", status: "blocked" }),
-            models.Event.countDocuments(upcoming),
+            models.Event.countDocuments(sessionUpcoming),
+            models.GroupChat.countDocuments({ ...oneToOneGroupFilter(), ...sessionUpcoming }),
             models.GroupChat.countDocuments({ ...seminarBaseFilter(), ...upcoming }),
         ]);
-    return { expertReviewCount, customerBlockedCount, upcomingSessions, upcomingSeminars };
+    return {
+        expertReviewCount,
+        customerBlockedCount,
+        upcomingSessions: legacyUpcoming + groupUpcoming,
+        upcomingSeminars,
+    };
 }

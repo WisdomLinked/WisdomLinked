@@ -26,7 +26,6 @@ import {
   joinCommunityChat,
   getMyFollowers,
   doFilterCustomers,
-  doFilterExperts,
   searchPrivateChatUsers,
   joinPrivateChat,
   addParticipantsToCommunityChat,
@@ -126,8 +125,8 @@ type PrivateRow =
   | { kind: 'expertCustomer'; id: string; title: string; lastLine: string; raw: any }
   /** Student: expert from directory search (opens / ensures 1:1 DM). */
   | { kind: 'studentSearchedExpert'; id: string; title: string; lastLine: string; raw: any }
-  /** Admin: expert from directory search (admins cannot initiate with students). */
-  | { kind: 'adminSearchedExpert'; id: string; title: string; lastLine: string; raw: any };
+  /** Admin: student or expert from directory search (opens / ensures 1:1 DM). */
+  | { kind: 'adminSearchedUser'; id: string; title: string; lastLine: string; raw: any };
 
 const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTION_DEFAULT }) => {
   const dispatch = useDispatch();
@@ -809,20 +808,16 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
     let cancelled = false;
     const t = window.setTimeout(async () => {
       try {
-        const res: any = await doFilterExperts({
-          username: q,
-          keywords: [],
-          services: [],
-          sortBy: 'Name in ASC',
-        });
+        // customer/filterExperts is student-only: it answers an admin with a 401, which logs them out.
+        const res: any = await searchPrivateChatUsers(q);
         if (cancelled) return;
         const list = Array.isArray(res?.result) ? res.result : [];
         const rows: PrivateRow[] = list
-          .filter((u: any) => canAdminInitiateDmWithRole(u?.role ?? 'expert'))
+          .filter((u: any) => canAdminInitiateDmWithRole(u?.role))
           .map((u: any) => ({
-            kind: 'adminSearchedExpert' as const,
+            kind: 'adminSearchedUser' as const,
             id: String(u._id),
-            title: String(u.username || u.email || 'Expert'),
+            title: String(u.username || u.email || 'User'),
             lastLine: String(u.email || ''),
             raw: u,
           }));
@@ -979,8 +974,8 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
         localFiltered.map(r => (r.kind === 'privateDm' ? r.otherUserId : r.id)),
       );
       const extras = studentExpertSearchRows.filter(
-        (r): r is Extract<PrivateRow, { kind: 'studentSearchedExpert' | 'adminSearchedExpert' }> =>
-          (r.kind === 'studentSearchedExpert' || r.kind === 'adminSearchedExpert') && !existingIds.has(r.id),
+        (r): r is Extract<PrivateRow, { kind: 'studentSearchedExpert' | 'adminSearchedUser' }> =>
+          (r.kind === 'studentSearchedExpert' || r.kind === 'adminSearchedUser') && !existingIds.has(r.id),
       );
       return [...ordered(localFiltered), ...extras];
     }
@@ -1477,7 +1472,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
   const openStudentSearchedExpert = async (row: Extract<PrivateRow, { kind: 'studentSearchedExpert' }>) => {
     await openDmWithOtherUser(row);
   };
-  const openAdminSearchedExpert = async (row: Extract<PrivateRow, { kind: 'adminSearchedExpert' }>) => {
+  const openAdminSearchedUser = async (row: Extract<PrivateRow, { kind: 'adminSearchedUser' }>) => {
     await openDmWithOtherUser(row);
   };
 
@@ -1921,12 +1916,12 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                   ? isExpert
                     ? 'No chats or users match your search.'
                     : isAdmin
-                      ? 'No chats or experts match your search.'
+                      ? 'No chats, students or experts match your search.'
                       : 'No chats or users match your search.'
                   : isExpert
                     ? 'Type a name to search users, or open a friend or direct chat below.'
                     : isAdmin
-                      ? 'No private chats yet. Type an expert name to start one.'
+                      ? 'No private chats yet. Type a student or expert name to start one.'
                       : 'No private chats yet. Type a name to find users.'}
               </p>
             ) : (
@@ -1934,7 +1929,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                 const active =
                   row.kind === 'friend'
                     ? isFriendActive(row.id)
-                    : row.kind === 'expertCustomer' || row.kind === 'studentSearchedExpert' || row.kind === 'adminSearchedExpert'
+                    : row.kind === 'expertCustomer' || row.kind === 'studentSearchedExpert' || row.kind === 'adminSearchedUser'
                       ? isFriendActive(row.id)
                       : row.kind === 'privateDm'
                         ? isFriendActive(row.otherUserId)
@@ -1943,7 +1938,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                 const presenceUserId =
                   row.kind === 'privateDm'
                     ? row.otherUserId
-                    : row.kind === 'friend' || row.kind === 'expertCustomer' || row.kind === 'studentSearchedExpert' || row.kind === 'adminSearchedExpert'
+                    : row.kind === 'friend' || row.kind === 'expertCustomer' || row.kind === 'studentSearchedExpert' || row.kind === 'adminSearchedUser'
                       ? row.id
                       : '';
                 const online = presenceUserId ? isUserOnline(presenceUserId) : false;
@@ -1978,7 +1973,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                       ? `c-${row.id}`
                       : row.kind === 'studentSearchedExpert'
                         ? `s-${row.id}`
-                        : row.kind === 'adminSearchedExpert'
+                        : row.kind === 'adminSearchedUser'
                           ? `a-${row.id}`
                         : row.kind === 'privateDm'
                           ? `dm-${row.conversationId ?? row.otherUserId}`
@@ -1993,7 +1988,7 @@ const StudentChat: React.FC<{ section?: ChatSection }> = ({ section = CHAT_SECTI
                   if (row.kind === 'friend') openFriend(row);
                   else if (row.kind === 'expertCustomer') void openExpertCustomer(row);
                   else if (row.kind === 'studentSearchedExpert') void openStudentSearchedExpert(row);
-                  else if (row.kind === 'adminSearchedExpert') void openAdminSearchedExpert(row);
+                  else if (row.kind === 'adminSearchedUser') void openAdminSearchedUser(row);
                   else if (row.kind === 'privateDm') openPrivateDm(row);
                 };
 

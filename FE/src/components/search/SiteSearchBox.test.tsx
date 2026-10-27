@@ -299,4 +299,32 @@ describe('SiteSearchBox', () => {
       '/user/expertdashboard?session=appt-9',
     );
   });
+
+  it('shows From HelpBot Q&A on the answer panel when source is faq', async () => {
+    let resolveAsk: (value?: unknown) => void = () => {};
+    askSite.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAsk = resolve;
+        }),
+    );
+
+    render(
+      <MemoryRouter>
+        <SiteSearchBox audience="public" />
+      </MemoryRouter>,
+    );
+    await typeQuery('book');
+    await flushDebounce();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    await act(async () => {
+      resolveAsk({ answer: 'Open the calendar and pick a time.', source: 'faq' });
+    });
+
+    const panel = screen.getByTestId('site-search-answer');
+    expect(panel).toHaveTextContent('From HelpBot Q&A');
+    expect(panel).toHaveTextContent('Open the calendar and pick a time.');
+  });
+
 });

@@ -9,16 +9,21 @@ import {
     changePctByCurrency,
     createdAtFilter,
     fillMonthlySeries,
+    heldSessionFilter,
     heldStartFilter,
     isValidRecordDate,
     monthKeyUTC,
     monthlyFromAgg,
     monthsInRange,
+    oneToOneGroupFilter,
     parseDateParam,
     periodChange,
     resolveSnapshotRange,
     seminarBaseFilter,
     startInRangeFilter,
+    statusListFilter,
+    sumMonthCountRows,
+    upcomingSessionFilter,
     upcomingStartFilter,
     clampPage,
     clampPageSize,
@@ -116,6 +121,50 @@ test("cancelled sessions use declined/cancelled inside the held window", () => {
     const f = cancelledSessionFilter(null, null, now) as { status: { $in: string[] } };
     assert.ok(f.status.$in.includes("cancelled"));
     assert.ok(f.status.$in.includes("declined"));
+});
+
+test("held 1:1 sessions are inside the held window and not cancelled or declined", () => {
+    const now = new Date("2026-10-21T00:00:00.000Z");
+    const from = new Date("2026-07-21T00:00:00.000Z");
+    const f = heldSessionFilter(from, now, now) as { start: unknown; status: { $nin: string[] } };
+    assert.deepEqual(f.start, heldStartFilter(from, now, now).start);
+    assert.deepEqual(f.status.$nin, ["cancelled", "canceled", "declined"]);
+});
+
+test("upcoming 1:1 sessions start from now and are not cancelled or declined", () => {
+    const now = new Date("2026-10-21T00:00:00.000Z");
+    const f = upcomingSessionFilter(now) as { start: { $gte: Date }; status: { $nin: string[] } };
+    assert.equal(f.start.$gte.toISOString(), now.toISOString());
+    assert.deepEqual(f.status.$nin, ["cancelled", "canceled", "declined"]);
+});
+
+test("statusListFilter takes one status or a comma-separated list", () => {
+    assert.equal(statusListFilter(undefined), null);
+    assert.equal(statusListFilter(""), null);
+    assert.equal(statusListFilter(" , "), null);
+    assert.deepEqual(statusListFilter("pending"), { status: "pending" });
+    assert.deepEqual(statusListFilter("accepted,active"), { status: { $in: ["accepted", "active"] } });
+    assert.deepEqual(statusListFilter("cancelled, declined,"), { status: { $in: ["cancelled", "declined"] } });
+});
+
+test("today's 1:1s are individual group chats", () => {
+    assert.deepEqual(oneToOneGroupFilter(), { type: "individual" });
+});
+
+test("sumMonthCountRows adds months across collections and sorts them", () => {
+    assert.deepEqual(
+        sumMonthCountRows(
+            [{ _id: "2026-05", count: 1 }, { _id: "2026-07", count: 2 }],
+            [{ _id: "2026-05", count: 3 }, { _id: "2026-06", count: 1 }],
+            [],
+        ),
+        [
+            { _id: "2026-05", count: 4 },
+            { _id: "2026-06", count: 1 },
+            { _id: "2026-07", count: 2 },
+        ],
+    );
+    assert.deepEqual(sumMonthCountRows([{ _id: null as unknown as string, count: 5 }]), []);
 });
 
 test("monthsInRange lists inclusive UTC month keys", () => {
@@ -234,15 +283,19 @@ test("computePeriodSnapshot maps counts and per-currency amounts", async () => {
     const now = new Date("2026-10-01T00:00:00.000Z");
     const createdAt = createdAtFilter(from, to);
     const held = heldStartFilter(from, to, now);
+    const sessionHeld = heldSessionFilter(from, to, now);
+    const cancelled = cancelledSessionFilter(from, to, now);
     const models = stubModels({
         counts: {
             [JSON.stringify({ role: "expert", ...createdAt })]: 4,
             [JSON.stringify({ role: "customer", ...createdAt })]: 9,
-            [JSON.stringify(held)]: 5,
+            [JSON.stringify(sessionHeld)]: 3,
+            [JSON.stringify({ ...oneToOneGroupFilter(), ...sessionHeld })]: 2,
             [JSON.stringify({ ...seminarBaseFilter(), ...held })]: 2,
             [JSON.stringify({ paymentType: { $ne: "refund" }, ...createdAt })]: 7,
             [JSON.stringify({ paymentType: "refund", ...createdAt })]: 1,
-            [JSON.stringify(cancelledSessionFilter(from, to, now))]: 1,
+            [JSON.stringify(cancelled)]: 1,
+            [JSON.stringify({ ...oneToOneGroupFilter(), ...cancelled })]: 2,
             [JSON.stringify({
                 paymentType: "refund",
                 ...createdAt,
@@ -270,7 +323,7 @@ test("computePeriodSnapshot maps counts and per-currency amounts", async () => {
     assert.equal(period.refundsCount, 1);
     assert.deepEqual(period.paymentsAmountByCurrency, { usd: 12000, eur: 4000 });
     assert.deepEqual(period.refundsAmountByCurrency, { usd: 2000 });
-    assert.equal(period.sessionsCancelled, 1);
+    assert.equal(period.sessionsCancelled, 3);
     assert.equal(period.seminarsAttendees, 11);
     assert.equal(period.refundsUnlinked, 1);
 });
@@ -299,14 +352,36 @@ test("computeMonthlyBreakdown fills every month in the range", async () => {
     assert.equal(monthly.payments[0].amountsByCurrency?.usd, 500);
 });
 
-test("computeSnapshotExtras counts review, blocked, and upcoming from start >= now", async () => {
+test("computeMonthlyBreakdown counts older and today's 1:1s together, not seminars", async () => {
+    const from = new Date("2026-04-01T00:00:00.000Z");
+    const to = new Date("2026-06-01T00:00:00.000Z");
+    const none = { countDocuments: async () => 0, aggregate: async () => [] };
+    const models = {
+        User: none,
+        PaymentHistory: none,
+        Event: { countDocuments: async () => 0, aggregate: async () => [{ _id: "2026-04", count: 1 }] },
+        GroupChat: {
+            countDocuments: async () => 0,
+            aggregate: async (pipeline: any[]) => pipeline[0].$match.type === "individual"
+                ? [{ _id: "2026-04", count: 2 }, { _id: "2026-05", count: 1 }]
+                : [{ _id: "2026-06", count: 9 }],
+        },
+    };
+    const monthly = await computeMonthlyBreakdown(models, from, to, to);
+    assert.deepEqual(monthly.sessions.map((p) => p.count), [3, 1, 0]);
+    assert.deepEqual(monthly.seminars.map((p) => p.count), [0, 0, 9]);
+});
+
+test("computeSnapshotExtras counts review, blocked, and upcoming (both kinds of 1:1) from start >= now", async () => {
     const now = new Date("2026-10-21T00:00:00.000Z");
     const upcoming = upcomingStartFilter(now);
+    const sessionUpcoming = upcomingSessionFilter(now);
     const models = stubModels({
         counts: {
             [JSON.stringify({ role: "expert", status: "review" })]: 2,
             [JSON.stringify({ role: "customer", status: "blocked" })]: 3,
-            [JSON.stringify(upcoming)]: 6,
+            [JSON.stringify(sessionUpcoming)]: 4,
+            [JSON.stringify({ ...oneToOneGroupFilter(), ...sessionUpcoming })]: 2,
             [JSON.stringify({ ...seminarBaseFilter(), ...upcoming })]: 1,
         },
     });

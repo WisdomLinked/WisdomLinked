@@ -6,7 +6,9 @@ import {
     useStripe,
     useElements,
 } from '@stripe/react-stripe-js';
-import { createStripePaymentIntent, getStripeMode } from '../../../api/api';
+import { createStripePaymentIntent, getStripeMode, quoteBookingCharge } from '../../../api/api';
+import { quoteRequestBody } from '../../../components/dashboard/StudentBookingCheckout';
+import { formatDollarsFromCents } from '../../../utils/bookingPrice';
 import { persistPendingDetails } from '../../../utils/safeLocalStorage';
 import FormAlert from '../../../components/FormAlert';
 import { SetLoadingStatus } from '../../../actions/appActions';
@@ -14,7 +16,8 @@ import { SetLoadingStatus } from '../../../actions/appActions';
 const CheckoutForm = ({
     pendingDetails,
     stripeMode,
-    price
+    price,
+    dueCents,
 }: any) => {
     const stripe: any = useStripe();
     const elements = useElements();
@@ -92,10 +95,14 @@ const CheckoutForm = ({
         if (!stripe || !elements) {
             return;
         }
+        set_errorMessage('');
 
         try {
-            if (price === 0) {
-                // Directly mark the payment as successful
+            if (dueCents == null) {
+                set_errorMessage('Could not load the amount due. Please try again.');
+                return;
+            }
+            if (!(dueCents > 0)) {
                 persistPendingDetails(window.localStorage, pendingDetails);
                 window.location.replace(`${window.location.href.split('?')[0]}?redirect_status=succeeded&payment_intent=0`);
                 return;
@@ -147,15 +154,6 @@ const CheckoutForm = ({
         }
     };
 
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            set_errorMessage('')
-        }, 4000)
-        return () => {
-            clearTimeout(timer)
-        }
-    }, [errorMessage])
-
     return (
         <form onSubmit={handleSubmit}>
             <PaymentElement />
@@ -181,10 +179,14 @@ const Payment = ({
     price,
     pendingDetails
 }: any) => {
+    const [dueCents, setDueCents] = useState<number | null>(null);
+    const quoteKey = JSON.stringify(quoteRequestBody(pendingDetails || {}, Number(price) || 0));
 
     const options: any = {
         mode: 'payment',
-        amount: price > 0 ? Math.round(price * 100) : 1,
+        amount: dueCents != null && dueCents > 0
+            ? dueCents
+            : (Number(price) > 0 ? Math.round(Number(price) * 100) : 1),
         currency: 'usd',
         // Fully customizable with appearance API.
         appearance: {
@@ -225,6 +227,18 @@ const Payment = ({
         setStripeMode();
     }, []);
 
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const response = await quoteBookingCharge(JSON.parse(quoteKey));
+            if (cancelled) return;
+            setDueCents(response && typeof response.chargeCents === 'number' ? response.chargeCents : null);
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [quoteKey]);
+
 
     useEffect(() => {
         if (stripeMode && stripePromise) {
@@ -238,12 +252,13 @@ const Payment = ({
         stripeMode && stripePromise ?
             <Elements stripe={stripePromise} options={options}>
                 <div className='text-xl text-white text-center mb-6'>
-                    Please pay ${price} for the {type} ({stripeMode})
+                    Please pay {dueCents != null ? formatDollarsFromCents(dueCents) : `$${price}`} for the {type} ({stripeMode})
                 </div>
                 <CheckoutForm
                     pendingDetails={pendingDetails}
                     stripeMode={stripeMode}
                     price={price}
+                    dueCents={dueCents}
                 />
             </Elements> :
             null

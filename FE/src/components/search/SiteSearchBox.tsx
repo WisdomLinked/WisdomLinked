@@ -112,6 +112,7 @@ export default function SiteSearchBox({
   // A later ask must not clear this list, and a new search must not wipe it before it returns.
   const [searchCards, setSearchCards] = useState<SiteSearchResponse | null>(null);
   const [askAnswer, setAskAnswer] = useState<string | null>(null);
+  const [askSource, setAskSource] = useState<'faq' | 'ai'>('ai');
   const [asking, setAsking] = useState(false);
   const askRequestRef = useRef(0);
   const [open, setOpen] = useState(false);
@@ -135,6 +136,7 @@ export default function SiteSearchBox({
       const response = await askSite(current);
       if (requestId !== askRequestRef.current) return;
       setAskAnswer(typeof response?.answer === 'string' ? response.answer : '');
+      setAskSource(response?.source === 'faq' ? 'faq' : 'ai');
     } catch {
       if (requestId !== askRequestRef.current) return;
     } finally {
@@ -255,6 +257,7 @@ export default function SiteSearchBox({
             askInFlightRef.current = false;
             setAsking(false);
             setAskAnswer(null);
+            setAskSource('ai');
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={(event) => {
@@ -311,6 +314,9 @@ export default function SiteSearchBox({
           ) : null}
           {askAnswer ? (
             <div data-testid="site-search-answer" className="mb-2 min-w-0 rounded-lg bg-[#F5F3EF] px-2 py-2 text-[13px] text-slate-800 whitespace-pre-wrap">
+              <p className="mb-1 text-[11px] text-slate-400 whitespace-normal">
+                {askSource === 'faq' ? 'From HelpBot Q&A' : 'AI answer'}
+              </p>
               <AnswerText text={askAnswer} />
             </div>
           ) : null}

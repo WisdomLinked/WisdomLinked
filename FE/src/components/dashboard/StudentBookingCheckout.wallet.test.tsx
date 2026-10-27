@@ -3,12 +3,17 @@ import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 
 import StudentBookingCheckout from './StudentBookingCheckout';
+import { computeSessionCharge, DEFAULT_PRICING_RATES } from '../../utils/bookingPrice';
 
 const createStripePaymentIntent = vi.fn();
+const quoteBookingCharge = vi.fn(async (body: any) =>
+  computeSessionCharge(Number(body?.advertisedCents) || 0, DEFAULT_PRICING_RATES, body?.expertId ? 'oneToOne' : 'seminar'),
+);
 
 vi.mock('../../api/api', () => ({
   getStripeMode: vi.fn(async () => ({ stripeMode: 'test' })),
   createStripePaymentIntent: (...args: any[]) => createStripePaymentIntent(...args),
+  quoteBookingCharge: (...args: any[]) => quoteBookingCharge(...args),
 }));
 
 vi.mock('../../actions/appActions', () => ({
@@ -64,6 +69,10 @@ describe('StudentBookingCheckout payment method tabs', () => {
   beforeEach(() => {
     createStripePaymentIntent.mockReset();
     createStripePaymentIntent.mockResolvedValue({ client_secret: 'cs_test_1' });
+    quoteBookingCharge.mockReset();
+    quoteBookingCharge.mockImplementation(async (body: any) =>
+      computeSessionCharge(Number(body?.advertisedCents) || 0, DEFAULT_PRICING_RATES, body?.expertId ? 'oneToOne' : 'seminar'),
+    );
     confirmPayment.mockClear();
     window.localStorage.clear();
   });
@@ -98,10 +107,28 @@ describe('StudentBookingCheckout payment method tabs', () => {
     expect(screen.queryByRole('tab', { name: /wechat pay \/ alipay/i })).toBeNull();
   });
 
-  it('hides the tabs for a free booking, where a wallet has nothing to charge', async () => {
+  it('still charges a $0 session when the server total is the platform fee', async () => {
     renderCheckout({ price: 0, walletOption: { kind: 'charge' } });
-    await screen.findByTestId('payment-element');
+    expect(await screen.findByText('Platform fee')).toBeTruthy();
+    expect(screen.getAllByText('$1.00').length).toBeGreaterThan(0);
+    expect(screen.getByRole('tab', { name: /wechat pay \/ alipay/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^pay \$1\.00$/i }));
+    await waitFor(() => expect(createStripePaymentIntent).toHaveBeenCalled());
+  });
+
+  it('skips payment only when the server total is zero', async () => {
+    quoteBookingCharge.mockResolvedValue({
+      advertisedCents: 0,
+      platformFeeCents: 0,
+      taxCents: 0,
+      chargeCents: 0,
+    });
+    const onPaymentSuccess = vi.fn();
+    renderCheckout({ price: 0, walletOption: { kind: 'charge' }, onPaymentSuccess });
+    fireEvent.click(await screen.findByRole('button', { name: /confirm booking/i }));
     expect(screen.queryByRole('tab', { name: /wechat pay \/ alipay/i })).toBeNull();
+    expect(onPaymentSuccess).toHaveBeenCalledWith('0', expect.anything());
+    expect(createStripePaymentIntent).not.toHaveBeenCalled();
   });
 
   it('offers card and wallet tabs, with card selected first', async () => {
@@ -119,7 +146,7 @@ describe('StudentBookingCheckout payment method tabs', () => {
     fireEvent.click(await screen.findByRole('tab', { name: /wechat pay \/ alipay/i }));
 
     const payButton = await screen.findByRole('button', {
-      name: /^pay \$25$/i,
+      name: /^pay \$25\.75$/i,
     });
     fireEvent.click(payButton);
 
@@ -169,7 +196,7 @@ describe('StudentBookingCheckout payment method tabs', () => {
     renderCheckout({ walletOption: { kind: 'charge', only: true } });
 
     fireEvent.click(
-      await screen.findByRole('button', { name: /^pay \$25$/i }),
+      await screen.findByRole('button', { name: /^pay \$25\.75$/i }),
     );
 
     await waitFor(() => expect(createStripePaymentIntent).toHaveBeenCalled());
@@ -183,7 +210,7 @@ describe('StudentBookingCheckout payment method tabs', () => {
       const onPaymentSuccess = vi.fn();
       const { unmount } = renderCheckout({ walletOption: { kind: 'charge', only: true }, onPaymentSuccess });
 
-      fireEvent.click(await screen.findByRole('button', { name: /^pay \$25$/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /^pay \$25\.75$/i }));
       await waitFor(() => expect(onPaymentSuccess).toHaveBeenCalled());
 
       const finishIndex = setTimeoutSpy.mock.calls.findIndex((call) => call[1] === 450);
@@ -203,7 +230,7 @@ describe('StudentBookingCheckout payment method tabs', () => {
 
     fireEvent.click(await screen.findByRole('tab', { name: /wechat pay \/ alipay/i }));
     fireEvent.click(
-      await screen.findByRole('button', { name: /^pay \$25$/i }),
+      await screen.findByRole('button', { name: /^pay \$25\.75$/i }),
     );
 
     await waitFor(() => expect(confirmPayment).toHaveBeenCalled());
@@ -225,18 +252,18 @@ describe('pay button wording', () => {
     await screen.findByTestId('payment-element');
 
     fireEvent.click(screen.getByRole('button', { name: /select wechat/i }));
-    expect(screen.getByRole('button', { name: /^pay \$25 with wechat pay$/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /^pay \$25 with alipay$/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /^pay \$25\.75 with wechat pay$/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^pay \$25\.75 with alipay$/i })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /select alipay/i }));
-    expect(screen.getByRole('button', { name: /^pay \$25 with alipay$/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /^pay \$25 with wechat pay$/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /^pay \$25\.75 with alipay$/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^pay \$25\.75 with wechat pay$/i })).toBeNull();
   });
 
   it('stays neutral until a wallet is chosen', async () => {
     renderCheckout({ walletOption: { kind: 'charge', only: true } });
     await screen.findByTestId('payment-element');
-    expect(screen.getByRole('button', { name: /^pay \$25$/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^pay \$25\.75$/i })).toBeTruthy();
   });
 
   it('never names a wallet on the card tab', async () => {
@@ -244,6 +271,6 @@ describe('pay button wording', () => {
     await screen.findByTestId('payment-element');
 
     fireEvent.click(screen.getByRole('button', { name: /select wechat/i }));
-    expect(screen.getByRole('button', { name: /^pay \$25$/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^pay \$25\.75$/i })).toBeTruthy();
   });
 });

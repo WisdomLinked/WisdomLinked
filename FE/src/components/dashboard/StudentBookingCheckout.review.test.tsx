@@ -5,10 +5,16 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import StudentBookingCheckout from './StudentBookingCheckout';
 import { ACCOUNT_BLOCKED_MESSAGE, ACCOUNT_UNDER_REVIEW_MESSAGE } from '../../utils/accountStatus';
 import { createStripePaymentIntent } from '../../api/api';
+import { computeSessionCharge, DEFAULT_PRICING_RATES } from '../../utils/bookingPrice';
+
+const quoteBookingCharge = vi.fn(async (body: any) =>
+  computeSessionCharge(Number(body?.advertisedCents) || 0, DEFAULT_PRICING_RATES, 'oneToOne'),
+);
 
 vi.mock('../../api/api', () => ({
   getStripeMode: vi.fn(async () => ({ stripeMode: 'test' })),
   createStripePaymentIntent: vi.fn(),
+  quoteBookingCharge: (...args: any[]) => quoteBookingCharge(...args),
 }));
 
 vi.mock('../../actions/appActions', () => ({
@@ -45,7 +51,7 @@ const submitPayment = async () => {
       onPaymentSuccess={vi.fn()}
     />,
   );
-  fireEvent.click(await screen.findByRole('button', { name: /pay \$10/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /pay \$10\.30/i }));
 };
 
 describe('StudentBookingCheckout — account under review', () => {

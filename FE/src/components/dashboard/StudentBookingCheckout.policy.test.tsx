@@ -3,10 +3,16 @@ import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 
 import StudentBookingCheckout from './StudentBookingCheckout';
+import { computeSessionCharge, DEFAULT_PRICING_RATES } from '../../utils/bookingPrice';
+
+const quoteBookingCharge = vi.fn(async (body: any) =>
+  computeSessionCharge(Number(body?.advertisedCents) || 0, DEFAULT_PRICING_RATES, 'oneToOne'),
+);
 
 vi.mock('../../api/api', () => ({
   getStripeMode: vi.fn(async () => ({ stripeMode: 'test' })),
   createStripePaymentIntent: vi.fn(),
+  quoteBookingCharge: (...args: any[]) => quoteBookingCharge(...args),
 }));
 
 vi.mock('../../actions/appActions', () => ({
@@ -21,7 +27,9 @@ vi.mock('@stripe/react-stripe-js', () => ({
   Elements: ({ children }: any) => <div>{children}</div>,
   PaymentElement: () => <div data-testid="payment-element" />,
   useStripe: () => ({}),
-  useElements: () => ({}),
+  useElements: () => ({
+    submit: async () => ({ error: { message: 'Your card was declined.' } }),
+  }),
 }));
 
 const pendingDetails = {
@@ -52,7 +60,7 @@ describe('StudentBookingCheckout cancellation notice', () => {
       },
     });
 
-    const payButton = await screen.findByRole('button', { name: /pay \$40/i });
+    const payButton = await screen.findByRole('button', { name: /pay \$41\.20/i });
     expect(screen.getByText(/cannot be cancelled/i)).toBeTruthy();
     expect(payButton).toBeDisabled();
 
@@ -64,8 +72,19 @@ describe('StudentBookingCheckout cancellation notice', () => {
   it('leaves payment open when no notice is configured', async () => {
     renderCheckout();
 
-    const payButton = await screen.findByRole('button', { name: /pay \$40/i });
+    const payButton = await screen.findByRole('button', { name: /pay \$41\.20/i });
     expect(screen.queryByRole('checkbox')).toBeNull();
     expect(payButton).not.toBeDisabled();
+  });
+
+  it('keeps a payment error on screen after 4 seconds', async () => {
+    renderCheckout();
+    const payButton = await screen.findByRole('button', { name: /pay \$41\.20/i });
+    fireEvent.click(payButton);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Your card was declined.');
+
+    await new Promise((resolve) => setTimeout(resolve, 4100));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Your card was declined.');
   });
 });

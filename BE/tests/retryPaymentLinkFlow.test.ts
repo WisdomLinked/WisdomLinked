@@ -49,13 +49,14 @@ Module._load = function (request: string, parent: any, isMain: boolean) {
     return originalLoad(request, parent, isMain);
 };
 
-const { sendPaymentLinkToUser, handleStripeWebhook } = require("../controllers/stripe.controller");
+const { sendPaymentLinkToUser, sendAdHocPaymentLink, handleStripeWebhook } = require("../controllers/stripe.controller");
 const { sweepExpiredRetryPaymentLinks } = require("../services/retryPaymentLinkSweep");
 const PaymentHistory = require("../models/PaymentHistory");
 const GroupChat = require("../models/GroupChat");
 const User = require("../models/User");
 const AppState = require("../models/AppState");
 const StripeWebhookEvent = require("../models/StripeWebhookEvent");
+const AdminAuditLog = require("../models/AdminAuditLog");
 const { RETRY_LINK_SESSION_STARTED, RETRY_LINK_SESSION_TOO_SOON } = require("../utils/retryPaymentLink");
 
 const HOUR = 60 * 60 * 1000;
@@ -83,6 +84,8 @@ const original = {
 async function sendLink(t: any, sessionStart: Date | null, history: any = original) {
     reset();
     const saved: any[] = [];
+    const audits: any[] = [];
+    t.mock.method(AdminAuditLog, "create", async (doc: any) => { audits.push(doc); return doc; });
     t.mock.method(PaymentHistory, "findById", async () => history);
     t.mock.method(PaymentHistory.prototype, "save", async function (this: any) { saved.push(this.toObject()); return this; });
     t.mock.method(AppState, "findOne", async () => ({ stripeMode: "test" }));
@@ -91,9 +94,10 @@ async function sendLink(t: any, sessionStart: Date | null, history: any = origin
     const res = makeRes();
     const before = Date.now();
     await sendPaymentLinkToUser({
+        user: { userId: "admin-1", email: "admin@example.com" },
         body: { paymentHistoryId: "ph_original", customerEmail: "student@example.com", customAmount: 4000, customDescription: "Seminar seat" },
     }, res);
-    return { res, saved, before, after: Date.now() };
+    return { res, saved, audits, before, after: Date.now() };
 }
 
 test("a retry link is a one-time Stripe Checkout Session, never a reusable Payment Link", async t => {
@@ -114,6 +118,60 @@ test("a retry link is a one-time Stripe Checkout Session, never a reusable Payme
     assert.equal(sentMail.length, 1);
     assert.match(sentMail[0].html, /https:\/\/checkout\.stripe\.test\/cs_test_1/);
     assert.match(sentMail[0].html, /Link expires/);
+});
+
+test("a sent retry link is written to the admin audit log", async t => {
+    const { res, saved, audits } = await sendLink(t, new Date(Date.now() + 5 * 24 * HOUR));
+    assert.equal(res.body.status, "SUCCESS");
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].action, "send_payment_link");
+    assert.equal(audits[0].actorEmail, "admin@example.com");
+    assert.equal(audits[0].targetType, "paymentHistory");
+    assert.equal(audits[0].targetId, String(saved[0]._id));
+    assert.equal(audits[0].targetEmail, "student@example.com");
+    assert.deepEqual(audits[0].meta, {
+        amount: "40.00 USD",
+        description: "Seminar seat",
+        originalPayment: "ph_original",
+        stripeMode: "test",
+    });
+});
+
+test("a refused retry link is not written to the admin audit log", async t => {
+    const { res, audits } = await sendLink(t, new Date(Date.now() - HOUR));
+    assert.equal(res.body.status, "FAILED");
+    assert.equal(audits.length, 0);
+});
+
+test("a sent ad-hoc payment link is written to the admin audit log, a rejected one is not", async t => {
+    reset();
+    const audits: any[] = [];
+    const saved: any[] = [];
+    t.mock.method(AdminAuditLog, "create", async (doc: any) => { audits.push(doc); return doc; });
+    t.mock.method(AppState, "findOne", async () => ({ stripeMode: "test" }));
+    t.mock.method(User, "findOne", async () => ({ _id: "customer-1", email: "payer@example.com" }));
+    t.mock.method(PaymentHistory.prototype, "save", async function (this: any) { saved.push(this.toObject()); return this; });
+    const user = { userId: "admin-1", email: "admin@example.com" };
+
+    const rejected = makeRes();
+    await sendAdHocPaymentLink({ user, body: { amount: 0, description: "Consult", customerEmail: "payer@example.com" } }, rejected);
+    assert.equal(rejected.statusCode, 400);
+    assert.equal(audits.length, 0);
+
+    const res = makeRes();
+    await sendAdHocPaymentLink({
+        user,
+        body: { amount: 25, description: " Consult ", customerEmail: " payer@example.com ", customerName: "Pat" },
+    }, res);
+    assert.equal(res.body.status, "SUCCESS");
+    assert.equal(stripeCalls.links.length, 1);
+    assert.equal(sentMail.length, 1);
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].action, "send_adhoc_payment_link");
+    assert.equal(audits[0].targetType, "paymentHistory");
+    assert.equal(audits[0].targetId, String(saved[0]._id));
+    assert.equal(audits[0].targetEmail, "payer@example.com");
+    assert.deepEqual(audits[0].meta, { amount: "25.00 USD", description: "Consult", stripeMode: "test" });
 });
 
 test("the link expires 24 hours after it is sent when the session is further away", async t => {

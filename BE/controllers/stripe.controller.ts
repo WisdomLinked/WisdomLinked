@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
 import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
 import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
-import { expectedBookingIntentCents, extractHourlyRate, balanceTransactionId } from '../utils/bookingPrice';
+import { expectedBookingIntentCents, extractHourlyRate, balanceTransactionId, dollarsToCents, pricingMetadata, type ChargeBreakdown } from '../utils/bookingPrice';
+import { chargeForAdvertised, loadPricingSettings, savePricingSettings } from '../utils/pricingSettings';
 import { seminarIsFull, firstFullFutureOccurrence, seatRequestUnavailableMessage } from '../utils/seminarCapacity';
 const SeminarSeatRequest = require("../models/SeminarSeatRequest");
 import { checkoutPaymentMetadata, retryLinkExpiry } from '../utils/retryPaymentLink';
+import { auditAmount, auditChanges, flattenForAudit } from '../utils/adminAuditChanges';
 import {
     normalizePaymentMode,
     isWallet,
@@ -24,7 +26,7 @@ const AppState = require("../models/AppState");
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
 const PaymentHistory = require("../models/PaymentHistory");
-const { assertBookingLeadTime } = require("../utils/bookingLeadTime");
+const { seminarRegistrationClosedError } = require("../utils/bookingLeadTime");
 const { resolveAppBaseUrl } = require("../utils/appBaseUrl");
 const { logAdminAction } = require("../utils/adminAudit");
 
@@ -63,6 +65,7 @@ const createStripePaymentIntent = async (req, res) => {
         let wallet = paymentMode === 'wallet';
 
         let expectedCents: number;
+        let pricingMeta: Record<string, string> = {};
         let metadata: Record<string, string>;
         let manualCapture = false;
         let requiresApproval = false;
@@ -88,7 +91,16 @@ const createStripePaymentIntent = async (req, res) => {
                 paymentMode = pinnedSettlementMode(request.paymentMode);
                 wallet = paymentMode === 'wallet';
             }
-            expectedCents = Number(request.amount) || 0;
+            const seatSeminar = await GroupChat.findById(request.groupChat);
+            const seatQuote = await chargeForAdvertised('seminar', dollarsToCents(seatSeminar?.price));
+            expectedCents = seatQuote.chargeCents;
+            pricingMeta = pricingMetadata(seatQuote);
+            // The pay confirmation reads this stored total, so it has to be the quote
+            // the new PaymentIntent is created for.
+            if (expectedCents > 0 && Number(request.amount) !== expectedCents) {
+                request.amount = expectedCents;
+                await request.save();
+            }
             metadata = {
                 bookingType: 'groupChat',
                 groupChatId: String(request.groupChat),
@@ -100,7 +112,12 @@ const createStripePaymentIntent = async (req, res) => {
             if (!groupChat) {
                 return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
             }
-            expectedCents = expectedBookingIntentCents({ kind: 'groupChat', priceDollars: groupChat.price });
+            const seminarQuote = await chargeForAdvertised(
+                groupChat.type === 'seminar' ? 'seminar' : 'oneToOne',
+                expectedBookingIntentCents({ kind: 'groupChat', priceDollars: groupChat.price }),
+            );
+            expectedCents = seminarQuote.chargeCents;
+            pricingMeta = pricingMetadata(seminarQuote);
             metadata = { bookingType: 'groupChat', groupChatId: String(groupChat._id), userId: payerId };
 
             if (groupChat.type !== 'seminar') {
@@ -194,11 +211,9 @@ const createStripePaymentIntent = async (req, res) => {
                             return res.status(400).send({ error: 'A later session in this seminar series is full, so registration is closed.' });
                         }
                     }
-                    const expert = await User.findById(groupChat.admin.toString());
-                    try {
-                        assertBookingLeadTime(expert, groupChat.start, 'Seminar registrations');
-                    } catch (leadErr) {
-                        return res.status(400).send({ error: leadErr.message || 'This seminar can no longer be booked.' });
+                    const registrationClosed = seminarRegistrationClosedError(groupChat.start);
+                    if (registrationClosed) {
+                        return res.status(400).send({ error: registrationClosed });
                     }
                     if (!wallet) manualCapture = true;
                 }
@@ -212,12 +227,21 @@ const createStripePaymentIntent = async (req, res) => {
             if (wallet) {
                 return res.status(409).send({ error: WALLET_NEEDS_APPROVAL_MESSAGE });
             }
-            expectedCents = expectedBookingIntentCents({ kind: 'oneToOne', durationMinutes: Number(duration), hourlyRateDollars: extractHourlyRate(expertUser.price) });
+            const oneToOneQuote = await chargeForAdvertised(
+                'oneToOne',
+                expectedBookingIntentCents({ kind: 'oneToOne', durationMinutes: Number(duration), hourlyRateDollars: extractHourlyRate(expertUser.price) }),
+            );
+            expectedCents = oneToOneQuote.chargeCents;
+            pricingMeta = pricingMetadata(oneToOneQuote);
             metadata = { bookingType: 'oneToOne', expertId: String(expertUser._id), duration: String(duration), userId: payerId };
             manualCapture = true;
         }
 
         if (!(expectedCents > 0)) {
+            return res.status(400).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+        }
+        const clientAmount = req.body?.amount ?? req.body?.chargeCents;
+        if (clientAmount != null && clientAmount !== '' && Math.round(Number(clientAmount)) !== expectedCents) {
             return res.status(400).send(BOOKING_PAYMENT_AMOUNT_INVALID);
         }
 
@@ -232,7 +256,7 @@ const createStripePaymentIntent = async (req, res) => {
                 }
                 : { payment_method_types: CARD_PAYMENT_METHOD_TYPES }),
             ...(manualCapture ? { capture_method: 'manual' } : {}),
-            metadata: { ...metadata, paymentMode },
+            metadata: { ...metadata, paymentMode, ...pricingMeta },
         });
         res.send({
             client_secret: paymentIntent.client_secret,
@@ -301,12 +325,19 @@ const setSeminarApprovalDeadline = async (req, res) => {
             return res.status(400).send({ error: 'Deadline must be between 0 and 168 hours.' });
         }
         let appState = await AppState.findOne();
+        const previous = appState?.seminarApprovalDeadlineHours ?? 24;
         if (!appState) {
             appState = await AppState.create({ seminarApprovalDeadlineHours: hours });
         } else {
             appState.seminarApprovalDeadlineHours = hours;
             await appState.save();
         }
+        logAdminAction({
+            actor: req.user,
+            action: 'set_seminar_approval_deadline',
+            targetType: 'appState',
+            meta: { from: previous, to: hours },
+        });
         res.send({ result: 'SUCCESS', seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours });
     } catch (err) {
         console.log(err);
@@ -321,12 +352,19 @@ const setPaymentWindow = async (req, res) => {
             return res.status(400).send({ error: 'The payment window must be between 1 and 168 hours.' });
         }
         let appState = await AppState.findOne();
+        const previous = paymentWindowHours(appState);
         if (!appState) {
             appState = await AppState.create({ paymentWindowHours: hours });
         } else {
             appState.paymentWindowHours = hours;
             await appState.save();
         }
+        logAdminAction({
+            actor: req.user,
+            action: 'set_payment_window',
+            targetType: 'appState',
+            meta: { from: previous, to: hours },
+        });
         res.send({ result: 'SUCCESS', paymentWindowHours: appState.paymentWindowHours });
     } catch (err) {
         console.log(err);
@@ -538,7 +576,7 @@ const buildPaymentRequestEmail = ({ customerName, amountCents, description, url,
     ],
 });
 
-const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, retainedCents, description, expertName, start, reference, transactionId }: any) => renderStripeEmail({
+const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, retainedCents, description, expertName, start, reference, transactionId, releasedSession }: any) => renderStripeEmail({
     heading: 'Your refund has been processed',
     previewText: `${stripeMoneyFromCents(amountCents, currency)} refunded.`,
     blocks: [
@@ -555,6 +593,11 @@ const buildRefundEmail = ({ customerName, amountCents, currency, isFullRefund, r
         isFullRefund
             ? ''
             : stripeCallout(`${stripeMoneyFromCents(retainedCents, currency)} of your original payment has been retained in accordance with the applicable cancellation and refund policy.`),
+        releasedSession
+            ? stripeCallout(releasedSession.type === 'seminar'
+                ? `Because of this refund, your seat in <strong>${stripeEscape(releasedSession.sessionName)}</strong> has been released, so you are no longer enrolled in it or its chat.`
+                : `Because of this refund, your 1:1 session <strong>${stripeEscape(releasedSession.sessionName)}</strong> has been cancelled.`)
+            : '',
         stripeCallout('The refund will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank. Your card issuer may notify you separately when it posts.', 'bad'),
         stripeParagraph('If the refund has not reached you within 10 business days, contact the administrator through WisdomLinked quoting the reference above.', { muted: true }),
     ],
@@ -749,6 +792,20 @@ const sendPaymentLinkToUser = async (req, res) => {
         const inline_msg = stripeAttachments();
         if (inline_msg.length) (msg as any).attachments = inline_msg;
         await sgMail.send(msg);
+
+        logAdminAction({
+            actor: req.user,
+            action: 'send_payment_link',
+            targetType: 'paymentHistory',
+            targetId: immediatePaymentHistory._id,
+            targetEmail: customerEmail,
+            meta: {
+                amount: auditAmount(finalAmount, paymentHistory.currency),
+                description: finalDescription,
+                originalPayment: String(paymentHistoryId),
+                stripeMode: currentStripeMode,
+            },
+        });
 
         res.status(200).json({
             status: 'SUCCESS',
@@ -1151,6 +1208,16 @@ const processRefund = async (req, res) => {
 
         await refundHistory.save();
 
+        // Every automatic refund takes the seat back with the money; this one has to as well.
+        let seatRelease: any = { released: false };
+        try {
+            // Deferred require: groupChat.controller depends on this module.
+            const { releaseSeatAfterAdminRefund } = require("./groupChat.controller");
+            seatRelease = await releaseSeatAfterAdminRefund(paymentHistory);
+        } catch (releaseErr) {
+            console.error('[processRefund] seat not released — it will show under Seats to check', String(paymentHistory._id), releaseErr?.message);
+        }
+
         // Send refund notification email to customer
         if (paymentHistory.customer?.email) {
             const sgMail = require("@sendgrid/mail");
@@ -1172,6 +1239,7 @@ const processRefund = async (req, res) => {
                     : '',
                 reference: refundHistory?._id ? String(refundHistory._id) : paymentHistory.paymentIntent,
                 transactionId: paymentHistory.paymentIntent,
+                releasedSession: seatRelease.released ? seatRelease : null,
             });
 
             const refundEmailMsg = {
@@ -1214,12 +1282,19 @@ const processRefund = async (req, res) => {
                 currency: paymentHistory.currency,
                 reason: refundReason,
                 isFullRefund,
+                groupChat: paymentHistory.groupChat ? String(paymentHistory.groupChat) : undefined,
+                seatReleased: Boolean(seatRelease.released),
+                seatReleaseSkipped: seatRelease.skipped,
             },
         });
 
+        const who = paymentHistory.customer?.email || 'The student';
         res.status(200).json({
             status: 'SUCCESS',
-            message: 'Refund processed successfully.',
+            message: seatRelease.released
+                ? `Refund processed successfully. ${who} was removed from “${seatRelease.sessionName}”.`
+                : 'Refund processed successfully.',
+            seatRelease,
             refund: {
                 id: refundResult.id,
                 amount: refundAmount,
@@ -1378,6 +1453,19 @@ const sendAdHocPaymentLink = async (req, res) => {
         await sgMail.send(emailMsg);
         console.log('Ad-hoc payment link email sent to:', customerEmail.trim());
 
+        logAdminAction({
+            actor: req.user,
+            action: 'send_adhoc_payment_link',
+            targetType: 'paymentHistory',
+            targetId: immediatePaymentHistory._id,
+            targetEmail: customerEmail.trim(),
+            meta: {
+                amount: auditAmount(finalAmount),
+                description: finalDescription,
+                stripeMode: currentStripeMode,
+            },
+        });
+
         res.status(200).json({
             status: 'SUCCESS',
             message: 'Payment link sent successfully.',
@@ -1399,9 +1487,84 @@ const sendAdHocPaymentLink = async (req, res) => {
     }
 };
 
+const resolveCheckoutBreakdown = async (body: any): Promise<ChargeBreakdown | null> => {
+    const { groupChatId, expertId, duration, seatRequestId } = body || {};
+    if (seatRequestId) {
+        const request = await SeminarSeatRequest.findById(String(seatRequestId));
+        if (!request) return null;
+        const groupChat = await GroupChat.findById(request.groupChat);
+        if (!groupChat) return null;
+        return chargeForAdvertised('seminar', dollarsToCents(groupChat.price));
+    }
+    if (groupChatId) {
+        const groupChat = await GroupChat.findById(String(groupChatId));
+        if (!groupChat) return null;
+        const sessionType = groupChat.type === 'seminar' ? 'seminar' : 'oneToOne';
+        return chargeForAdvertised(sessionType, dollarsToCents(groupChat.price));
+    }
+    if (expertId) {
+        const expertUser = await User.findById(String(expertId));
+        if (!expertUser) return null;
+        const advertised = expectedBookingIntentCents({
+            kind: 'oneToOne',
+            durationMinutes: Number(duration),
+            hourlyRateDollars: extractHourlyRate(expertUser.price),
+        });
+        return chargeForAdvertised('oneToOne', advertised);
+    }
+    return null;
+};
+
+const quoteBookingCharge = async (req, res) => {
+    try {
+        const breakdown = await resolveCheckoutBreakdown(req.body);
+        if (!breakdown) return res.status(404).send(BOOKING_PAYMENT_AMOUNT_INVALID);
+        res.send({
+            sessionType: breakdown.sessionType,
+            advertisedCents: breakdown.advertisedCents,
+            platformFeeCents: breakdown.platformFeeCents,
+            taxCents: breakdown.taxCents,
+            chargeCents: breakdown.chargeCents,
+        });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const getPricingSettings = async (req, res) => {
+    try {
+        res.send(await loadPricingSettings());
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
+const setPricingSettings = async (req, res) => {
+    try {
+        const previous = await loadPricingSettings();
+        const settings = await savePricingSettings(req.body);
+        logAdminAction({
+            actor: req.user,
+            action: 'set_pricing_settings',
+            targetType: 'appState',
+            meta: { changes: auditChanges(flattenForAudit(previous), flattenForAudit(settings)) },
+        });
+        res.send({ result: 'SUCCESS', ...settings });
+    } catch (err: any) {
+        if (err?.status === 400) return res.status(400).send({ error: err.message });
+        console.log(err);
+        return res.status(500).send(HTTP_GENERIC_ERROR);
+    }
+};
+
 module.exports = {
     stripePay,
     createStripePaymentIntent,
+    quoteBookingCharge,
+    getPricingSettings,
+    setPricingSettings,
     getStripeMode,
     checkPaymentIntentSucceeded,
     checkPaymentIntentAuthorized,

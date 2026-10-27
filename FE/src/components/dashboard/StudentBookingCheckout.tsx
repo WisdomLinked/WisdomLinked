@@ -6,7 +6,8 @@ import {
   useStripe,
   useElements,
 } from '@stripe/react-stripe-js';
-import { createStripePaymentIntent, getStripeMode } from '../../api/api';
+import { createStripePaymentIntent, getStripeMode, quoteBookingCharge } from '../../api/api';
+import { formatDollarsFromCents } from '../../utils/bookingPrice';
 import { persistPendingDetails } from '../../utils/safeLocalStorage';
 import FormAlert from '../FormAlert';
 import { SetLoadingStatus } from '../../actions/appActions';
@@ -77,6 +78,7 @@ type CheckoutFormProps = {
   returnUrl: string;
   isSeatRequest?: boolean;
   paymentMode?: PaymentMode;
+  quote: BookingQuote;
   onPaymentSuccess: (paymentIntentId: string, opts?: { requiresApproval?: boolean }) => void;
   policyNotice?: BookingPolicyNotice;
 };
@@ -91,15 +93,63 @@ const WALLET_METHOD_NAMES: Record<string, string> = {
   alipay: 'Alipay',
 };
 
+export type BookingQuote = {
+  sessionType?: string;
+  advertisedCents: number;
+  platformFeeCents: number;
+  taxCents: number;
+  chargeCents: number;
+};
+
+export function quoteRequestBody(details: StudentBookingPendingDetails, priceDollars = 0) {
+  const anyDetails = details as StudentBookingPendingDetails & {
+    kind?: string;
+    requestId?: string;
+    groupChatId?: string;
+    expert?: string;
+    duration?: number;
+  };
+  // advertisedCents is not used to charge. The server looks up the price itself.
+  const advertisedCents = Math.max(0, Math.round(Number(priceDollars) * 100));
+  if (anyDetails.kind === 'pay-seat-request') return { seatRequestId: anyDetails.requestId, advertisedCents };
+  if (anyDetails.kind === 'accept-1to1' || anyDetails.groupChatId) {
+    return { groupChatId: anyDetails.groupChatId, advertisedCents };
+  }
+  return { expertId: String(anyDetails.expert), duration: anyDetails.duration, advertisedCents };
+}
+
 export const payButtonLabel = (
-  price: number,
+  totalLabel: string,
   paymentMode: PaymentMode,
   selectedMethod: string,
 ): string => {
-  if (paymentMode !== 'wallet') return `Pay $${price}`;
+  if (paymentMode !== 'wallet') return `Pay ${totalLabel}`;
   const name = WALLET_METHOD_NAMES[selectedMethod];
-  return name ? `Pay $${price} with ${name}` : `Pay $${price}`;
+  return name ? `Pay ${totalLabel} with ${name}` : `Pay ${totalLabel}`;
 };
+
+export function ChargeLines({ quote }: { quote: BookingQuote }) {
+  return (
+    <dl className="mt-3 space-y-1 text-[13px] text-[#1A3A4A]">
+      <div className="flex justify-between gap-3">
+        <dt>Price</dt>
+        <dd className="tabular-nums">{formatDollarsFromCents(quote.advertisedCents)}</dd>
+      </div>
+      {quote.platformFeeCents > 0 ? (
+        <div className="flex justify-between gap-3">
+          <dt>Platform fee</dt>
+          <dd className="tabular-nums">{formatDollarsFromCents(quote.platformFeeCents)}</dd>
+        </div>
+      ) : null}
+      {quote.taxCents > 0 ? (
+        <div className="flex justify-between gap-3">
+          <dt>Tax</dt>
+          <dd className="tabular-nums">{formatDollarsFromCents(quote.taxCents)}</dd>
+        </div>
+      ) : null}
+    </dl>
+  );
+}
 
 const CheckoutForm = ({
   pendingDetails,
@@ -108,6 +158,7 @@ const CheckoutForm = ({
   returnUrl,
   isSeatRequest = false,
   paymentMode = 'card',
+  quote,
   onPaymentSuccess,
   policyNotice,
 }: CheckoutFormProps) => {
@@ -164,9 +215,10 @@ const CheckoutForm = ({
     e.preventDefault();
     if (!stripe || !elements) return;
     if (policyNotice && !acknowledged) return;
+    setErrorMessage('');
 
     try {
-      if (price === 0) {
+      if (!(quote.chargeCents > 0)) {
         window.localStorage.removeItem('pendingDetails');
         onPaymentSuccess('0', { requiresApproval: isSeatRequest });
         return;
@@ -256,12 +308,6 @@ const CheckoutForm = ({
     }
   };
 
-  useEffect(() => {
-    if (!errorMessage) return;
-    const timer = setTimeout(() => setErrorMessage(''), 4000);
-    return () => clearTimeout(timer);
-  }, [errorMessage]);
-
   return (
     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
@@ -301,8 +347,8 @@ const CheckoutForm = ({
             ? (isSeatRequest ? 'Joining the waitlist…' : 'Processing payment…')
             : isSeatRequest
               ? 'Join waitlist'
-              : price > 0
-                ? payButtonLabel(price, paymentMode, selectedMethod)
+              : quote.chargeCents > 0
+                ? payButtonLabel(formatDollarsFromCents(quote.chargeCents), paymentMode, selectedMethod)
                 : 'Confirm booking'}
         </button>
         {policyNotice && !acknowledged ? (
@@ -372,11 +418,41 @@ export default function StudentBookingCheckout({
   const stripeReturnBase =
     returnUrl ?? `${window.location.pathname}${window.location.search}`;
 
-  // Free bookings never reach a wallet, so the tabs would only be noise.
-  const walletAvailable = !!walletOption && price > 0;
+  const [quote, setQuote] = useState<BookingQuote | null>(null);
+  const [quoteError, setQuoteError] = useState('');
+  const quoteKey = JSON.stringify(quoteRequestBody(pendingDetails, price));
+
+  useEffect(() => {
+    let cancelled = false;
+    const body = JSON.parse(quoteKey);
+    (async () => {
+      setQuote(null);
+      setQuoteError('');
+      const response = await quoteBookingCharge(body);
+      if (cancelled) return;
+      if (!response || typeof response.chargeCents !== 'number') {
+        setQuoteError('Could not load the amount due. Please try again.');
+        return;
+      }
+      setQuote({
+        sessionType: response.sessionType,
+        advertisedCents: Number(response.advertisedCents) || 0,
+        platformFeeCents: Number(response.platformFeeCents) || 0,
+        taxCents: Number(response.taxCents) || 0,
+        chargeCents: Number(response.chargeCents) || 0,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [quoteKey]);
+
+  // A $0 advertised price can still owe the platform fee. Only a server total of 0 is free.
+  const chargeCents = quote?.chargeCents ?? 0;
+  const walletAvailable = !!walletOption && chargeCents > 0;
   const walletOnly =
     walletAvailable && walletOption?.kind === 'charge' && !!walletOption.only;
-  const [tab, setTab] = useState<PaymentMode>(walletOnly ? 'wallet' : 'card');
+  const [tab, setTab] = useState<PaymentMode>('card');
   const activeTab: PaymentMode = walletOnly ? 'wallet' : walletAvailable ? tab : 'card';
   const [walletSubmitting, setWalletSubmitting] = useState(false);
   const [walletRestriction, setWalletRestriction] = useState<string | null>(null);
@@ -386,13 +462,13 @@ export default function StudentBookingCheckout({
   const options = useMemo(
     () => ({
       mode: 'payment' as const,
-      amount: price > 0 ? Math.round(price * 100) : 1,
+      amount: chargeCents > 0 ? chargeCents : 1,
       currency: 'usd' as const,
       // Seminar bookings authorize (hold) the funds — the deferred Element must
       // declare the same manual capture or confirmPayment throws a capture_method
       // mismatch and the submit silently fails. Wallets cannot hold at all, so they
       // always settle immediately and must not declare manual capture.
-      ...((isSeatRequest || holdsFunds) && price > 0 && activeTab === 'card'
+      ...((isSeatRequest || holdsFunds) && chargeCents > 0 && activeTab === 'card'
         ? { captureMethod: 'manual' as const }
         : {}),
       // Each rail names its methods explicitly. Wallets are redirect/QR methods that
@@ -404,7 +480,7 @@ export default function StudentBookingCheckout({
         activeTab === 'wallet' ? ['alipay', 'wechat_pay'] : ['card'],
       appearance: APPEARANCE,
     }),
-    [price, isSeatRequest, holdsFunds, activeTab],
+    [chargeCents, isSeatRequest, holdsFunds, activeTab],
   );
 
   const [stripeMode, setStripeMode] = useState('');
@@ -437,7 +513,11 @@ export default function StudentBookingCheckout({
     }
   }, [stripeMode, stripePromise]);
 
-  if (!stripeMode || !stripePromise) {
+  if (quoteError) {
+    return <p className="text-sm text-[#7A7A72]">{quoteError}</p>;
+  }
+
+  if (!stripeMode || !stripePromise || !quote) {
     return (
       <p className="text-sm text-[#7A7A72]">Loading secure checkout…</p>
     );
@@ -449,8 +529,9 @@ export default function StudentBookingCheckout({
         <p className="font-serif text-lg font-medium text-[#1A3A4A]">
           {isSeatRequest ? `Join the waiting list — ${type}` : `Pay for your ${type}`}
         </p>
-        <p className="mt-1 text-[12px] text-[#7A7A72]">
-          Total: <span className="font-semibold text-[#1A3A4A]">${price}</span>
+        <ChargeLines quote={quote} />
+        <p className="mt-2 text-[12px] text-[#7A7A72]">
+          Total: <span className="font-semibold text-[#1A3A4A]">{formatDollarsFromCents(quote.chargeCents)}</span>
           {stripeMode === 'test' ? ' · test mode' : ''}
         </p>
         {isSeatRequest && activeTab === 'card' ? (
@@ -505,7 +586,7 @@ export default function StudentBookingCheckout({
                 <p className="mt-1 text-[12px] text-[#7A7A72]">
                   These wallets can't hold funds the way a card can. We'll send this as a
                   request and <strong>charge you nothing now</strong>. If it's accepted, we'll
-                  email you a link to pay ${price} — you'll have 24 hours to complete it, and
+                  email you a link to pay {formatDollarsFromCents(quote.chargeCents)} — you'll have 24 hours to complete it, and
                   the booking is confirmed the moment you do.
                 </p>
               </div>
@@ -542,12 +623,24 @@ export default function StudentBookingCheckout({
               ) : null}
             </div>
           </div>
+        ) : quote.chargeCents <= 0 ? (
+          <button
+            type="button"
+            onClick={() => {
+              window.localStorage.removeItem('pendingDetails');
+              onPaymentSuccess('0', { requiresApproval: isSeatRequest });
+            }}
+            className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-4 py-3 text-[13px] font-semibold text-white hover:bg-[#122635]"
+          >
+            Confirm booking
+          </button>
         ) : (
           <Elements key={activeTab} stripe={stripePromise} options={options}>
             <CheckoutForm
               pendingDetails={pendingDetails}
               stripeMode={stripeMode}
               price={price}
+              quote={quote}
               returnUrl={stripeReturnBase}
               isSeatRequest={isSeatRequest && activeTab === 'card'}
               paymentMode={activeTab}

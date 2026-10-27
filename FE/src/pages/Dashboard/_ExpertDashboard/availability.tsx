@@ -799,7 +799,7 @@ const AvailabilityPage: React.FC = () => {
               </label>
               <p className="mb-2 text-xs text-gray-400">
                 Students can only book sessions that start at least this many hours from
-                when they book (applies to 1:1 bookings and seminar sign-ups).
+                when they book (applies to 1:1 appointments only).
               </p>
               <div className="inline-flex flex-wrap rounded-full bg-gray-50 p-1 text-xs font-medium text-gray-600">
                 {BOOKING_NOTICE_HOURS.map((h) => {

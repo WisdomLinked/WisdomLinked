@@ -54,3 +54,30 @@ describe("expertSchedulingPastStartError", () => {
     assert.equal(expertSchedulingPastStartError("not a date", NOW), null);
   });
 });
+
+describe("seminarRegistrationClosedError", () => {
+  const { seminarRegistrationClosedError, SEMINAR_ALREADY_STARTED } = require("../utils/bookingLeadTime");
+  const NOW = Date.parse("2026-10-08T12:00:00Z");
+  const inHours = (h: number) => new Date(NOW + h * 3600_000).toISOString();
+
+  it("allows registering for a seminar starting within the booking notice", () => {
+    assert.equal(seminarRegistrationClosedError(inHours(23), NOW), null);
+    assert.equal(seminarRegistrationClosedError(inHours(1), NOW), null);
+    assert.equal(seminarRegistrationClosedError(inHours(1 / 60), NOW), null);
+  });
+
+  it("allows registering for a seminar far in the future", () => {
+    assert.equal(seminarRegistrationClosedError(inHours(500), NOW), null);
+  });
+
+  it("closes registration once the seminar has started", () => {
+    assert.equal(seminarRegistrationClosedError(new Date(NOW).toISOString(), NOW), SEMINAR_ALREADY_STARTED);
+    assert.equal(seminarRegistrationClosedError(inHours(-0.5), NOW), SEMINAR_ALREADY_STARTED);
+    assert.equal(seminarRegistrationClosedError(inHours(-48), NOW), SEMINAR_ALREADY_STARTED);
+  });
+
+  it("treats a missing or invalid start as closed", () => {
+    assert.equal(seminarRegistrationClosedError(undefined, NOW), SEMINAR_ALREADY_STARTED);
+    assert.equal(seminarRegistrationClosedError("not a date", NOW), SEMINAR_ALREADY_STARTED);
+  });
+});

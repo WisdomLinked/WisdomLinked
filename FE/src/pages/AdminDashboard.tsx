@@ -16,6 +16,8 @@ import {
   Award,
   FileText,
   Settings,
+  CircleDollarSign,
+  Banknote,
 } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar';
@@ -58,14 +60,18 @@ import Feedback from '../components/getFeedback';
 import GetContactedUs from '../components/getContactedUs';
 import RegisterUserByAdmin from '../components/registerUserByAdmin';
 import ChatBotQA from './Dashboard/_AdminDashboard/chatBotQA';
+import TermsAgreementPage from './Dashboard/_AdminDashboard/termsAgreement';
 import UserMgmt from './Dashboard/_AdminDashboard/usermgmt';
 import Payment from './Dashboard/_AdminDashboard/payment';
+import AdminRevenue from './Dashboard/_AdminDashboard/revenue';
+import AdminPayroll from './Dashboard/_AdminDashboard/payroll';
 import AdminMajors from './Dashboard/_AdminDashboard/majors';
 import AdminAuditLog from './Dashboard/_AdminDashboard/auditLog';
 import TermsAgreementPage from './Dashboard/_AdminDashboard/terms';
 import AdminExpertsManager from '../components/dashboard/AdminExpertsManager';
 import Chatbot from '../components/chatbot';
 import { PendingContactRequestsProvider } from '../hooks/usePendingContactRequestsCount';
+import { useAdminDmUnread } from '../hooks/useAdminDmUnread';
 import { DASHBOARD_PAGE_TITLE } from '../components/dashboard/pageTitle';
 
 const AUTH_BASE = process.env.REACT_APP_AUTH_URL || '/user/';
@@ -74,6 +80,8 @@ const adminNavItems = [
   { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
   { id: 'usermgmt', label: 'User management', icon: Users },
   { id: 'payment', label: 'Payments', icon: CreditCard },
+  { id: 'revenue', label: 'Fee structure', icon: CircleDollarSign },
+  { id: 'payroll', label: 'Payroll', icon: Banknote },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
   { id: 'feedbacks', label: 'Feedback', icon: MessageCircleWarning },
   { id: 'contactedus', label: 'Contact requests', icon: Inbox },
@@ -83,6 +91,7 @@ const adminNavItems = [
   { id: 'auditLog', label: 'Audit log', icon: ScrollText },
   { id: 'terms', label: 'Terms & Agreement', icon: FileText },
   { id: 'chatBotQA', label: 'HelpBot Q&A', icon: Bot },
+  { id: 'termsAgreement', label: 'Terms & Agreement', icon: FileText },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -309,6 +318,8 @@ export default function AdminDashboard() {
   const sidebarActive =
     extraView === 'profile' || extraView === 'settings' ? extraView : section;
 
+  const dmUnread = useAdminDmUnread(Boolean(userDetails?.email));
+
   const adminName =
     (userDetails?.username as string | undefined) ||
     (userDetails?.name as string | undefined) ||
@@ -505,6 +516,10 @@ export default function AdminDashboard() {
           ? 'User management'
           : section === 'payment'
             ? 'Payments'
+            : section === 'revenue'
+              ? 'Fee structure'
+            : section === 'payroll'
+              ? 'Payroll'
             : section === 'chat'
               ? 'Chat'
               : section === 'feedbacks'
@@ -515,6 +530,8 @@ export default function AdminDashboard() {
                     ? 'Register user'
                     : section === 'chatBotQA'
                       ? 'HelpBot Q&A'
+                      : section === 'termsAgreement'
+                        ? 'Terms & Agreement'
                       : section === 'majors'
                           ? 'Majors'
                           : section === 'featuredExperts'
@@ -559,6 +576,8 @@ export default function AdminDashboard() {
         <Route path="snapshot/:listType" element={<AdminSnapshotMetricView />} />
         <Route path="usermgmt" element={<UserMgmt />} />
         <Route path="payment" element={<Payment />} />
+        <Route path="revenue" element={<AdminRevenue />} />
+        <Route path="payroll" element={<AdminPayroll />} />
         <Route path="feedbacks" element={<Feedback />} />
         <Route path="contactedus" element={<GetContactedUs />} />
         <Route path="registerUser" element={<RegisterUserByAdmin />} />
@@ -567,6 +586,7 @@ export default function AdminDashboard() {
         <Route path="auditLog" element={<AdminAuditLog />} />
         <Route path="terms" element={<TermsAgreementPage />} />
         <Route path="chatBotQA" element={<ChatBotQA />} />
+        <Route path="termsAgreement" element={<TermsAgreementPage />} />
         <Route path="*" element={<AdminOverview go={goToSection} />} />
       </Routes>
     </div>
@@ -595,7 +615,8 @@ export default function AdminDashboard() {
           studentName={adminName}
           avatarUrl={avatarUrl}
           roleLabel="Admin"
-          notifications={{}}
+          notifications={{ chat: sidebarActive === 'chat' ? 0 : dmUnread.total }}
+          subItemCounts={{ chat: dmUnread.bySection }}
         />
 
         <main className="flex-1 min-w-0 lg:ml-[220px]">

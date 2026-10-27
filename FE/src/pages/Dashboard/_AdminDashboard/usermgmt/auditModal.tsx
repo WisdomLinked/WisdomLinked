@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { doGetFullUserDataByEmail, doFilterPaymentHistories } from '../../../../api/api';
+import { doGetFullUserDataByEmail, doFilterPaymentHistories, getPricingSettings, listExpertPayroll } from '../../../../api/api';
 import ChatHistory from './chatHistory';
 import PaymentHistory from './paymentHistory';
 import AuditHeader from './audit/AuditHeader';
@@ -10,6 +10,10 @@ import {
   buildExportPayload,
   lastActiveFromAccount,
   paymentSummary,
+  auditMoneyRole,
+  DEFAULT_AUDIT_RATES,
+  type AuditCheque,
+  type AuditCommissionRates,
   type AuditTab,
 } from './audit/auditModel';
 import type { PaymentHistoryRow } from '../payment/paymentHistoryUtils';
@@ -26,6 +30,24 @@ const AuditModal = ({
   const [selectedTab, set_selectedTab] = useState<AuditTab>('chat');
   const [paymentRows, setPaymentRows] = useState<PaymentHistoryRow[]>([]);
   const [paymentCount, setPaymentCount] = useState(0);
+  const [rates, setRates] = useState<AuditCommissionRates>(DEFAULT_AUDIT_RATES);
+  const [cheques, setCheques] = useState<AuditCheque[]>([]);
+
+  useEffect(() => {
+    if (typeof getPricingSettings !== 'function') return;
+    let cancelled = false;
+    (async () => {
+      const settings = await getPricingSettings();
+      if (cancelled || !settings?.seminar || !settings?.oneToOne) return;
+      setRates({
+        seminarCommissionPercent: Number(settings.seminar.expertCommissionPercent) || 20,
+        oneToOneCommissionPercent: Number(settings.oneToOne.expertCommissionPercent) || 20,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const getFullUserData = useCallback(async (email: string) => {
     const res = await doGetFullUserDataByEmail(email);
@@ -77,6 +99,23 @@ const AuditModal = ({
   }, [selectedUser?.email, userDetails?.email]);
 
   useEffect(() => {
+    const expertId = userDetails?._id || selectedUser?._id;
+    const role = userDetails?.role || selectedUser?.role;
+    if (auditMoneyRole(role) !== 'expert' || !expertId || typeof listExpertPayroll !== 'function') {
+      setCheques([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const data = await listExpertPayroll(String(expertId));
+      if (!cancelled) setCheques(Array.isArray(data?.cheques) ? data.cheques : []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedUser?._id, selectedUser?.role, userDetails?._id, userDetails?.role]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeModal();
     };
@@ -85,7 +124,10 @@ const AuditModal = ({
   }, [closeModal]);
 
   const conversations = useMemo(() => buildConversations(userDetails), [userDetails]);
-  const paySummary = useMemo(() => paymentSummary(paymentRows), [paymentRows]);
+  const paySummary = useMemo(
+    () => paymentSummary(paymentRows, auditMoneyRole(userDetails?.role || selectedUser?.role), rates, cheques),
+    [paymentRows, userDetails?.role, selectedUser?.role, rates, cheques],
+  );
   const lastActive = lastActiveFromAccount(userDetails, conversations.all);
 
   const onExport = () => {
@@ -119,6 +161,7 @@ const AuditModal = ({
             conversationCount={conversations.group.length + conversations.privateChats.length}
             seminarCount={conversations.seminars.length}
             netEarningsCents={paySummary.net}
+            earningsLabel={paySummary.role === 'expert' ? 'Expert net' : 'Paid'}
             lastActive={lastActive}
           />
           <AuditTabs
