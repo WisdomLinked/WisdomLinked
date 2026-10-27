@@ -142,7 +142,7 @@ export default function ConversationPane({
       </div>
 
       {(group || appointment) && groupActivity ? (
-        <div className="border-b border-audit-line bg-audit-surface px-3 py-3 sm:px-4">
+        <div className="border-b border-audit-line bg-audit-surface px-3 py-3 xl:px-4">
           <GroupActivity
             state={groupActivity}
             kind={conversation.kind}

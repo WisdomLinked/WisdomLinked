@@ -219,6 +219,20 @@ describe('ChatHistory audit pane', () => {
     expect(await screen.findByText('A place for cohort A to talk.')).toBeTruthy();
   });
 
+  it('can fold the per-member table away and back, keeping the totals', async () => {
+    mockedGroup.mockResolvedValue({ result: [], gotAllChats: true });
+    render(<ChatHistory userDetails={{ ...userDetails, groupChats: [] }} />);
+    const activity = await screen.findByRole('region', { name: 'Activity' });
+    const table = activity.querySelector('#audit-activity-members') as HTMLElement;
+    expect(table.hidden).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    expect(table.hidden).toBe(true);
+    expect(screen.getByRole('button', { name: 'Show' }).getAttribute('aria-expanded')).toBe('false');
+    expect(activity.textContent).toContain('Video calls');
+    await userEvent.click(screen.getByRole('button', { name: 'Show' }));
+    expect(table.hidden).toBe(false);
+  });
+
   it('opens all participants from the names line, then a member profile card, with no remove option', async () => {
     mockedGroup.mockResolvedValue({ result: [], gotAllChats: true });
     mockedProfile.mockResolvedValue({ success: true, result: { _id: 's1', username: 'Sam Student', role: 'customer' } });
