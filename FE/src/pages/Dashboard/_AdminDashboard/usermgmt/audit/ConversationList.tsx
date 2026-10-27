@@ -12,9 +12,9 @@ import {
 
 const SEGMENTS: Array<{ id: SegmentFilter; label: string }> = [
   { id: 'all', label: 'All' },
-  { id: 'group', label: 'Group' },
-  { id: 'private', label: 'Private' },
+  { id: 'private', label: '1:1' },
   { id: 'seminar', label: 'Seminars' },
+  { id: 'group', label: 'Communities' },
 ];
 
 function KindIcon({ kind, initials }: { kind: ConversationKind; initials: string }) {
@@ -90,7 +90,7 @@ function Section({
     <section className="space-y-1">
       <h3 className="flex items-center justify-between px-2 pt-3 text-xs uppercase tracking-wider text-audit-muted">
         <span>
-          {kind === 'private' ? 'Private chats' : kind === 'seminar' ? 'Seminars' : 'Group chats'}
+          {kind === 'private' ? '1:1 appointments' : kind === 'seminar' ? 'Seminars' : 'Community chats'}
         </span>
         <span className="tabular-nums">{items.length}</span>
       </h3>
@@ -113,7 +113,7 @@ function Section({
 
 export default function ConversationList({
   group,
-  privateChats,
+  appointments,
   seminars,
   selectedId,
   failedIds,
@@ -124,7 +124,7 @@ export default function ConversationList({
   onSelect,
 }: {
   group: AuditConversation[];
-  privateChats: AuditConversation[];
+  appointments: AuditConversation[];
   seminars: AuditConversation[];
   selectedId?: string;
   failedIds: Record<string, boolean>;
@@ -135,7 +135,7 @@ export default function ConversationList({
   onSelect: (item: AuditConversation) => void;
 }) {
   const visibleGroup = filterConversations(group, query, segment === 'all' ? 'group' : segment);
-  const visiblePrivate = filterConversations(privateChats, query, segment === 'all' ? 'private' : segment);
+  const visiblePrivate = filterConversations(appointments, query, segment === 'all' ? 'private' : segment);
   const visibleSeminars = filterConversations(seminars, query, segment === 'all' ? 'seminar' : segment);
   const showGroup = segment === 'all' || segment === 'group';
   const showPrivate = segment === 'all' || segment === 'private';
@@ -163,7 +163,7 @@ export default function ConversationList({
             className={`${AUDIT_FOCUS} h-10 w-full rounded-lg border border-audit-line bg-audit-surface py-2 pl-9 pr-3 text-sm text-audit-ink placeholder:text-audit-muted`}
           />
         </div>
-        <div className="grid grid-cols-4 overflow-hidden rounded-lg border border-audit-line" role="group" aria-label="Filter conversations">
+        <div className="flex overflow-hidden rounded-lg border border-audit-line" role="group" aria-label="Filter conversations">
           {SEGMENTS.map(item => {
             const active = segment === item.id;
             return (
@@ -172,7 +172,7 @@ export default function ConversationList({
                 type="button"
                 onClick={() => onSegmentChange(item.id)}
                 aria-pressed={active}
-                className={`${AUDIT_FOCUS} px-1 py-1.5 text-xs ${
+                className={`${AUDIT_FOCUS} flex-auto whitespace-nowrap px-2 py-1.5 text-xs ${
                   active ? 'bg-audit-brand-soft font-semibold text-audit-brand' : 'text-audit-muted hover:bg-audit-sunken'
                 }`}
               >
@@ -187,19 +187,10 @@ export default function ConversationList({
           <p className="px-2 py-6 text-center text-sm text-audit-muted">No conversations match that search.</p>
         ) : (
           <>
-            {showGroup ? (
-              <Section
-                kind="group"
-                items={segment === 'all' ? visibleGroup : filterConversations(group, query, 'group')}
-                selectedId={selectedId}
-                failedIds={failedIds}
-                onSelect={onSelect}
-              />
-            ) : null}
             {showPrivate ? (
               <Section
                 kind="private"
-                items={segment === 'all' ? visiblePrivate : filterConversations(privateChats, query, 'private')}
+                items={segment === 'all' ? visiblePrivate : filterConversations(appointments, query, 'private')}
                 selectedId={selectedId}
                 failedIds={failedIds}
                 onSelect={onSelect}
@@ -209,6 +200,15 @@ export default function ConversationList({
               <Section
                 kind="seminar"
                 items={segment === 'all' ? visibleSeminars : filterConversations(seminars, query, 'seminar')}
+                selectedId={selectedId}
+                failedIds={failedIds}
+                onSelect={onSelect}
+              />
+            ) : null}
+            {showGroup ? (
+              <Section
+                kind="group"
+                items={segment === 'all' ? visibleGroup : filterConversations(group, query, 'group')}
                 selectedId={selectedId}
                 failedIds={failedIds}
                 onSelect={onSelect}

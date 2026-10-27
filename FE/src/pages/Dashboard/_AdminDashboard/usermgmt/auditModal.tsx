@@ -158,7 +158,7 @@ const AuditModal = ({
         <AuditHeader userDetails={userDetails || selectedUser} titleId={titleId} onExport={onExport} onClose={closeModal} />
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 sm:px-8">
           <SummaryStrip
-            conversationCount={conversations.group.length + conversations.privateChats.length}
+            conversationCount={conversations.group.length + conversations.appointments.length}
             seminarCount={conversations.seminars.length}
             netEarningsCents={paySummary.net}
             earningsLabel={paySummary.role === 'expert' ? 'Expert net' : 'Paid'}

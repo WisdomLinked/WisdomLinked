@@ -2,11 +2,17 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+vi.mock('react-redux', () => ({
+  useSelector: (select: (state: any) => unknown) => select({ auth: { userDetails: { _id: 'admin-1', role: 'admin' } } }),
+  useDispatch: () => vi.fn(),
+}));
+
 vi.mock('../../../../api/api', () => ({
   doGetFullUserDataByEmail: vi.fn(),
   doFilterPaymentHistories: vi.fn(),
   doGetDirectChatHistory: vi.fn(),
   doGetGroupChatHistory: vi.fn(),
+  doGetGroupChatActivity: vi.fn(async () => false),
   getPricingSettings: vi.fn(async () => null),
   listExpertPayroll: vi.fn(async () => ({ cheques: [] })),
 }));

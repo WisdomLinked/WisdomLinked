@@ -1803,6 +1803,15 @@ export const doGetGroupChatHistory = async (filter: any, options?: HandleApiFail
     }
 };
 
+export const doGetGroupChatActivity = async (groupChatId: string, options?: HandleApiFailureOptions) => {
+    try {
+        const res = await api.post("admin/getGroupChatActivity", { groupChatId });
+        return res.data
+    } catch (err: any) {
+        return handleApiFailure(err, options ?? { notify: true });
+    }
+};
+
 export const doContactUs = async (data: {
     name: string;
     email: string;

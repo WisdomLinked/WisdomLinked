@@ -22,6 +22,7 @@ const {
     filterPaymentHistories ,
     getDirectChatHistory,
     getGroupChatHistory,
+    getGroupChatActivity,
     getContactedUs,
     toggleActionedStatus,
     sendEmailToUser,
@@ -110,6 +111,7 @@ router.post("/getFullUserDataByEmail", adminAuth, getFullUserDataByEmail)
 router.post("/updateProfileOfUser", adminAuth, updateProfileOfUser)
 router.post("/getDirectChatHistory", adminAuth, getDirectChatHistory)
 router.post("/getGroupChatHistory", adminAuth, getGroupChatHistory)
+router.post("/getGroupChatActivity", adminAuth, getGroupChatActivity)
 router.get("/getEventFeedback", adminAuth, getFeedback)
 router.post("/getUserFeedbacks", adminAuth, getUserFeedbacks);
 router.get("/allFeedbacks", adminAuth, getAllFeedbacks);

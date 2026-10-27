@@ -1290,6 +1290,51 @@ export const getRCGroupHistory = async (
     return [];
 };
 
+/**
+ * Room id of an existing `wl-group-*` channel, looked up by name only.
+ * Unlike syncRocketGroupChannelMembers this never creates the room or changes
+ * who is in it, so it is safe for read-only admin views.
+ */
+export const findGroupChannelIdReadOnly = async (channelKey: string): Promise<string | null> => {
+    const key = String(channelKey || '').trim();
+    if (!key) return null;
+    return withAdminAuth(async (headers) => {
+        try {
+            const res = await axios.get(
+                `${RC_URL}/api/v1/channels.info?roomName=${encodeURIComponent(`wl-group-${key}`)}`,
+                { headers },
+            );
+            return res.data?.success && res.data.channel?._id ? String(res.data.channel._id) : null;
+        } catch (e: any) {
+            // RC answers an unknown room with 400/404; anything else means RC itself could not be read.
+            const status = e?.response?.status;
+            if (!isRcAuthError(e) && (status === 400 || status === 404)) return null;
+            throw e;
+        }
+    });
+};
+
+/**
+ * One page of a channel's history (newest first) read as the RC admin.
+ * Throws when Rocket.Chat cannot be read, so callers can tell "no messages" from "unavailable".
+ */
+export const getRCChannelHistoryAsAdmin = async (
+    roomId: string,
+    count: number,
+    offset: number,
+): Promise<any[]> => {
+    return withAdminAuth(async (headers) => {
+        const res = await axios.get(
+            `${RC_URL}/api/v1/channels.history?roomId=${encodeURIComponent(roomId)}&count=${count}&offset=${offset}`,
+            { headers },
+        );
+        if (!res.data?.success || !Array.isArray(res.data.messages)) {
+            throw new Error('Rocket.Chat history unavailable');
+        }
+        return res.data.messages;
+    });
+};
+
 // ── Typing Indicator ────────────────────────────────────────
 
 /** Notify RC that a user is typing in a room. */
