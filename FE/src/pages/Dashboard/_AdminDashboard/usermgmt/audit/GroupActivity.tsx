@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { AUDIT_FOCUS, AUDIT_PILL } from './auditUi';
 import {
@@ -26,12 +26,12 @@ function Total({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Full heading on wider screens; the short one keeps all five columns on a phone. */
+/** Full heading once the chat panel is wide; the short one keeps all five columns visible when it is narrow. */
 function ColumnHeading({ full, short, last = false }: { full: string; short: string; last?: boolean }) {
   return (
-    <th scope="col" className={`whitespace-nowrap py-1.5 text-right font-medium ${last ? '' : 'pr-2 sm:pr-3'}`}>
-      <abbr title={full} className="no-underline sm:hidden">{short}</abbr>
-      <span className="hidden sm:inline">{full}</span>
+    <th scope="col" className={`whitespace-nowrap py-1.5 text-right font-medium ${last ? '' : 'pr-2 min-[1360px]:pr-3'}`}>
+      <abbr title={full} className="no-underline min-[1360px]:hidden">{short}</abbr>
+      <span className="hidden min-[1360px]:inline">{full}</span>
     </th>
   );
 }
@@ -47,6 +47,8 @@ export default function GroupActivity({
   auditedUserId?: string;
   onRetry: () => void;
 }) {
+  const [membersOpen, setMembersOpen] = useState(true);
+
   if (state.status === 'loading') {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-audit-line bg-audit-sunken p-4 text-sm text-audit-muted">
@@ -76,7 +78,7 @@ export default function GroupActivity({
   const sessions = community?.sessionCount ?? 1;
 
   return (
-    <section className="rounded-xl border border-audit-line bg-audit-sunken px-3 py-3 sm:px-4" aria-label="Activity">
+    <section className="rounded-xl border border-audit-line bg-audit-sunken px-3 py-3 xl:px-4" aria-label="Activity">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-xs uppercase tracking-wider text-audit-muted">Activity</p>
         <p className="text-xs text-audit-muted">{since ? `Since ${since} · averages per week` : 'Averages per week'}</p>
@@ -118,12 +120,24 @@ export default function GroupActivity({
         <p className="mt-3 text-xs text-audit-muted">Message counts cover the most recent 5,000 messages.</p>
       ) : null}
 
-      <div className="mt-3 max-h-36 overflow-auto">
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <p className="text-xs uppercase tracking-wider text-audit-muted">Per member</p>
+        <button
+          type="button"
+          onClick={() => setMembersOpen(open => !open)}
+          aria-expanded={membersOpen}
+          aria-controls="audit-activity-members"
+          className={`${AUDIT_FOCUS} rounded px-1.5 py-0.5 text-xs font-medium text-audit-brand hover:bg-audit-surface`}
+        >
+          {membersOpen ? 'Hide' : 'Show'}
+        </button>
+      </div>
+      <div id="audit-activity-members" hidden={!membersOpen} className="mt-1 max-h-36 overflow-auto">
         <table className="w-full text-left text-sm">
           <caption className="sr-only">Activity per member</caption>
           <thead>
-            <tr className="sticky top-0 border-b border-audit-line bg-audit-sunken text-xs uppercase text-audit-muted sm:tracking-wider">
-              <th scope="col" className="py-1.5 pr-2 font-medium sm:pr-3">Member</th>
+            <tr className="sticky top-0 border-b border-audit-line bg-audit-sunken text-xs uppercase text-audit-muted min-[1360px]:tracking-wider">
+              <th scope="col" className="py-1.5 pr-2 font-medium min-[1360px]:pr-3">Member</th>
               <ColumnHeading full="Calls joined" short="Calls" />
               <ColumnHeading full="Calls / week" short="Calls/wk" />
               <ColumnHeading full="Messages" short="Msgs" />
@@ -136,13 +150,13 @@ export default function GroupActivity({
               const tag = communityMemberTag(member, auditedUserId, kind);
               return (
                 <tr key={member._id} className="border-b border-audit-line last:border-0">
-                  <th scope="row" className="max-w-[76px] truncate py-1.5 pr-2 font-normal text-audit-ink sm:max-w-[220px] sm:pr-3">
+                  <th scope="row" className="max-w-[76px] truncate py-1.5 pr-2 font-normal text-audit-ink min-[1360px]:max-w-[220px] min-[1360px]:pr-3">
                     {name}
                     {tag ? <span className="text-xs text-audit-muted"> · {tag}</span> : null}
                   </th>
-                  <td className="py-1.5 pr-2 text-right tabular-nums text-audit-ink sm:pr-3">{formatCount(member.callsJoined)}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums text-audit-ink sm:pr-3">{formatPerWeek(member.callsPerWeek)}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums text-audit-ink sm:pr-3">{formatCount(member.messages)}</td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums text-audit-ink min-[1360px]:pr-3">{formatCount(member.callsJoined)}</td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums text-audit-ink min-[1360px]:pr-3">{formatPerWeek(member.callsPerWeek)}</td>
+                  <td className="py-1.5 pr-2 text-right tabular-nums text-audit-ink min-[1360px]:pr-3">{formatCount(member.messages)}</td>
                   <td className="py-1.5 text-right tabular-nums text-audit-ink">{formatPerWeek(member.messagesPerWeek)}</td>
                 </tr>
               );
