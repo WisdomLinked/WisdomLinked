@@ -200,6 +200,10 @@ describe('Admin Payment Management', () => {
       'table-fixed',
     );
     expect(screen.getByRole('columnheader', { name: 'Description' })).toHaveClass('lg:table-cell');
+    const totalRow = screen.getByTestId('payment-history-total');
+    expect(totalRow).toHaveTextContent('Total');
+    expect(totalRow).toHaveTextContent('240.00 USD');
+    expect(totalRow).not.toHaveTextContent('this page');
   });
 
   it('filters by status and updates the result count', async () => {
@@ -262,6 +266,9 @@ describe('Admin Payment Management', () => {
     await screen.findByText(/Showing 4 of 4 histories/);
     chooseSelect('Stripe mode', 'All');
     await screen.findByText(/Showing 5 of 6 histories/);
+    const totalRow = screen.getByTestId('payment-history-total');
+    expect(totalRow).toHaveTextContent('Total (this page)');
+    expect(totalRow).toHaveTextContent('280.00 USD');
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
     await waitFor(() => {

@@ -40,7 +40,7 @@ export function sanitizeComposerHtml(html: string): string {
 
 const EDITOR_CLASS = [
   'chat-composer-editor',
-  'min-h-[1.625em] max-h-[calc(8*1.625em)] overflow-y-auto',
+  'min-h-[1.625em] max-h-[calc(5*1.625em)] overflow-y-auto',
   'text-[15px] leading-relaxed text-slate-800 break-words outline-none',
   '[&_p]:m-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5',
   '[&_a]:text-blue-600 [&_a]:underline',
@@ -279,31 +279,27 @@ export default function MessageComposer({
         </div>
       ) : null}
 
-      <EditorContent editor={editor} className="px-2.5 pt-1" />
-
-      <div className="flex items-center gap-1">
-        <div className="flex min-w-0 flex-1 items-center gap-0.5">
-          <ToolbarButton
-            label="Attach files"
-            icon={Paperclip}
-            disabled={busy}
-            onClick={() => fileInputRef.current?.click()}
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept={CHAT_FILE_ACCEPT}
-            className="hidden"
-            tabIndex={-1}
-            aria-hidden
-            onChange={(e) => {
-              addFiles(e.target.files);
-              e.target.value = '';
-            }}
-          />
-        </div>
-
+      <div className="flex items-center gap-2">
+        <ToolbarButton
+          label="Attach files"
+          icon={Paperclip}
+          disabled={busy}
+          onClick={() => fileInputRef.current?.click()}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept={CHAT_FILE_ACCEPT}
+          className="hidden"
+          tabIndex={-1}
+          aria-hidden
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = '';
+          }}
+        />
+        <EditorContent editor={editor} className="min-w-0 flex-1 py-1" />
         <span data-composer-trigger="emoji" className="inline-flex shrink-0">
           <ToolbarButton
             label="Add emoji"

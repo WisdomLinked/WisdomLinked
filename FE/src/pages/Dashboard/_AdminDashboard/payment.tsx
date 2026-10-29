@@ -28,6 +28,7 @@ import PaymentSettingRow from './payment/PaymentSettingRow';
 import {
   EMPTY_FILTERS,
   countActiveFilters,
+  formatAmountTotals,
   hasAnyParty,
   historySearchFromState,
   parseHistorySearch,
@@ -111,6 +112,8 @@ const Payment = () => {
   const showParty = hasAnyParty(histories);
   const genuineEmpty = hasLoaded && !loading && totalCount === 0 && activeCount === 0;
   const filteredEmpty = hasLoaded && !loading && totalCount === 0 && activeCount > 0;
+  const pageAmountTotal = formatAmountTotals(histories);
+  const pageTotalLabel = totalCount > histories.length ? 'Total (this page)' : 'Total';
 
   const parsedRef = useRef(parsed);
   parsedRef.current = parsed;
@@ -542,6 +545,13 @@ const Payment = () => {
                       }}
                     />
                   ))}
+                  <div
+                    data-testid="payment-history-total-cards"
+                    className="flex items-center justify-between rounded-xl border border-wl-line bg-wl-brandSoft/60 px-4 py-3 text-sm"
+                  >
+                    <span className="font-semibold text-wl-ink">{pageTotalLabel}</span>
+                    <span className="tabular-nums font-semibold text-wl-ink">{pageAmountTotal}</span>
+                  </div>
                 </div>
                 <div className="hidden max-h-[640px] overflow-y-auto md:block" data-testid="payment-history-table">
                   <table className="hidden w-full table-fixed text-left text-sm md:table">
@@ -580,6 +590,23 @@ const Payment = () => {
                         />
                       ))}
                     </tbody>
+                    <tfoot className="sticky bottom-0 bg-wl-brandSoft text-sm text-wl-ink">
+                      <tr data-testid="payment-history-total">
+                        <td className="px-3 py-3 text-right font-semibold" colSpan={2}>
+                          {pageTotalLabel}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap tabular-nums font-semibold">
+                          {pageAmountTotal}
+                        </td>
+                        {showParty ? <td className="px-3 py-3" /> : null}
+                        <td className="px-3 py-3" />
+                        <td className="hidden px-3 py-3 lg:table-cell" />
+                        <td className="px-3 py-3" />
+                        <td className="px-3 py-3" />
+                        <td className="hidden px-3 py-3 lg:table-cell" />
+                        <td className="px-3 py-3" />
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               </>
