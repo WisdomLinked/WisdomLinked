@@ -31,6 +31,11 @@ vi.mock('./StudentBookingCheckout', () => ({
     groupChatId: details?.groupChatId,
     advertisedCents: Math.max(0, Math.round(Number(priceDollars) * 100)),
   }),
+  ChargeLines: ({ quote }: { quote: { advertisedCents: number; platformFeeCents: number; chargeCents: number } }) => (
+    <div data-testid="charge-lines">
+      {quote.advertisedCents}+{quote.platformFeeCents}={quote.chargeCents}
+    </div>
+  ),
 }));
 
 const mentor = {
@@ -103,6 +108,20 @@ describe('ExpertProfile seminar registration state', () => {
 
     expect(await screen.findByRole('button', { name: /book the session/i })).toBeTruthy();
     expect(screen.queryByText(/Registered/i)).toBeNull();
+  });
+
+  it('shows the seminar total including the platform fee', async () => {
+    vi.mocked(quoteBookingCharge).mockResolvedValue({
+      sessionType: 'seminar',
+      advertisedCents: 4000,
+      platformFeeCents: 120,
+      taxCents: 0,
+      chargeCents: 4120,
+    });
+    renderProfile([]);
+
+    expect(await screen.findByText('$41.20 total')).toBeInTheDocument();
+    expect(screen.getByText('$40.00 per seat + $1.20 platform fee')).toBeInTheDocument();
   });
 
   it('marks an enrolled seminar as Registered and removes the pay button', async () => {
