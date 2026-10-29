@@ -3,15 +3,37 @@ import {
   countActiveFilters,
   EMPTY_FILTERS,
   formatAmount,
+  formatAmountTotals,
   historySearchFromState,
   lastPageIndex,
   parseHistorySearch,
   shortPaymentIntent,
+  sumAmountsByCurrency,
 } from './paymentHistoryUtils';
 
 describe('paymentHistoryUtils', () => {
   it('formats amount with currency', () => {
     expect(formatAmount(10000, 'usd')).toBe('100.00 USD');
+  });
+
+  it('sums amounts by currency for a table footer', () => {
+    expect(
+      sumAmountsByCurrency([
+        { amount: 5150, currency: 'usd' },
+        { amount: 1030, currency: 'usd' },
+        { amount: 2000, currency: 'cad' },
+        { amount: undefined, currency: 'usd' },
+      ]),
+    ).toEqual([
+      { cents: 2000, currency: 'CAD' },
+      { cents: 6180, currency: 'USD' },
+    ]);
+    expect(
+      formatAmountTotals([
+        { amount: 5150, currency: 'usd' },
+        { amount: 1030, currency: 'usd' },
+      ]),
+    ).toBe('61.80 USD');
   });
 
   it('shortens payment intents', () => {

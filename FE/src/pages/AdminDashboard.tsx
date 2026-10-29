@@ -30,8 +30,11 @@ import type { SnapshotListType } from '../components/dashboard/adminSnapshotType
 import { doGetAdminDashboardStats, type AdminDashboardStatsData } from '../api/api';
 import {
   DEFAULT_SNAPSHOT_RANGE,
-  parseSnapshotRangeKey,
+  resolveSnapshotSelection,
   snapshotRangeBounds,
+  snapshotRangeQuery,
+  type SnapshotCustomRange,
+  type SnapshotRangeKey,
 } from '../utils/adminSnapshotRange';
 import {
   loadAdminTopBarDismiss,
@@ -115,9 +118,18 @@ const emptyStats: AdminDashboardStatsData = {
 
 function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const rangeKey = parseSnapshotRangeKey(searchParams.get('range'));
+  const { rangeKey, customRange } = resolveSnapshotSelection(searchParams);
   const [stats, setStats] = useState<AdminDashboardStatsData>(emptyStats);
   const [statsLoading, setStatsLoading] = useState(true);
+
+  const writeRange = (next: SnapshotRangeKey, custom?: SnapshotCustomRange) => {
+    const params: Record<string, string> = { range: next };
+    if (next === 'custom' && custom) {
+      params.startDate = custom.startDate;
+      params.endDate = custom.endDate;
+    }
+    setSearchParams(params, { replace: true });
+  };
 
   useEffect(() => {
     if (!searchParams.get('range')) {
@@ -129,7 +141,7 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
     let cancelled = false;
     (async () => {
       setStatsLoading(true);
-      const res = await doGetAdminDashboardStats(snapshotRangeBounds(rangeKey));
+      const res = await doGetAdminDashboardStats(snapshotRangeBounds(rangeKey, new Date(), customRange));
       if (!cancelled && res?.status === 'SUCCESS' && res.data) {
         setStats(res.data);
       }
@@ -138,7 +150,7 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
     return () => {
       cancelled = true;
     };
-  }, [rangeKey]);
+  }, [rangeKey, customRange?.startDate, customRange?.endDate]);
 
   const fmt = (n: number) => (statsLoading ? '—' : n);
 
@@ -209,8 +221,11 @@ function AdminOverview({ go }: { go: (id: string, search?: string) => void }) {
               <AdminMetricsPanel
                 stats={stats}
                 rangeKey={rangeKey}
-                onRangeChange={next => setSearchParams({ range: next }, { replace: true })}
-                onSelectList={(type: SnapshotListType) => go(`snapshot/${type}`, `?range=${rangeKey}`)}
+                customRange={customRange}
+                onRangeChange={writeRange}
+                onSelectList={(type: SnapshotListType) =>
+                  go(`snapshot/${type}`, snapshotRangeQuery(rangeKey, customRange))
+                }
               />
             )}
           </div>

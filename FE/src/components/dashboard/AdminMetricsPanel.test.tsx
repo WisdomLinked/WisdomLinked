@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import AdminMetricsPanel from './AdminMetricsPanel';
 import type { AdminDashboardStatsData } from '../../api/api';
+import { snapshotRangeDescription } from '../../utils/adminSnapshotRange';
 
 const stats: AdminDashboardStatsData = {
   pendingApprovals: 0,
@@ -82,5 +83,49 @@ describe('AdminMetricsPanel', () => {
     );
     expect(screen.getByRole('radio', { name: 'All time' })).toHaveAttribute('aria-checked', 'true');
     expect(screen.queryByText(/vs previous period/)).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Custom' })).toBeInTheDocument();
+  });
+
+  it('opens Custom after All time and applies a valid start/end range', () => {
+    const onRangeChange = vi.fn();
+    const { rerender } = render(
+      <AdminMetricsPanel
+        stats={stats}
+        rangeKey="6m"
+        onRangeChange={onRangeChange}
+        onSelectList={vi.fn()}
+      />,
+    );
+    const labels = screen.getAllByRole('radio').map(el => el.textContent);
+    expect(labels[labels.length - 2]).toBe('All time');
+    expect(labels[labels.length - 1]).toBe('Custom');
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+    fireEvent.change(screen.getByLabelText('Start'), { target: { value: '2026-03-31' } });
+    fireEvent.change(screen.getByLabelText('End'), { target: { value: '2026-01-01' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/on or after start/i);
+    expect(onRangeChange).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Start'), { target: { value: '2026-01-01' } });
+    fireEvent.change(screen.getByLabelText('End'), { target: { value: '2026-03-31' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(onRangeChange).toHaveBeenCalledWith('custom', { startDate: '2026-01-01', endDate: '2026-03-31' });
+
+    rerender(
+      <AdminMetricsPanel
+        stats={stats}
+        rangeKey="custom"
+        customRange={{ startDate: '2026-01-01', endDate: '2026-03-31' }}
+        onRangeChange={onRangeChange}
+        onSelectList={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('radio', { name: 'Custom' })).toHaveAttribute('aria-checked', 'true');
+    expect(
+      screen.getByText(
+        snapshotRangeDescription('custom', { startDate: '2026-01-01', endDate: '2026-03-31' }),
+      ),
+    ).toBeInTheDocument();
   });
 });

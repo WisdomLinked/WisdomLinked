@@ -33,9 +33,11 @@ import {
   type SnapshotListType,
 } from './adminSnapshotTypes';
 import {
-  parseSnapshotRangeKey,
+  resolveSnapshotSelection,
   snapshotRangeBounds,
   snapshotRangePhrase,
+  snapshotRangeQuery,
+  type SnapshotCustomRange,
   type SnapshotRangeKey,
 } from '../../utils/adminSnapshotRange';
 import {
@@ -527,8 +529,9 @@ function listSummary(
   total: number,
   whenMode: WhenMode,
   rangeKey: SnapshotRangeKey,
+  customRange?: SnapshotCustomRange | null,
 ): string {
-  const range = snapshotRangePhrase(rangeKey);
+  const range = snapshotRangePhrase(rangeKey, customRange);
   const upcoming = whenMode === 'upcoming';
   if (type === 'experts') {
     return `${countLabel(total, 'expert', 'experts')} · all accounts, activity counted for ${range}`;
@@ -552,12 +555,13 @@ async function fetchPage(
   args: {
     page: number;
     rangeKey: SnapshotRangeKey;
+    customRange?: SnapshotCustomRange | null;
     whenMode: WhenMode;
     status: string;
     q: string;
   },
 ): Promise<{ rows: ListRow[]; total: number }> {
-  const bounds = snapshotRangeBounds(args.rangeKey);
+  const bounds = snapshotRangeBounds(args.rangeKey, new Date(), args.customRange);
   const sendRange = args.whenMode !== 'upcoming' && args.rangeKey !== 'all';
 
   if (type === 'experts' || type === 'students') {
@@ -1025,7 +1029,7 @@ export default function AdminSnapshotMetricView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const listType: SnapshotListType = isSnapshotListType(listTypeParam) ? listTypeParam : 'experts';
-  const rangeKey = parseSnapshotRangeKey(searchParams.get('range'));
+  const { rangeKey, customRange } = resolveSnapshotSelection(searchParams);
   const meta = META[listType];
 
   const [stats, setStats] = useState<AdminDashboardStatsData | null>(null);
@@ -1043,9 +1047,16 @@ export default function AdminSnapshotMetricView() {
   const [selected, setSelected] = useState<ListRow | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
 
-  const setRangeKey = (next: SnapshotRangeKey) => {
+  const setRangeKey = (next: SnapshotRangeKey, custom?: SnapshotCustomRange) => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('range', next);
+    if (next === 'custom' && custom) {
+      nextParams.set('startDate', custom.startDate);
+      nextParams.set('endDate', custom.endDate);
+    } else {
+      nextParams.delete('startDate');
+      nextParams.delete('endDate');
+    }
     setSearchParams(nextParams, { replace: true });
   };
 
@@ -1064,7 +1075,7 @@ export default function AdminSnapshotMetricView() {
 
   useEffect(() => {
     let cancelled = false;
-    const bounds = snapshotRangeBounds(rangeKey);
+    const bounds = snapshotRangeBounds(rangeKey, new Date(), customRange);
     (async () => {
       const res = await doGetAdminDashboardStats(bounds);
       if (!cancelled && res?.status === 'SUCCESS' && res.data) setStats(res.data);
@@ -1072,11 +1083,11 @@ export default function AdminSnapshotMetricView() {
     return () => {
       cancelled = true;
     };
-  }, [rangeKey]);
+  }, [rangeKey, customRange?.startDate, customRange?.endDate]);
 
   const loadArgs = useMemo(
-    () => ({ page: 0, rangeKey, whenMode, status, q: debouncedQuery }),
-    [rangeKey, whenMode, status, debouncedQuery],
+    () => ({ page: 0, rangeKey, customRange, whenMode, status, q: debouncedQuery }),
+    [rangeKey, customRange?.startDate, customRange?.endDate, whenMode, status, debouncedQuery],
   );
 
   useEffect(() => {
@@ -1129,7 +1140,7 @@ export default function AdminSnapshotMetricView() {
         : 'grid-cols-2';
 
   const goMetric = (type: SnapshotListType) => {
-    navigate(`${AUTH_BASE}admindashboard/snapshot/${type}?range=${rangeKey}`);
+    navigate(`${AUTH_BASE}admindashboard/snapshot/${type}${snapshotRangeQuery(rangeKey, customRange)}`);
   };
 
   const people = listType === 'experts' || listType === 'students';
@@ -1140,7 +1151,7 @@ export default function AdminSnapshotMetricView() {
         <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <Link
-              to={`${AUTH_BASE}admindashboard?range=${rangeKey}`}
+              to={`${AUTH_BASE}admindashboard${snapshotRangeQuery(rangeKey, customRange)}`}
               className={`text-sm text-wl-brand hover:underline ${FOCUS}`}
             >
               ← Overview
@@ -1156,7 +1167,7 @@ export default function AdminSnapshotMetricView() {
             </div>
           </div>
           <div className="min-w-0">
-            <SnapshotRangeControl value={rangeKey} onChange={setRangeKey} />
+            <SnapshotRangeControl value={rangeKey} customRange={customRange} onChange={setRangeKey} />
           </div>
         </div>
 
@@ -1257,7 +1268,7 @@ export default function AdminSnapshotMetricView() {
 
             <div className="flex shrink-0 items-center gap-2 bg-sunken px-4 py-2 text-xs text-muted">
               <Calendar size={14} aria-hidden className="shrink-0" />
-              <span>{listSummary(listType, total, whenMode, rangeKey)}</span>
+              <span>{listSummary(listType, total, whenMode, rangeKey, customRange)}</span>
             </div>
 
             <div ref={listScrollRef} className="min-h-0 min-w-0 flex-1 overflow-auto">

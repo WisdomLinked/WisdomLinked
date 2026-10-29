@@ -14,6 +14,7 @@ import type { SnapshotListType } from './adminSnapshotTypes';
 import SnapshotRangeControl from './SnapshotRangeControl';
 import {
   snapshotRangeDescription,
+  type SnapshotCustomRange,
   type SnapshotRangeKey,
 } from '../../utils/adminSnapshotRange';
 import { formatMoneyByCurrency } from '../../utils/adminSnapshotDisplay';
@@ -146,12 +147,14 @@ function amountValue(amounts: AmountByCurrency | undefined, fallbackCount: numbe
 export default function AdminMetricsPanel({
   stats,
   rangeKey,
+  customRange,
   onRangeChange,
   onSelectList,
 }: {
   stats: AdminDashboardStatsData;
   rangeKey: SnapshotRangeKey;
-  onRangeChange: (next: SnapshotRangeKey) => void;
+  customRange?: SnapshotCustomRange | null;
+  onRangeChange: (next: SnapshotRangeKey, custom?: SnapshotCustomRange) => void;
   onSelectList: (type: SnapshotListType) => void;
 }) {
   const range = stats.range;
@@ -164,9 +167,9 @@ export default function AdminMetricsPanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 text-left">
           <h3 className="font-sans text-lg font-semibold text-wl-brand">Platform snapshot</h3>
-          <p className="mt-1 text-sm text-wl-muted">{snapshotRangeDescription(rangeKey)}</p>
+          <p className="mt-1 text-sm text-wl-muted">{snapshotRangeDescription(rangeKey, customRange)}</p>
         </div>
-        <SnapshotRangeControl value={rangeKey} onChange={onRangeChange} />
+        <SnapshotRangeControl value={rangeKey} customRange={customRange} onChange={onRangeChange} />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">

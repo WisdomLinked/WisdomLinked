@@ -118,6 +118,26 @@ export function formatAmount(amount?: number, currency?: string): string {
   return currency ? `${value} ${String(currency).toUpperCase()}` : value;
 }
 
+export function sumAmountsByCurrency(
+  rows: PaymentHistoryRow[],
+): { cents: number; currency: string }[] {
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    if (typeof row.amount !== 'number' || !Number.isFinite(row.amount)) continue;
+    const currency = String(row.currency || 'usd').toUpperCase();
+    totals.set(currency, (totals.get(currency) ?? 0) + row.amount);
+  }
+  return [...totals.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([currency, cents]) => ({ cents, currency }));
+}
+
+export function formatAmountTotals(rows: PaymentHistoryRow[]): string {
+  const totals = sumAmountsByCurrency(rows);
+  if (totals.length === 0) return '—';
+  return totals.map(total => formatAmount(total.cents, total.currency)).join(' · ');
+}
+
 export function shortPaymentIntent(id?: string | null): string {
   const value = String(id || '').trim();
   if (!value) return 'N/A';

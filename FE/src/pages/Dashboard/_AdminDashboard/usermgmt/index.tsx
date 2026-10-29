@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
-import SelectionWithCheckBox from "../../../../components/SelectionWithCheckBox";
 import ClearableInput from "../../../../components/ui/ClearableInput";
+import SelectField from "../../../../components/ui/SelectField";
+import QueueSwitcher, { USER_MGMT_QUEUES } from "./QueueSwitcher";
 import {
     doFilterUsers,
     doUpdateProfileByAdmin,
@@ -30,12 +31,7 @@ const UserMgmt = () => {
     const dispatch = useDispatch();
     const navigate = useNavigate();
 
-    const dataTypeOptions = [
-        { value: "ReviewQueue", label: "Needs review" },
-        { value: "User", label: "All users" },
-        { value: "PendingUser", label: "Pending email verify" },
-        { value: "PendingLogin", label: "Pending login" },
-    ];
+    const dataTypeOptions = USER_MGMT_QUEUES;
 
     const roles = [
         { value: "", label: "All" },
@@ -52,8 +48,8 @@ const UserMgmt = () => {
     ];
 
     const sorts = [
-        { value: "ASC", label: "ASC" },
-        { value: "DESC", label: "DESC" }
+        { value: "DESC", label: "Newest first" },
+        { value: "ASC", label: "Oldest first" },
     ];
 
     const [dataType, set_dataType] = useState<any>(dataTypeOptions[0]);
@@ -64,7 +60,7 @@ const UserMgmt = () => {
     const [totalCount, set_totalCount] = useState<number>(0);
     const [totalPage, set_totalPage] = useState<number>(0);
 
-    const [sortBy, set_sortBy] = useState<any>(sorts[1]); // DESC by default (newest first)
+    const [sortBy, set_sortBy] = useState<any>(sorts[0]); // newest first
     const [role, set_role] = useState<any>(roles[0]);
     const [statusFilter, set_statusFilter] = useState<any>(statusOptions[0]);
     const [email, set_email] = useState<string>(emailFromUrl);
@@ -279,9 +275,12 @@ const UserMgmt = () => {
         }
     };
 
-    const handleDataTypeChange = (selected: any) => {
+    const handleDataTypeChange = (selected: (typeof USER_MGMT_QUEUES)[number]) => {
         set_dataType(selected);
     };
+
+    const pickOption = <T extends { value: string }>(options: T[], value: string, fallback: T) =>
+        options.find((option) => option.value === value) ?? fallback;
 
     useEffect(() => {
         if (isUserListView) {
@@ -338,91 +337,107 @@ const UserMgmt = () => {
             <div className={`w-full h-full py-10 px-5 ${manageModalShow || auditModalShow ? "overflow-hidden" : "overflow-y-auto"}`}>
                 <div className="w-full max-w-[1400px] mx-auto text-wl-ink">
                     <div className="text-center text-2xl font-semibold text-wl-brand">User Management</div>
-                    {isReviewQueue ? (
-                        <p className="mt-2 text-center text-sm text-wl-muted">
-                            Primary approval queue — accounts with status <span className="font-medium text-brownyellow">review</span>.
-                        </p>
-                    ) : null}
+                    <p className="mt-2 text-center text-sm text-wl-muted">
+                        {isReviewQueue ? (
+                            <>
+                                Primary approval queue — accounts with status{" "}
+                                <span className="font-medium text-brownyellow">review</span>.
+                            </>
+                        ) : isUserListView ? (
+                            "Search and filter every account."
+                        ) : dataType.value === "PendingUser" ? (
+                            "Signups that have not verified their email yet."
+                        ) : (
+                            "Login codes that have not been used yet."
+                        )}
+                    </p>
 
-                    <div className="w-full my-4">
-                        <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Manage:</div>
-                        <SelectionWithCheckBox
-                            options={dataTypeOptions}
-                            selectedOptions={dataType}
-                            set_selectedOptions={handleDataTypeChange}
-                            placeholder="Choose Data Type"
-                            isMulti={false}
-                        />
+                    <div className="mt-6">
+                        <div className="mb-2 text-[12px] leading-[19px] text-grey">Queue</div>
+                        <QueueSwitcher value={dataType.value} onChange={handleDataTypeChange} />
                     </div>
 
                     {isUserListView && (
-                        <div className="w-full py-1">
-                            <div className="flex justify-between mt-4">
-                                <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)]">
-                                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by email</div>
-                                    <ClearableInput
-                                        className="bg-wl-card"
-                                        placeholder="Input email"
-                                        value={email}
-                                        onChange={(e) => set_email(e.target.value)}
-                                    />
-                                </div>
-                                <div className="w-[150px] sm:w-[300px]">
-                                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by role</div>
-                                    <SelectionWithCheckBox
-                                        options={roles}
-                                        selectedOptions={role}
-                                        set_selectedOptions={set_role}
-                                        placeholder="Filter by role"
-                                        isMulti={false}
-                                    />
-                                </div>
+                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            <div>
+                                <label htmlFor="usermgmt-email" className="mb-1 block text-[12px] text-wl-muted">
+                                    Filter by email
+                                </label>
+                                <ClearableInput
+                                    id="usermgmt-email"
+                                    className="bg-wl-card"
+                                    placeholder="Input email"
+                                    value={email}
+                                    onChange={(e) => set_email(e.target.value)}
+                                />
                             </div>
-                            <div className="flex justify-between mt-2">
-                                <div className="w-[calc(100%-174px)] sm:w-[calc(100%-324px)]">
-                                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Filter by username</div>
-                                    <ClearableInput
-                                        className="bg-wl-card"
-                                        placeholder="Input username"
-                                        value={username}
-                                        onChange={(e) => set_username(e.target.value)}
+                            <div>
+                                <label htmlFor="usermgmt-username" className="mb-1 block text-[12px] text-wl-muted">
+                                    Filter by username
+                                </label>
+                                <ClearableInput
+                                    id="usermgmt-username"
+                                    className="bg-wl-card"
+                                    placeholder="Input username"
+                                    value={username}
+                                    onChange={(e) => set_username(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="usermgmt-role" className="mb-1 block text-[12px] text-wl-muted">
+                                    Filter by role
+                                </label>
+                                <SelectField
+                                    id="usermgmt-role"
+                                    size="filter"
+                                    value={role.value}
+                                    onChange={(value) => set_role(pickOption(roles, value, roles[0]))}
+                                    options={roles}
+                                    placeholder="Filter by role"
+                                />
+                            </div>
+                            {isReviewQueue ? (
+                                <div>
+                                    <label htmlFor="usermgmt-sort" className="mb-1 block text-[12px] text-wl-muted">
+                                        Sort
+                                    </label>
+                                    <SelectField
+                                        id="usermgmt-sort"
+                                        size="filter"
+                                        value={sortBy.value}
+                                        onChange={(value) => set_sortBy(pickOption(sorts, value, sorts[0]))}
+                                        options={sorts}
+                                        placeholder="Sort by"
                                     />
                                 </div>
-                                <div className="w-[150px] sm:w-[300px]">
-                                    <div className="text-grey mb-0.5 text-[12px] leading-[19px]">
-                                        {isReviewQueue ? "Sort" : "Filter by status"}
-                                    </div>
-                                    {isReviewQueue ? (
-                                        <SelectionWithCheckBox
-                                            options={sorts}
-                                            selectedOptions={sortBy}
-                                            set_selectedOptions={set_sortBy}
-                                            placeholder="Sort by"
-                                            isMulti={false}
-                                        />
-                                    ) : (
-                                        <SelectionWithCheckBox
-                                            options={statusOptions}
-                                            selectedOptions={statusFilter}
-                                            set_selectedOptions={set_statusFilter}
-                                            placeholder="Filter by status"
-                                            isMulti={false}
-                                        />
-                                    )}
+                            ) : (
+                                <div>
+                                    <label htmlFor="usermgmt-status" className="mb-1 block text-[12px] text-wl-muted">
+                                        Filter by status
+                                    </label>
+                                    <SelectField
+                                        id="usermgmt-status"
+                                        size="filter"
+                                        value={statusFilter.value}
+                                        onChange={(value) => set_statusFilter(pickOption(statusOptions, value, statusOptions[0]))}
+                                        options={statusOptions}
+                                        placeholder="Filter by status"
+                                    />
                                 </div>
-                            </div>
+                            )}
                             {!isReviewQueue ? (
-                                <div className="flex justify-end mt-2">
-                                    <div className="w-[150px] sm:w-[300px]">
-                                        <div className="text-grey mb-0.5 text-[12px] leading-[19px]">Sort</div>
-                                        <SelectionWithCheckBox
-                                            options={sorts}
-                                            selectedOptions={sortBy}
-                                            set_selectedOptions={set_sortBy}
-                                            placeholder="Sort by"
-                                            isMulti={false}
-                                        />
-                                    </div>
+                                <div>
+                                    <label htmlFor="usermgmt-sort" className="mb-1 block text-[12px] text-wl-muted">
+                                        Sort
+                                    </label>
+                                    <SelectField
+                                        id="usermgmt-sort"
+                                        size="filter"
+                                        value={sortBy.value}
+                                        onChange={(value) => set_sortBy(pickOption(sorts, value, sorts[0]))}
+                                        options={sorts}
+                                        placeholder="Sort by"
+                                    />
                                 </div>
                             ) : null}
                         </div>
