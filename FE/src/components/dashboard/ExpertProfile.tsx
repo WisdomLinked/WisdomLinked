@@ -58,6 +58,25 @@ type BookingStep = 'pick' | 'review' | 'pay' | 'success';
 const aiHeadshotUrl = (seed: string) =>
   `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(seed)}`;
 
+function quoteFromResponse(response: unknown): BookingQuote | null {
+  if (!response || typeof response !== 'object' || !('chargeCents' in response)) return null;
+  const row = response as {
+    sessionType?: string;
+    advertisedCents?: unknown;
+    platformFeeCents?: unknown;
+    taxCents?: unknown;
+    chargeCents?: unknown;
+  };
+  if (typeof row.chargeCents !== 'number' || !Number.isFinite(row.chargeCents)) return null;
+  return {
+    sessionType: row.sessionType,
+    advertisedCents: Number(row.advertisedCents) || 0,
+    platformFeeCents: Number(row.platformFeeCents) || 0,
+    taxCents: Number(row.taxCents) || 0,
+    chargeCents: row.chargeCents,
+  };
+}
+
 export default function ExpertProfile({
   mentor,
   onBack,
@@ -247,41 +266,36 @@ export default function ExpertProfile({
     return computeBookingPriceDollars(pickedDuration, hourly);
   }, [pickedDuration, expertDetails?.price]);
 
+  const previewDuration = (pickedDuration || sessionDurationMinutes) as AppointmentDurationMinutes;
+  const previewAdvertisedDollars = useMemo(() => {
+    if (publishedOneToOneRate == null) return 0;
+    return computeBookingPriceDollars(previewDuration, publishedOneToOneRate);
+  }, [publishedOneToOneRate, previewDuration]);
+
   const [oneToOneQuote, setOneToOneQuote] = useState<BookingQuote | null>(null);
   const [oneToOneQuoteFailed, setOneToOneQuoteFailed] = useState(false);
 
   useEffect(() => {
-    if (bookingStep !== 'review' || !pickedDuration) {
+    if (publishedOneToOneRate == null) {
       setOneToOneQuote(null);
       setOneToOneQuoteFailed(false);
       return;
     }
     let cancelled = false;
-    setOneToOneQuote(null);
     setOneToOneQuoteFailed(false);
     const expertId = String(expertDetails?._id ?? mentor.id);
     (async () => {
       try {
         const response = await quoteBookingCharge(
           quoteRequestBody(
-            { expert: expertId, duration: pickedDuration, price: oneToOneSessionPrice },
-            oneToOneSessionPrice,
+            { expert: expertId, duration: previewDuration, price: previewAdvertisedDollars },
+            previewAdvertisedDollars,
           ),
         );
         if (cancelled) return;
-        if (!response || typeof response.chargeCents !== 'number') {
-          setOneToOneQuote(null);
-          setOneToOneQuoteFailed(true);
-          return;
-        }
-        setOneToOneQuote({
-          sessionType: response.sessionType,
-          advertisedCents: Number(response.advertisedCents) || 0,
-          platformFeeCents: Number(response.platformFeeCents) || 0,
-          taxCents: Number(response.taxCents) || 0,
-          chargeCents: response.chargeCents,
-        });
-        setOneToOneQuoteFailed(false);
+        const quote = quoteFromResponse(response);
+        setOneToOneQuote(quote);
+        setOneToOneQuoteFailed(!quote);
       } catch {
         if (cancelled) return;
         setOneToOneQuote(null);
@@ -291,7 +305,13 @@ export default function ExpertProfile({
     return () => {
       cancelled = true;
     };
-  }, [bookingStep, oneToOneSessionPrice, pickedDuration, expertDetails?._id, mentor.id]);
+  }, [
+    publishedOneToOneRate,
+    previewAdvertisedDollars,
+    previewDuration,
+    expertDetails?._id,
+    mentor.id,
+  ]);
 
   const pickedSlotDisplay = useMemo(() => {
     if (!pickedStart || !pickedEnd) return null;
@@ -513,6 +533,46 @@ export default function ExpertProfile({
 
     return { past, upcoming };
   }, [expertDetails?.groupChats, myEnrollment, seatRequestIndex]);
+
+  const [seminarQuotes, setSeminarQuotes] = useState<Record<string, BookingQuote>>({});
+  const upcomingSeminarQuoteKey = seminarTimeline.upcoming
+    .map(item => `${item.id}:${item.price}`)
+    .join('|');
+
+  useEffect(() => {
+    const items = seminarTimeline.upcoming;
+    if (!items.length) {
+      setSeminarQuotes({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const pairs = await Promise.all(
+        items.map(async item => {
+          try {
+            const response = await quoteBookingCharge(
+              quoteRequestBody({ groupChatId: item.id, price: item.price }, item.price),
+            );
+            const quote = quoteFromResponse(response);
+            return quote ? ([item.id, quote] as const) : null;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (cancelled) return;
+      const next: Record<string, BookingQuote> = {};
+      for (const pair of pairs) {
+        if (pair) next[pair[0]] = pair[1];
+      }
+      setSeminarQuotes(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // upcomingSeminarQuoteKey captures id+price; seminarTimeline.upcoming is rebuilt each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upcomingSeminarQuoteKey]);
 
   const registerSeminarFor = useCallback(
     async (paymentIntentId: string, target: typeof seminarCheckout) => {
@@ -847,9 +907,29 @@ export default function ExpertProfile({
                     <p className="mt-1 text-[11px] text-[#7A7A72]">
                       {item.recurrenceLabel ? 'Next: ' : ''}{item.date}{item.time ? ` · ${item.time}` : ''}
                     </p>
-                    <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
-                      {item.price > 0 ? `$${item.price.toFixed(2)}` : 'Free'}
-                    </p>
+                    {(() => {
+                      const quote = seminarQuotes[item.id];
+                      if (!quote) {
+                        return (
+                          <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
+                            {item.price > 0 ? `$${item.price.toFixed(2)}` : 'Free'}
+                          </p>
+                        );
+                      }
+                      return (
+                        <div className="mt-2">
+                          <p className="text-[12px] font-semibold text-[#1A3A4A]">
+                            {formatDollarsFromCents(quote.chargeCents)} total
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-[#7A7A72]">
+                            {formatDollarsFromCents(quote.advertisedCents)} per seat
+                            {quote.platformFeeCents > 0
+                              ? ` + ${formatDollarsFromCents(quote.platformFeeCents)} platform fee`
+                              : ''}
+                          </p>
+                        </div>
+                      );
+                    })()}
                     {seminarBookingSuccessId === item.id ? (
                       <div className="mt-2 rounded-[4px] bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
                         You're enrolled in this seminar{item.recurrenceLabel ? ' series' : ''}.
@@ -1112,7 +1192,7 @@ export default function ExpertProfile({
                       ))}
                     </div>
                     <p className="mt-2 text-[11px] text-[#7A7A72]">
-                      Total uses the expert&apos;s hourly rate × appointment duration.
+                      Totals are the hourly rate × duration, plus the platform fee.
                     </p>
                   </>
                 )}
@@ -1136,12 +1216,33 @@ export default function ExpertProfile({
                             ${publishedOneToOneRate.toFixed(2)}
                           </p>
                           <p className="mt-1 text-[12px] text-[#7A7A72]">
-                            per hour — {formatOfferedDurationsList(offeredDurations)} totals scale
-                            from this rate
+                            per hour — {formatOfferedDurationsList(offeredDurations)}
                           </p>
+                          {oneToOneQuote ? (
+                            <div className="mt-3 border-t border-[#E5E2DB] pt-3">
+                              <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#7A7A72]">
+                                {previewDuration} min total
+                              </p>
+                              <ChargeLines quote={oneToOneQuote} />
+                              <p className="mt-2 flex justify-between gap-3 text-[13px] font-semibold text-[#1A3A4A]">
+                                <span>Total</span>
+                                <span className="tabular-nums">
+                                  {formatDollarsFromCents(oneToOneQuote.chargeCents)}
+                                </span>
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="mt-1 text-[12px] text-[#7A7A72]">
+                              Totals include the platform fee
+                            </p>
+                          )}
                           {pickedStart && pickedEnd && pickedDuration ? (
                             <p className="mt-2 text-[12px] font-semibold text-[#1A3A4A]">
-                              {pickedDuration} min · ${oneToOneSessionPrice.toFixed(2)} · {pickedSlotDisplay}
+                              {pickedDuration} min ·{' '}
+                              {oneToOneQuote
+                                ? formatDollarsFromCents(oneToOneQuote.chargeCents)
+                                : `$${oneToOneSessionPrice.toFixed(2)}`}{' '}
+                              · {pickedSlotDisplay}
                             </p>
                           ) : null}
                         </>

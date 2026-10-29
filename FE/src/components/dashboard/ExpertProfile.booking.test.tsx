@@ -472,6 +472,29 @@ describe('ExpertProfile booking', () => {
     expect(await screen.findByText('$60.00')).toBeInTheDocument();
   });
 
+  it('shows the selected duration total with platform fee in Rates', async () => {
+    vi.mocked(quoteBookingCharge).mockResolvedValue({
+      sessionType: 'oneToOne',
+      advertisedCents: 6000,
+      platformFeeCents: 180,
+      taxCents: 0,
+      chargeCents: 6180,
+    });
+
+    render(
+      <Provider store={store}>
+        <ExpertProfile mentor={mentor} onBack={vi.fn()} />
+      </Provider>,
+    );
+
+    const rates = () =>
+      screen.getByRole('heading', { name: 'Rates' }).closest('section') as HTMLElement;
+    expect(await within(rates()).findByText('60 min total')).toBeInTheDocument();
+    expect(within(rates()).getByText('Platform fee')).toBeInTheDocument();
+    expect(within(rates()).getByText('$1.80')).toBeInTheDocument();
+    expect(within(rates()).getByText('$61.80')).toBeInTheDocument();
+  });
+
 
 
   it('shows picked-slot sub-line in Rates after selecting a 1:1 slot', async () => {
