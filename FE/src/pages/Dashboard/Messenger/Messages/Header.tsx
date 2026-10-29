@@ -95,6 +95,8 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const [deleteCommunityConfirmOpen, setDeleteCommunityConfirmOpen] = useState(false);
     const [deleteSeminarConfirmOpen, setDeleteSeminarConfirmOpen] = useState(false);
     const [deleteSeminarApproved, setDeleteSeminarApproved] = useState(false);
+    const [startSessionConfirmOpen, setStartSessionConfirmOpen] = useState(false);
+    const [startSessionAcknowledged, setStartSessionAcknowledged] = useState(false);
     const [addCommunityMembersOpen, setAddCommunityMembersOpen] = useState(false);
     const [callHistoryOpen, setCallHistoryOpen] = useState(false);
     const [callHistoryLoading, setCallHistoryLoading] = useState(false);
@@ -305,6 +307,23 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
         }
     }
 
+    // The host acknowledges every time, so a ticked box from an earlier open never carries over.
+    const openStartSessionConfirm = () => {
+        setStartSessionAcknowledged(false);
+        setStartSessionConfirmOpen(true);
+    };
+
+    const closeStartSessionConfirm = () => setStartSessionConfirmOpen(false);
+
+    // Runs synchronously inside the click so the meeting window is not treated as a blocked popup.
+    // Unticking disables Join while the dialog fades out; a second click there would send a second
+    // start request that races the first into two meetings.
+    const confirmStartSession = () => {
+        setStartSessionAcknowledged(false);
+        closeStartSessionConfirm();
+        void createNewRoomOrJoinRoom();
+    };
+
     const closeJoinPopup = async () => {
         set_joinPopupShow(false)
         if (joinPopupBlocked) {
@@ -406,6 +425,9 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
     const viewerIsStudent = String(userDetails?.role || "").toLowerCase() === "customer";
     const isCommunityChat = chosenGroupChatDetails?.type === "community";
     const isAppointmentChat = chosenGroupChatDetails?.type === "individual";
+    const hostMustAcknowledgeStart = isGroupAdmin
+        && (chosenGroupChatDetails?.type === "seminar" || isAppointmentChat);
+    const startSessionKindLabel = isAppointmentChat ? "1:1 appointment" : "seminar";
     const canInviteToSeminar = !isCommunityChat
         && !!chosenGroupChatDetails
         && chosenGroupChatDetails?.type !== 'individual'
@@ -740,7 +762,10 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                                             //     enabledEvent?.participants?.findIndex((x:any) => x?._id === activeRooms?.[0]?.roomCreator?.userId) > -1
                                             // )
                                         }
-                                        onClick={createNewRoomOrJoinRoom}
+                                        onClick={() => {
+                                            if (hostMustAcknowledgeStart) openStartSessionConfirm();
+                                            else void createNewRoomOrJoinRoom();
+                                        }}
                                     >
                                         Join
                                     </button>
@@ -1122,6 +1147,41 @@ const MessagesHeader = ({ events, openCalendarModal, openSeminarModal, openEditS
                         disabled={!deleteSeminarApproved}
                     >
                         Delete Seminar
+                    </Button>
+                </DialogActions>
+            </Dialog>
+            <Dialog
+                open={startSessionConfirmOpen}
+                // A double-clicked Join opens the dialog and lands its second click on the backdrop.
+                onClose={(_event, reason) => {
+                    if (reason !== "backdropClick") closeStartSessionConfirm();
+                }}
+                maxWidth="xs"
+                fullWidth
+            >
+                <DialogTitle>Join the {startSessionKindLabel}?</DialogTitle>
+                <DialogContent>
+                    <label className="flex cursor-pointer items-start gap-2.5 text-sm text-slate-800">
+                        <input
+                            type="checkbox"
+                            aria-label="Acknowledge official paid session"
+                            checked={startSessionAcknowledged}
+                            onChange={(e) => setStartSessionAcknowledged(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer"
+                        />
+                        <span>
+                            I understand that joining now starts the official paid session of the {startSessionKindLabel} - {chosenGroupChatDetails?.groupName}.
+                        </span>
+                    </label>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+                    <Button onClick={closeStartSessionConfirm}>Cancel</Button>
+                    <Button
+                        variant="contained"
+                        onClick={confirmStartSession}
+                        disabled={!startSessionAcknowledged}
+                    >
+                        Join
                     </Button>
                 </DialogActions>
             </Dialog>
