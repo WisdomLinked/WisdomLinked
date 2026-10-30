@@ -3,6 +3,15 @@ import { canonicalMembershipSide } from './rcMembershipTypes';
 
 export const WL_COMMUNITY_SYS_PREFIX = '__WL_COMMUNITY_SYS__::';
 
+/**
+ * "X has joined / left …" naming the right kind of chat: Rocket.Chat records the same join and leave
+ * events in community, seminar and 1:1 appointment rooms. Mirrors BE/utils/membershipNotice.ts.
+ */
+export function membershipNotice(label: string, side: 'join' | 'leave', groupType?: string | null): string {
+    const noun = groupType === 'seminar' ? 'seminar' : groupType === 'individual' ? '1:1 appointment' : 'community';
+    return `${label} has ${side === 'join' ? 'joined' : 'left'} the ${noun}.`;
+}
+
 /** Mirrors BE `wlDisplayName` for chat labels (avoid showing raw email/slug). */
 function displayName(u: { username?: string; email?: string } | null | undefined): string {
     if (!u) return 'Someone';
@@ -90,10 +99,10 @@ export function parseCommunityGroupRealtimeMessage(
     }
 
     if (match && side === 'join') {
-        return { content: `${displayName(match)} has joined the community.`, type: 'wl-community-sys' };
+        return { content: membershipNotice(displayName(match), 'join', groupDetails?.type), type: 'wl-community-sys' };
     }
     if (match && side === 'leave') {
-        return { content: `${displayName(match)} has left the community.`, type: 'wl-community-sys' };
+        return { content: membershipNotice(displayName(match), 'leave', groupDetails?.type), type: 'wl-community-sys' };
     }
 
     return { content: raw, type: 'message' };

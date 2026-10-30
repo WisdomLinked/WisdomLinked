@@ -39,8 +39,18 @@ const CommunityProfileModal: React.FC<CommunityProfileModalProps> = ({
         const handler = (e: MouseEvent) => {
             if (modalRef.current && !modalRef.current.contains(e.target as Node)) onClose();
         };
+        // Consumed here, as MUI dialogs do, so a window that opened this popup does not close too.
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== "Escape") return;
+            e.stopPropagation();
+            onClose();
+        };
         document.addEventListener("mousedown", handler);
-        return () => document.removeEventListener("mousedown", handler);
+        document.addEventListener("keydown", onKey);
+        return () => {
+            document.removeEventListener("mousedown", handler);
+            document.removeEventListener("keydown", onKey);
+        };
     }, [isOpen, onClose]);
 
     if (!isOpen) return null;
@@ -67,7 +77,9 @@ const CommunityProfileModal: React.FC<CommunityProfileModalProps> = ({
         >
             <div
                 ref={modalRef}
-                className={`relative w-full max-w-[420px] overflow-hidden rounded-2xl shadow-2xl ${
+                // Capped at the screen so a long description scrolls inside instead of pushing the
+                // title and Done off-screen; the close button stays pinned outside the scroll.
+                className={`relative flex max-h-[calc(100dvh-2rem)] w-full max-w-[420px] flex-col overflow-hidden rounded-2xl shadow-2xl ${
                     isLight
                         ? "border border-slate-200/95 bg-white text-slate-900 shadow-slate-900/10"
                         : "border border-slate-700 bg-slate-900 text-slate-100 shadow-black/40"
@@ -77,7 +89,7 @@ const CommunityProfileModal: React.FC<CommunityProfileModalProps> = ({
                 aria-labelledby="community-modal-title"
             >
                 <div
-                    className="h-1.5 w-full"
+                    className="h-1.5 w-full shrink-0"
                     style={{
                         background: `linear-gradient(90deg, ${ACCENT} 0%, #456882 50%, ${ACCENT} 100%)`,
                         backgroundSize: "200% auto",
@@ -96,7 +108,7 @@ const CommunityProfileModal: React.FC<CommunityProfileModalProps> = ({
                     <X className="h-4 w-4" strokeWidth={2.25} />
                 </button>
 
-                <div className="px-6 pb-6 pt-8">
+                <div data-testid="community-info-scroll" className="min-h-0 overflow-y-auto overscroll-contain px-6 pb-6 pt-8">
                     <div className="mb-6 flex flex-col items-center text-center">
                         <div className="mb-4 flex h-[88px] w-[88px] items-center justify-center rounded-2xl ring-2 ring-[#E8EEF4] ring-offset-2 ring-offset-white bg-slate-100 text-[#234C6A]">
                             <Users className="h-10 w-10" />

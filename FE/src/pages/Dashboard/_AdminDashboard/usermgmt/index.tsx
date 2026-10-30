@@ -334,7 +334,9 @@ const UserMgmt = () => {
 
     return (
         <div className="relative w-full h-full">
-            <div className={`w-full h-full py-10 px-5 ${manageModalShow || auditModalShow ? "overflow-hidden" : "overflow-y-auto"}`}>
+            {/* relative: hidden screen-reader labels in the table are positioned, and without an anchor here
+                they escape this scroll area and stretch the dashboard's own scroll into blank space. */}
+            <div className={`relative w-full h-full py-10 px-5 ${manageModalShow || auditModalShow ? "overflow-hidden" : "overflow-y-auto"}`}>
                 <div className="w-full max-w-[1400px] mx-auto text-wl-ink">
                     <div className="text-center text-2xl font-semibold text-wl-brand">User Management</div>
                     <p className="mt-2 text-center text-sm text-wl-muted">

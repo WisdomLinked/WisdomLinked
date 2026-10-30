@@ -95,4 +95,19 @@ describe('AuditModal', () => {
     await userEvent.keyboard('{Escape}');
     expect(closeModal).toHaveBeenCalled();
   });
+
+  it('leaves Escape to a popup opened on top of it, and closes again once that popup is gone', async () => {
+    const closeModal = vi.fn();
+    render(<AuditModal selectedUser={{ email: 'ada@x.com' }} closeModal={closeModal} />);
+    await waitFor(() => expect(mockedUser).toHaveBeenCalled());
+    const popup = document.createElement('div');
+    popup.setAttribute('role', 'dialog');
+    document.body.appendChild(popup);
+    await userEvent.keyboard('{Escape}');
+    expect(closeModal).not.toHaveBeenCalled();
+    popup.remove();
+    await userEvent.keyboard('{Escape}');
+    expect(closeModal).toHaveBeenCalledTimes(1);
+  });
 });
+

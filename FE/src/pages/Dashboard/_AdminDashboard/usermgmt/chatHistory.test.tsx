@@ -328,5 +328,80 @@ describe('ChatHistory audit pane', () => {
     expect(await screen.findByRole('dialog', { name: 'Seminar details' })).toBeTruthy();
     expect(screen.getAllByText('Intro to thermodynamics.').length).toBeGreaterThan(0);
   });
+
+  const message = (id: string, content: string) => ({
+    _id: id,
+    content,
+    createdAt: '2024-01-01T12:00:00.000Z',
+    author: { _id: 's1', username: 'Sam' },
+  });
+
+  it('loads earlier messages on request, above the newer ones, then hides the button', async () => {
+    mockedGroup
+      .mockResolvedValueOnce({ result: [message('m-new', 'Newest page')], gotAllChats: false })
+      .mockResolvedValueOnce({ result: [message('m-old', 'Older page')], gotAllChats: true });
+    render(<ChatHistory userDetails={{ ...userDetails, groupChats: [] }} />);
+
+    const button = await screen.findByRole('button', { name: 'Load earlier messages' });
+    expect(screen.queryByText('Older page')).toBeNull();
+    await userEvent.click(button);
+
+    await screen.findByText('Older page');
+    expect(mockedGroup.mock.calls[1][0]).toMatchObject({ groupChatId: 'g-1', currentPage: 1 });
+    const older = screen.getByText('Older page');
+    const newer = screen.getByText('Newest page');
+    expect(older.compareDocumentPosition(newer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Load earlier messages' })).toBeNull());
+  });
+
+  it('offers no earlier-messages button when the whole chat is already loaded', async () => {
+    mockedGroup.mockResolvedValue({ result: [message('m1', 'Only page')], gotAllChats: true });
+    render(<ChatHistory userDetails={{ ...userDetails, groupChats: [] }} />);
+    await screen.findByText('Only page');
+    expect(screen.queryByRole('button', { name: 'Load earlier messages' })).toBeNull();
+  });
+
+  it('keeps the activity and the messages in one scroll area, without scrolling the page to the last message', async () => {
+    const scrollIntoView = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    mockedGroup.mockResolvedValue({ result: [message('m1', 'Hello there')], gotAllChats: true });
+    render(<ChatHistory userDetails={{ ...userDetails, groupChats: [] }} />);
+    await screen.findByText('Hello there');
+
+    const scroller = screen.getByTestId('audit-conversation-scroll');
+    expect(scroller.contains(await screen.findByRole('region', { name: 'Activity' }))).toBe(true);
+    expect(scroller.contains(screen.getByText('Hello there'))).toBe(true);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it('the header shows the whole conversation total, not how many messages are loaded', async () => {
+    mockedGroup.mockResolvedValue({ result: [message('m1', 'One loaded message')], gotAllChats: false });
+    render(<ChatHistory userDetails={{ ...userDetails, groupChats: [] }} />);
+    await screen.findByText('One loaded message');
+    expect(await screen.findByText('16 messages')).toBeTruthy();
+    expect(screen.queryByText(/^1 messages?$/)).toBeNull();
+  });
+
+  it('the header says the count is unavailable when the chat server could not be read', async () => {
+    mockedActivity.mockResolvedValue({ ...activityResponse, messagesAvailable: false, totals: { ...activityResponse.totals, messages: null, messagesPerWeek: null } });
+    mockedGroup.mockResolvedValue({ result: [message('m1', 'Loaded anyway')], gotAllChats: true });
+    render(<ChatHistory userDetails={{ ...userDetails, groupChats: [] }} />);
+    await screen.findByText('Loaded anyway');
+    expect(await screen.findByText('Messages unavailable')).toBeTruthy();
+  });
+
+  it('labels a cancelled 1:1 in the list and in the open conversation', async () => {
+    mockedGroup.mockResolvedValue({ result: [], gotAllChats: true });
+    const cancelled = { ...userDetails.groupChats[0], status: 'cancelled' };
+    render(<ChatHistory userDetails={{ ...userDetails, generalChats: [], groupChats: [cancelled] }} />);
+    await waitFor(() => expect(screen.getAllByText('Cancelled').length).toBe(2));
+  });
+
+  it('shows no cancelled label on an active 1:1', async () => {
+    mockedGroup.mockResolvedValue({ result: [], gotAllChats: true });
+    render(<ChatHistory userDetails={{ ...userDetails, generalChats: [], groupChats: [{ ...userDetails.groupChats[0], status: 'active' }] }} />);
+    await screen.findByText('Essay review with Priya', { selector: 'span' });
+    expect(screen.queryByText('Cancelled')).toBeNull();
+  });
 });
 

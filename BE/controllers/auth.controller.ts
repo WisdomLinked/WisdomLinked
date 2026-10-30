@@ -514,6 +514,7 @@ const verifyRegistration = async (req: Request, res: Response) => {
             { expiresIn: process.env.COOKIE_EXPIRED_TIME || '24h' }
         );
         user.token = token;
+        user.lastLoginAt = new Date();
         await user.save();
         
         user.token = null;
@@ -684,6 +685,7 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
 
         // Timezone is captured once at signup (register/verifyRegistration); logins never touch it.
 
+        user.lastLoginAt = new Date();
         const token = await user.generateAuthToken()
         user.token = null
         user.password = null
@@ -1174,6 +1176,7 @@ const confirmEmailChange = async (req: Request, res: Response) => {
         }
 
         user.email = newEmail;
+        user.lastLoginAt = new Date();
         const token = await user.generateAuthToken();
         await user.save();
         await pending.deleteOne();

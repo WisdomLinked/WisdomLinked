@@ -167,8 +167,9 @@ const oauthCallback = async (req: any, res: any) => {
             { expiresIn: process.env.COOKIE_EXPIRED_TIME || '24h' }
         );
         user.token = token;
+        user.lastLoginAt = new Date();
         await user.save();
-        
+
         res.clearCookie('accessToken', clearAuthCookieOptions());
         res.clearCookie('impersonatorToken', clearAuthCookieOptions());
         res.cookie('accessToken', token, authCookieOptions());

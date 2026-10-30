@@ -99,6 +99,21 @@ export function formatCallTime(summary: AppointmentSummary): string {
   return `${summary.calledMinutes}${booked} min`;
 }
 
+/**
+ * The conversation header's message total. Only the activity count is the whole conversation —
+ * the thread itself loads a page at a time — so nothing is shown as a total until that count exists.
+ */
+export function formatMessageTotal(
+  activity: { status: 'loading' } | { status: 'error' } | { status: 'ready'; data: GroupActivityData } | undefined,
+): string {
+  if (!activity || activity.status === 'loading') return 'Counting messages…';
+  if (activity.status === 'error' || !activity.data.messagesAvailable || activity.data.totals.messages == null) {
+    return 'Messages unavailable';
+  }
+  const total = activity.data.totals.messages;
+  return `${total.toLocaleString('en-US')} ${total === 1 ? 'message' : 'messages'}`;
+}
+
 export function formatAfterAppointment(summary: AppointmentSummary): string {
   const calls = `${summary.callsAfter} ${summary.callsAfter === 1 ? 'call' : 'calls'}`;
   if (summary.messagesAfter == null) return `${calls} · messages unavailable`;
@@ -117,6 +132,8 @@ export type AuditConversation = {
   startedAt?: string;
   /** The 1:1 appointment as stored, for the same details popup users see. */
   appointmentSource?: any;
+  /** A cancelled 1:1 or seminar stays on the account, so it is labelled rather than hidden. */
+  cancelled?: boolean;
   seminar?: SeminarDetailsData;
   group?: AuditGroupBasics;
 };
@@ -220,6 +237,24 @@ export function formatStarted(value?: string): string {
   const date = parseDate(value);
   if (!date) return '';
   return format(date, 'MMM d, yyyy');
+}
+
+/**
+ * The conversation header's date. A 1:1 or seminar is dated by when its session runs, a community
+ * by when it was created — distinct from the activity panel's "since", which counts from booking.
+ */
+export function conversationDateLine(conversation: AuditConversation): string {
+  if (conversation.kind === 'group') {
+    return conversation.startedAt ? `Created ${formatStarted(conversation.startedAt)}` : 'Creation date unknown';
+  }
+  const sessionStart = conversation.kind === 'private' ? conversation.appointmentSource?.start : conversation.seminar?.start;
+  return parseDate(sessionStart) ? `Session on ${formatStarted(sessionStart)}` : 'Session date unknown';
+}
+
+/** What the activity panel counts from: when a 1:1 was booked, or when a seminar or community was created. */
+export function activitySinceLine(since: string | null | undefined, kind: ConversationKind): string {
+  if (!parseDate(since)) return 'Averages per week';
+  return `Since ${kind === 'private' ? 'booked' : 'created'} ${formatStarted(since || undefined)} · averages per week`;
 }
 
 export function formatSeminarWhen(value?: string): string {
@@ -413,6 +448,7 @@ export function buildAppointmentConversations(userDetails: any): AuditConversati
         participants: participantList(chat.participants),
         startedAt: asIso(chat.start || chat.createdAt),
         appointmentSource: chat,
+        cancelled: chat.status === 'cancelled',
       };
     });
 }
@@ -433,6 +469,7 @@ export function buildSeminarConversations(userDetails: any): AuditConversation[]
         image: chat.image,
         participants,
         startedAt: asIso(chat.start || chat.createdAt),
+        cancelled: chat.status === 'cancelled',
         seminar: {
           start: asIso(chat.start),
           end: asIso(chat.end),
@@ -478,16 +515,28 @@ export function filterConversations(
   });
 }
 
+/**
+ * When the user last signed in. Accounts that have not signed in since login times were recorded
+ * fall back to the latest past change on the account or its chats — never a future session date,
+ * which a conversation's date can be.
+ */
 export function lastActiveFromAccount(
   userDetails: any,
   conversations: AuditConversation[],
+  now: number = Date.now(),
 ): string | undefined {
-  return latestDate(
+  const lastLogin = parseDate(userDetails?.lastLoginAt);
+  if (lastLogin && lastLogin.getTime() <= now) return lastLogin.toISOString();
+  const past = [
     userDetails?.updatedAt,
     userDetails?.lastSeen,
     userDetails?.lastActive,
     ...conversations.map(item => item.date),
-  );
+  ].filter(value => {
+    const date = parseDate(value);
+    return date !== null && date.getTime() <= now;
+  });
+  return latestDate(...past);
 }
 
 export function participantSummary(
@@ -504,6 +553,14 @@ export function participantSummary(
     names: shown.join(', '),
     extra: Math.max(0, labels.length - shown.length),
   };
+}
+
+/**
+ * A payment link sent after a failed charge (`retry`) that has not been paid. It asks for money
+ * rather than holding any, so it counts nowhere until the student pays it.
+ */
+export function isUnpaidPaymentLink(row: PaymentHistoryRow): boolean {
+  return row?.paymentType === 'retry' && row?.status !== 'completed';
 }
 
 export function isRefundedRow(row: PaymentHistoryRow): boolean {
@@ -566,6 +623,7 @@ export function paymentSummary(
   for (const row of rows) {
     if (isRefundedRow(row)) continue;
     if (row.status === 'failed' || row.status === 'released') continue;
+    if (isUnpaidPaymentLink(row)) continue;
     const money = explainPaymentRow(row, rates);
     if (role === 'expert') {
       gross += money.advertisedCents;
@@ -576,11 +634,12 @@ export function paymentSummary(
         if (!covered) readyToPay += money.expertNetCents;
       }
       if (row.status === 'pending' || row.status === 'withheld') pending += money.expertNetCents;
-    } else {
+    } else if (row.status === 'completed') {
+      // Only money actually charged: a card hold awaiting the expert is authorised, not collected.
       priceCollected += money.advertisedCents;
       fees += money.platformFeeCents;
       tax += money.taxCents;
-      if (row.status === 'completed') studentPaid += money.paidCents;
+      studentPaid += money.paidCents;
     }
   }
 

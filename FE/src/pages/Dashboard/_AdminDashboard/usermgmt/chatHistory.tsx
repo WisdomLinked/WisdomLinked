@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { doGetGroupChatActivity, doGetGroupChatHistory } from '../../../../api/api';
 import type { GroupActivityState } from './audit/GroupActivity';
 import ConversationList from './audit/ConversationList';
@@ -33,11 +33,9 @@ function useIsLg() {
 
 const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
   const isLg = useIsLg();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [isFirstLoad, set_isFirstLoad] = useState(true);
   const [selectedChat, set_selectedChat] = useState<AuditConversation | undefined>();
-  const [isScrollToTop, set_isScrollToTop] = useState(false);
   const [gotAllChats, set_gotAllChats] = useState(false);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [currentPage, set_currentPage] = useState(0);
   const [messages, set_messages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -114,33 +112,20 @@ const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
     if (selectedGroupId && !selectedActivity) void loadGroupActivity(selectedGroupId);
   }, [selectedGroupId, selectedActivity, loadGroupActivity]);
 
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    if (e.currentTarget.scrollTop === 0 && e.currentTarget.scrollHeight !== e.currentTarget.clientHeight) {
-      set_isScrollToTop(true);
-    }
+  const loadEarlierMessages = async () => {
+    if (!selectedChat || gotAllChats || loadingEarlier || loading) return;
+    setLoadingEarlier(true);
+    await getChatHistory(currentPage + 1, selectedChat);
+    setLoadingEarlier(false);
   };
 
   useEffect(() => {
-    if (isScrollToTop && !gotAllChats && selectedChat && !loading && !error) {
-      void getChatHistory(currentPage + 1, selectedChat);
-    }
-    set_isScrollToTop(false);
-  }, [isScrollToTop, gotAllChats, selectedChat, currentPage, getChatHistory, loading, error]);
-
-  useEffect(() => {
     if (selectedChat?.id) {
-      set_isFirstLoad(true);
       set_messages([]);
+      set_gotAllChats(true);
       void getChatHistory(0, selectedChat);
     }
   }, [selectedChat?.id, getChatHistory]);
-
-  useEffect(() => {
-    if (messages.length && isFirstLoad && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      set_isFirstLoad(false);
-    }
-  }, [isFirstLoad, messages]);
 
   useEffect(() => {
     set_selectedChat(undefined);
@@ -160,10 +145,8 @@ const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
   const showPane = Boolean(selectedChat) || isLg;
 
   return (
-    <div
-      className="mt-4 flex min-h-0 overflow-hidden rounded-xl border border-audit-line bg-audit-surface"
-      style={{ height: 'min(640px, calc(100dvh - 220px))' }}
-    >
+    // Fills the space left in the audit window; below 420px the window scrolls instead of crushing the panes.
+    <div className="mt-4 flex h-0 min-h-[420px] flex-1 overflow-hidden rounded-xl border border-audit-line bg-audit-surface">
       {showList ? (
         <ConversationList
           group={buckets.group}
@@ -189,8 +172,9 @@ const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
           showBack={!isLg}
           onBack={() => set_selectedChat(undefined)}
           onRetry={() => selectedChat && getChatHistory(0, selectedChat, 'retry')}
-          onMessagesScroll={handleScroll}
-          messagesEndRef={messagesEndRef}
+          canLoadEarlier={!loading && !error && !gotAllChats && messages.length > 0}
+          loadingEarlier={loadingEarlier}
+          onLoadEarlier={() => void loadEarlierMessages()}
           groupActivity={selectedGroupId ? selectedActivity ?? { status: 'loading' } : undefined}
           onRetryGroupActivity={() => selectedGroupId && loadGroupActivity(selectedGroupId)}
         />

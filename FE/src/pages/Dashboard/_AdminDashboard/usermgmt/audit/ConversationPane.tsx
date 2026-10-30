@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { ChevronLeft, Info, Loader2 } from 'lucide-react';
 import type { RootState } from '../../../../../store';
@@ -13,7 +13,8 @@ import SessionDetailsDialog from './SessionDetailsDialog';
 import {
   communityMembersFromChat,
   conversationKindLabel,
-  formatStarted,
+  conversationDateLine,
+  formatMessageTotal,
   participantSummary,
   type AuditConversation,
   type ChatMessage,
@@ -29,8 +30,9 @@ export default function ConversationPane({
   onBack,
   onRetry,
   showBack,
-  onMessagesScroll,
-  messagesEndRef,
+  canLoadEarlier = false,
+  loadingEarlier = false,
+  onLoadEarlier,
   groupActivity,
   onRetryGroupActivity,
 }: {
@@ -43,20 +45,24 @@ export default function ConversationPane({
   onBack: () => void;
   onRetry: () => void;
   showBack: boolean;
-  onMessagesScroll?: (event: React.UIEvent<HTMLDivElement>) => void;
-  messagesEndRef?: React.RefObject<HTMLDivElement | null>;
+  canLoadEarlier?: boolean;
+  loadingEarlier?: boolean;
+  onLoadEarlier?: () => void;
   groupActivity?: GroupActivityState;
   onRetryGroupActivity?: () => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
   // The viewing admin, not the audited user: the participants dialog only offers
   // Remove to a community's owner and co-moderators, so the audit stays read-only.
   const viewerId = useSelector((state: RootState) => String(state.auth?.userDetails?._id || ''));
 
+  // Each conversation opens at its activity summary, not wherever the previous one was left.
   useEffect(() => {
     setDetailsOpen(false);
     setParticipantsOpen(false);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [conversation?.id]);
 
   if (!conversation) {
@@ -78,8 +84,7 @@ export default function ConversationPane({
     group?.members ??
     (appointment ? communityMembersFromChat(appointment) : []);
   const showParticipants = Boolean(group || appointment);
-  /** The thread loads in pages, so the full count is shown once activity has loaded. */
-  const messageTotal = loaded?.totals.messages ?? messages.length;
+  const messageTotal = formatMessageTotal(groupActivity);
   const peopleText = (
     <>
       {people.names || 'No other participants'}
@@ -120,6 +125,9 @@ export default function ConversationPane({
             <span className={`${AUDIT_PILL} bg-audit-sunken text-audit-muted`}>
               {conversationKindLabel(conversation.kind)}
             </span>
+            {conversation.cancelled ? (
+              <span className={`${AUDIT_PILL} bg-audit-bad-soft text-audit-bad`}>Cancelled</span>
+            ) : null}
           </div>
           {showParticipants ? (
             <button
@@ -134,51 +142,66 @@ export default function ConversationPane({
             <p className="truncate text-sm text-audit-muted">{peopleText}</p>
           )}
           <p className="text-xs text-audit-muted">
-            {conversation.startedAt ? `Started ${formatStarted(conversation.startedAt)}` : 'Start date unknown'}
+            {conversationDateLine(conversation)}
             {' · '}
-            <span className="tabular-nums">{messageTotal} messages</span>
+            <span className="tabular-nums">{messageTotal}</span>
           </p>
         </div>
       </div>
 
-      {(group || appointment) && groupActivity ? (
-        <div className="border-b border-audit-line bg-audit-surface px-3 py-3 xl:px-4">
-          <GroupActivity
-            state={groupActivity}
-            kind={conversation.kind}
-            auditedUserId={auditedUserId}
-            onRetry={() => onRetryGroupActivity?.()}
-          />
-        </div>
-      ) : null}
+      {/* One scroll for the activity and the thread, so the activity never squeezes the messages. */}
+      <div ref={scrollRef} data-testid="audit-conversation-scroll" className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        {(group || appointment) && groupActivity ? (
+          <div className="border-b border-audit-line bg-audit-surface px-3 py-3 xl:px-4">
+            <GroupActivity
+              state={groupActivity}
+              kind={conversation.kind}
+              auditedUserId={auditedUserId}
+              onRetry={() => onRetryGroupActivity?.()}
+            />
+          </div>
+        ) : null}
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4" onScroll={onMessagesScroll}>
-        {conversation.seminar ? <SeminarDetails seminar={conversation.seminar} /> : null}
-        {error ? (
-          <div className="rounded-xl border border-audit-bad bg-audit-bad-soft px-4 py-5 text-center">
-            <p className="text-sm font-medium text-audit-bad">Couldn&apos;t load messages for this chat</p>
-            <p className="mt-1 text-sm text-audit-muted">
-              The conversation is still listed, but its messages could not be retrieved.
-            </p>
-            <button
-              type="button"
-              onClick={onRetry}
-              disabled={retrying}
-              className={`${AUDIT_FOCUS} mt-3 inline-flex items-center gap-2 rounded-lg bg-audit-surface px-3 py-1.5 text-sm font-medium text-audit-ink hover:bg-audit-canvas disabled:opacity-60`}
-            >
-              {retrying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-              Retry
-            </button>
-          </div>
-        ) : loading ? (
-          <div className="flex h-40 items-center justify-center text-audit-muted">
-            <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
-            <span className="sr-only">Loading messages</span>
-          </div>
-        ) : (
-          <MessageList messages={messages} auditedUserId={auditedUserId} />
-        )}
-        <div ref={messagesEndRef} />
+        <div className="space-y-4 px-4 py-4">
+          {conversation.seminar ? <SeminarDetails seminar={conversation.seminar} /> : null}
+          {canLoadEarlier ? (
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={onLoadEarlier}
+                disabled={loadingEarlier}
+                className={`${AUDIT_FOCUS} inline-flex items-center gap-2 rounded-lg border border-audit-line bg-audit-surface px-3 py-1.5 text-sm font-medium text-audit-ink hover:bg-audit-sunken disabled:opacity-60`}
+              >
+                {loadingEarlier ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                Load earlier messages
+              </button>
+            </div>
+          ) : null}
+          {error ? (
+            <div className="rounded-xl border border-audit-bad bg-audit-bad-soft px-4 py-5 text-center">
+              <p className="text-sm font-medium text-audit-bad">Couldn&apos;t load messages for this chat</p>
+              <p className="mt-1 text-sm text-audit-muted">
+                The conversation is still listed, but its messages could not be retrieved.
+              </p>
+              <button
+                type="button"
+                onClick={onRetry}
+                disabled={retrying}
+                className={`${AUDIT_FOCUS} mt-3 inline-flex items-center gap-2 rounded-lg bg-audit-surface px-3 py-1.5 text-sm font-medium text-audit-ink hover:bg-audit-canvas disabled:opacity-60`}
+              >
+                {retrying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                Retry
+              </button>
+            </div>
+          ) : loading ? (
+            <div className="flex h-40 items-center justify-center text-audit-muted">
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+              <span className="sr-only">Loading messages</span>
+            </div>
+          ) : (
+            <MessageList messages={messages} auditedUserId={auditedUserId} />
+          )}
+        </div>
       </div>
 
       <p className="border-t border-audit-line bg-audit-surface px-4 py-2 text-xs text-audit-muted">

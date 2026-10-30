@@ -1,6 +1,6 @@
 import React from 'react';
 import { Calendar, Search, Users } from 'lucide-react';
-import { AUDIT_FOCUS } from './auditUi';
+import { AUDIT_FOCUS, AUDIT_PILL } from './auditUi';
 import {
   emptySectionCopy,
   filterConversations,
@@ -64,6 +64,7 @@ function ConversationRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="min-w-0 flex-1 truncate text-sm font-medium text-audit-ink">{item.title}</p>
+          {item.cancelled ? <span className={`${AUDIT_PILL} shrink-0 bg-audit-bad-soft text-audit-bad`}>Cancelled</span> : null}
           <span className="shrink-0 text-xs tabular-nums text-audit-muted">{formatListDate(item.date)}</span>
         </div>
         <p className="truncate text-sm text-audit-muted">{item.preview}</p>
