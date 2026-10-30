@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { doGetFullUserDataByEmail, doFilterPaymentHistories, getPricingSettings, listExpertPayroll } from '../../../../api/api';
 import ChatHistory from './chatHistory';
 import PaymentHistory from './paymentHistory';
@@ -26,6 +26,7 @@ const AuditModal = ({
   closeModal: () => void;
 }) => {
   const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [userDetails, set_userDetails] = useState<any>();
   const [selectedTab, set_selectedTab] = useState<AuditTab>('chat');
   const [paymentRows, setPaymentRows] = useState<PaymentHistoryRow[]>([]);
@@ -117,7 +118,11 @@ const AuditModal = ({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeModal();
+      if (event.key !== 'Escape') return;
+      // A popup opened from the audit (details, participants, a profile) owns this Escape.
+      const others = Array.from(document.querySelectorAll('[role="dialog"]')).filter(el => el !== dialogRef.current);
+      if (others.length) return;
+      closeModal();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -150,10 +155,13 @@ const AuditModal = ({
     <div className="absolute inset-0 z-10 flex items-stretch justify-center bg-black/25 sm:items-center sm:p-6">
       <div className="absolute inset-0 cursor-pointer" onClick={closeModal} />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative flex h-full w-full max-w-6xl flex-col overflow-hidden bg-audit-surface sm:h-auto sm:max-h-full sm:rounded-2xl sm:border sm:border-audit-line sm:shadow-xl"
+        className={`relative flex h-full w-full max-w-6xl flex-col overflow-hidden bg-audit-surface sm:rounded-2xl sm:border sm:border-audit-line sm:shadow-xl ${
+          selectedTab === 'chat' ? '' : 'sm:h-auto sm:max-h-full'
+        }`}
       >
         <AuditHeader userDetails={userDetails || selectedUser} titleId={titleId} onExport={onExport} onClose={closeModal} />
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 sm:px-8">
@@ -174,7 +182,8 @@ const AuditModal = ({
             role="tabpanel"
             id={`audit-panel-${selectedTab}`}
             aria-labelledby={`audit-tab-${selectedTab}`}
-            className="min-h-0 flex-1"
+            // Chat fills the window so its panes scroll inside it; payments keep scrolling with the window.
+            className={selectedTab === 'chat' ? 'flex min-h-0 flex-1 flex-col' : 'min-h-0 flex-1'}
           >
             {selectedTab === 'chat' ? (
               <ChatHistory userDetails={userDetails} />

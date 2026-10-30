@@ -533,7 +533,7 @@ const getGroupChatHistory = async (req, res) => {
         const oldestFirst = [...rcMessages].sort(
             (a: any, b: any) => new Date(a?.ts?.$date ?? a?.ts).getTime() - new Date(b?.ts?.$date ?? b?.ts).getTime()
         );
-        const messages = await mapRCMessagesToWL(oldestFirst, undefined, people);
+        const messages = await mapRCMessagesToWL(oldestFirst, undefined, people, groupChat.type);
 
         return res.status(200).json({
             result: messages,

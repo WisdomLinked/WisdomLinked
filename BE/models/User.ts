@@ -94,6 +94,8 @@ const userSchema = new mongoose.Schema(
         /** Setup steps ('rate', 'durations') a new expert hasn't saved yet; their stored values are only defaults.
          *  Unset on accounts created before this field existed, which keeps their setup as-is. */
         pendingSetupSteps: { type: [String], default: undefined },
+        /** When the user last signed in themselves (not an admin impersonating). Shown as "Last active" in the admin audit. */
+        lastLoginAt: { type: Date },
         rating: { type: Number, default: 0 },
         specialNote: { type: String },
 

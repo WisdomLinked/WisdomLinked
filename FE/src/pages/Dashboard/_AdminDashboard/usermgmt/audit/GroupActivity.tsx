@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { AUDIT_FOCUS, AUDIT_PILL } from './auditUi';
 import {
+  activitySinceLine,
   communityMemberTag,
   formatAfterAppointment,
   formatCallTime,
   formatCount,
   formatPerWeek,
-  formatStarted,
   type ConversationKind,
   type GroupActivityData,
 } from './auditModel';
@@ -74,14 +74,13 @@ export default function GroupActivity({
   }
 
   const { totals, members, messagesAvailable, messagesCapped, community, appointment } = state.data;
-  const since = totals.since ? formatStarted(totals.since) : '';
   const sessions = community?.sessionCount ?? 1;
 
   return (
     <section className="rounded-xl border border-audit-line bg-audit-sunken px-3 py-3 xl:px-4" aria-label="Activity">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-xs uppercase tracking-wider text-audit-muted">Activity</p>
-        <p className="text-xs text-audit-muted">{since ? `Since ${since} · averages per week` : 'Averages per week'}</p>
+        <p className="text-xs text-audit-muted">{activitySinceLine(totals.since, kind)}</p>
       </div>
       <dl className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Total label="Video calls" value={formatCount(totals.calls)} />

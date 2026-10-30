@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
+  activitySinceLine,
   buildConversations,
+  conversationDateLine,
   communityMemberTag,
   communityMembersFromChat,
   conversationKindLabel,
   formatAfterAppointment,
   formatCallTime,
   formatCount,
+  formatMessageTotal,
   formatPerWeek,
   emptySectionCopy,
   filterConversations,
   initialsFromName,
+  isUnpaidPaymentLink,
+  lastActiveFromAccount,
   paymentDisplayStatus,
   paymentSummary,
 } from './auditModel';
@@ -282,6 +287,102 @@ describe('1:1 appointment call time', () => {
     expect(formatAfterAppointment({ ...base, callsAfter: 1, messagesAfter: 1 })).toBe('1 call · 1 message');
     expect(formatAfterAppointment({ ...base, callsAfter: 2, messagesAfter: 7 })).toBe('2 calls · 7 messages');
     expect(formatAfterAppointment({ ...base, messagesAfter: null })).toBe('0 calls · messages unavailable');
+  });
+
+  it('the header total waits for the real count instead of showing the loaded page', () => {
+    const ready = (messages: number | null, messagesAvailable = true) => ({
+      status: 'ready' as const,
+      data: {
+        community: { _id: 'g' },
+        members: [],
+        totals: { calls: 0, callsPerWeek: 0, messages, messagesPerWeek: 0, messagesFromOthers: 0, weeks: 1, since: null },
+        messagesAvailable,
+        messagesCapped: false,
+      },
+    });
+    expect(formatMessageTotal(undefined)).toBe('Counting messages…');
+    expect(formatMessageTotal({ status: 'loading' })).toBe('Counting messages…');
+    expect(formatMessageTotal({ status: 'error' })).toBe('Messages unavailable');
+    expect(formatMessageTotal(ready(null, false))).toBe('Messages unavailable');
+    expect(formatMessageTotal(ready(0))).toBe('0 messages');
+    expect(formatMessageTotal(ready(1))).toBe('1 message');
+    expect(formatMessageTotal(ready(1234))).toBe('1,234 messages');
+  });
+
+  it('dates a 1:1 or seminar by its session and a community by when it was created', () => {
+    const appointment = { id: 'a', kind: 'private' as const, title: 'A', preview: '', initials: 'A', participants: [], startedAt: '2026-09-28T17:00:00.000Z', appointmentSource: { start: '2026-09-28T17:00:00.000Z', createdAt: '2026-09-24T10:00:00.000Z' } };
+    const seminar = { id: 's', kind: 'seminar' as const, title: 'S', preview: '', initials: 'S', participants: [], seminar: { start: '2026-10-02T17:00:00.000Z', attendeeCount: 0, status: 'Scheduled' as const } };
+    const community = { id: 'c', kind: 'group' as const, title: 'C', preview: '', initials: 'C', participants: [], startedAt: '2026-09-24T10:00:00.000Z' };
+    expect(conversationDateLine(appointment)).toBe('Session on Sep 28, 2026');
+    expect(conversationDateLine(seminar)).toBe('Session on Oct 2, 2026');
+    expect(conversationDateLine(community)).toBe('Created Sep 24, 2026');
+    expect(conversationDateLine({ ...appointment, appointmentSource: { createdAt: '2026-09-24T10:00:00.000Z' } })).toBe('Session date unknown');
+    expect(conversationDateLine({ ...community, startedAt: undefined })).toBe('Creation date unknown');
+  });
+
+  it('says what the activity counts from', () => {
+    expect(activitySinceLine('2026-09-24T10:00:00.000Z', 'private')).toBe('Since booked Sep 24, 2026 · averages per week');
+    expect(activitySinceLine('2026-09-24T10:00:00.000Z', 'seminar')).toBe('Since created Sep 24, 2026 · averages per week');
+    expect(activitySinceLine('2026-09-24T10:00:00.000Z', 'group')).toBe('Since created Sep 24, 2026 · averages per week');
+    expect(activitySinceLine(null, 'private')).toBe('Averages per week');
+  });
+
+  it('marks cancelled 1:1s and seminars, and only those', () => {
+    const built = buildConversations({
+      _id: 'u',
+      generalChats: [],
+      groupChats: [
+        { _id: 'a1', type: 'individual', name: 'Live 1:1', status: 'active' },
+        { _id: 'a2', type: 'individual', name: 'Dropped 1:1', status: 'cancelled' },
+        { _id: 's1', type: 'seminar', name: 'Cancelled seminar', status: 'cancelled' },
+        { _id: 's2', type: 'seminar', name: 'Draft seminar', status: 'draft' },
+      ],
+    });
+    const flag = (id: string) => built.all.find(item => item.id === id)?.cancelled;
+    expect([flag('a1'), flag('a2'), flag('s1'), flag('s2')]).toEqual([false, true, true, false]);
+  });
+
+  // Rows shaped like the staging test payments of 2026-10-29: $5.00 + $0.15 fee, 20% commission.
+  const held = { _id: 'h', status: 'withheld', paymentType: 'charge', amount: 515, advertisedCents: 500, platformFeeCents: 15, taxCents: 0, commissionCents: 100, expertNetCents: 400, createdAt: '2026-10-29T12:00:00.000Z' } as any;
+  const captured = { ...held, _id: 'c', status: 'completed' };
+  const unpaidLink = { _id: 'r', status: 'pending', paymentType: 'retry', amount: 1000, createdAt: '2026-10-14T12:00:00.000Z' } as any;
+  const paidLink = { ...unpaidLink, _id: 'r2', status: 'completed' };
+
+  it('a student\'s price, fees and tax count only money actually charged, so they add up to Paid', () => {
+    const whileHeld = paymentSummary([held], 'student');
+    expect([whileHeld.priceCollected, whileHeld.fees, whileHeld.tax, whileHeld.paidOut]).toEqual([0, 0, 0, 0]);
+    const afterCapture = paymentSummary([captured], 'student');
+    expect([afterCapture.priceCollected, afterCapture.fees, afterCapture.tax, afterCapture.paidOut]).toEqual([500, 15, 0, 515]);
+    expect(afterCapture.priceCollected + afterCapture.fees + afterCapture.tax).toBe(afterCapture.paidOut);
+  });
+
+  it('an unpaid payment link counts nowhere until it is paid', () => {
+    expect(isUnpaidPaymentLink(unpaidLink)).toBe(true);
+    expect(isUnpaidPaymentLink(paidLink)).toBe(false);
+    expect(isUnpaidPaymentLink(held)).toBe(false);
+    const student = paymentSummary([unpaidLink], 'student');
+    expect([student.priceCollected, student.paidOut]).toEqual([0, 0]);
+    const expert = paymentSummary([unpaidLink], 'expert');
+    expect([expert.gross, expert.fees, expert.pending, expert.readyToPay]).toEqual([0, 0, 0, 0]);
+    expect(paymentSummary([paidLink], 'student').paidOut).toBe(1000);
+    expect(paymentSummary([paidLink], 'expert').readyToPay).toBe(800);
+  });
+
+  it('an expert\'s card hold still shows as pending payout, then moves to ready to pay on capture', () => {
+    const whileHeld = paymentSummary([held, unpaidLink], 'expert');
+    expect([whileHeld.gross, whileHeld.fees, whileHeld.pending, whileHeld.readyToPay]).toEqual([500, 100, 400, 0]);
+    const afterCapture = paymentSummary([captured, unpaidLink], 'expert');
+    expect([afterCapture.gross, afterCapture.fees, afterCapture.pending, afterCapture.readyToPay]).toEqual([500, 100, 0, 400]);
+  });
+
+  it('last active is the last sign-in, and never a future session date', () => {
+    const now = Date.parse('2026-10-29T18:00:00.000Z');
+    const future = { id: 'f', kind: 'private' as const, title: 'F', preview: '', initials: 'F', participants: [], date: '2026-10-31T19:00:00.000Z' };
+    const past = { ...future, id: 'p', date: '2026-10-20T10:00:00.000Z' };
+    expect(lastActiveFromAccount({ lastLoginAt: '2026-10-25T09:00:00.000Z', updatedAt: '2026-10-28T09:00:00.000Z' }, [future, past], now)).toBe('2026-10-25T09:00:00.000Z');
+    expect(lastActiveFromAccount({ updatedAt: '2026-10-28T09:00:00.000Z' }, [future, past], now)).toBe('2026-10-28T09:00:00.000Z');
+    expect(lastActiveFromAccount({}, [future, past], now)).toBe('2026-10-20T10:00:00.000Z');
+    expect(lastActiveFromAccount({}, [future], now)).toBeUndefined();
   });
 });
 

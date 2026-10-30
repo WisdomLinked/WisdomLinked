@@ -18,6 +18,7 @@ import {
     getRocketOnlineUsernames,
 } from '../services/rocketchat.service';
 import { wlDisplayName } from '../utils/wlDisplayName';
+import { membershipNotice } from '../utils/membershipNotice';
 import { prepareMessageForRocketChat } from '../utils/chatReplyPlainText';
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { searchableRolesFor } from '../utils/chatSearchRoles';
@@ -129,10 +130,12 @@ const hiddenStateForUser = (doc: any, userId: string) => {
 // Helper to map Rocket.Chat messages to WisdomLinked format so the frontend React UI doesnt break
 /** For DMs, pass `dmParticipants` so RC login slugs always resolve to Mongo `author._id` (fixes expert vs student mismatch). */
 /** For group/community, pass `groupParticipants` (populated users with email) so RC slugs map to display names. */
+/** `groupType` names the chat in join/leave lines ("the seminar", "the 1:1 appointment"); omitted means community. */
 export const mapRCMessagesToWL = async (
     rcMessages: any[],
     dmParticipants?: { me?: any; other?: any },
-    groupParticipants?: any[]
+    groupParticipants?: any[],
+    groupType?: string
 ) => {
     const rcSystemSlugs = rcMessages
         .filter((m: any) => canonicalMembershipSide(m.t ?? m.type) != null)
@@ -253,10 +256,10 @@ export const mapRCMessagesToWL = async (
             if (!subj && rcLogin) subj = resolveSlugToSubject(String(rcLogin));
             const label = labelFromSubject(subj);
             if (subj && membershipSide === 'join') {
-                content = `${label} has joined the community.`;
+                content = membershipNotice(label, 'join', groupType);
                 msgType = 'wl-community-sys';
             } else if (subj && membershipSide === 'leave') {
-                content = `${label} has left the community.`;
+                content = membershipNotice(label, 'leave', groupType);
                 msgType = 'wl-community-sys';
             }
         }
@@ -815,7 +818,7 @@ export const getGroupHistory = async (req: any, res: Response) => {
                         parts.push(a);
                     }
                 }
-                const messages = await mapRCMessagesToWL(visible, undefined, parts);
+                const messages = await mapRCMessagesToWL(visible, undefined, parts, groupChat.type);
 
                 if (visible.length > 0) {
                     let maxMs = 0;
