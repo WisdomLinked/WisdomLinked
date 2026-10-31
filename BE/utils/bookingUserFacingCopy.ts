@@ -14,6 +14,9 @@ export const BOOKING_PAYMENT_WRONG_BOOKING = 'This payment does not belong to th
 /** Generic verification failure — the server could not confirm an allowed payment state. */
 export const BOOKING_PAYMENT_UNVERIFIED = 'Payment could not be verified, so you have not been charged. Please try again.';
 
+/** Wallet checkout returned before Stripe finished marking the payment succeeded. */
+export const BOOKING_PAYMENT_STILL_CONFIRMING = 'Your payment is still being confirmed. Please wait a moment and try again.';
+
 /** A hold could not be turned into a charge; the booking is rolled back. */
 export const BOOKING_CAPTURE_FAILED = "We couldn't complete your payment, so you have not been charged. Please try again.";
 

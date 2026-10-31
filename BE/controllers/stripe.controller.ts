@@ -418,6 +418,17 @@ const checkPaymentIntentProcessing = async (payment_intent, stripeMode) => {
     }
 };
 
+/** The PaymentIntent as Stripe has it, including statuses the status-specific helpers ignore. */
+const readPaymentIntent = async (payment_intent, stripeMode) => {
+    try {
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        return await stripe.paymentIntents.retrieve(payment_intent, { expand: ['latest_charge'] });
+    } catch (err) {
+        console.log('[readPaymentIntent]', err.message);
+        return null;
+    }
+};
+
 const capturePaymentIntent = async (payment_intent, stripeMode, amountToCaptureCents?: number) => {
     try {
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
@@ -1569,6 +1580,7 @@ module.exports = {
     checkPaymentIntentSucceeded,
     checkPaymentIntentAuthorized,
     checkPaymentIntentProcessing,
+    readPaymentIntent,
     capturePaymentIntent,
     cancelPaymentIntent,
     setStripeMode,

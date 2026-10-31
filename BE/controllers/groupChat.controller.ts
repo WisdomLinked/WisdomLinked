@@ -61,11 +61,13 @@ import { isChatAdminOf } from '../utils/adminChatAccess';
 import { bookingEmailTo } from '../utils/emailPreferences';
 import { computeBookingPriceCents, extractHourlyRate, dollarsToCents, assertPaymentMatchesExpected, assertIntentMatchesBooking, cancellationRefundCents, capturedAmountCents, balanceTransactionId, historyPricing, pricingSnapshotFromMetadata, settlementMatchCents, snapshotChargeCents } from '../utils/bookingPrice';
 import { chargeForAdvertised, loadPricingSettings } from '../utils/pricingSettings';
+import { bookingSettlePollCount, bookingSettlePollMs, paymentIntentStillSettling } from '../utils/bookingPaymentSettle';
 import { resolvePendingPayment, resolveOrphanedIntent } from '../utils/pendingPayment';
 import { sessionHasEnded } from '../utils/paymentIntegrity';
 import {
     BOOKING_PAYMENT_WRONG_BOOKING,
     BOOKING_PAYMENT_UNVERIFIED,
+    BOOKING_PAYMENT_STILL_CONFIRMING,
     BOOKING_CAPTURE_FAILED,
     BOOKING_HOLD_GONE,
     BOOKING_CAPTURED_NOT_BOOKED,
@@ -2405,7 +2407,9 @@ const registerForSeminar = async (req, res) => {
                 groupChatId: groupChat._id.toString(),
             });
             if (!payment.ok) {
-                if (customer?.email) {
+                // A wallet that Stripe has not finished yet is not a failed payment.
+                // Emailing here is what sent "no charge processed" seconds before success.
+                if (!payment.stillSettling && customer?.email) {
                     await sendSeminarEmail(
                         bookingEmailTo(customer),
                         "We couldn't complete your booking — no charge processed",
@@ -2501,6 +2505,16 @@ const registerForSeminar = async (req, res) => {
                 return refundAndFail(400, "Sorry, the seminar is not active", "Seminar is no longer active");
             }
             if ((current.participants || []).some((p: any) => p.toString() === userId)) {
+                const samePayment = await PaymentHistory.exists({
+                    paymentIntent: String(payment_intent),
+                    paymentType: 'charge',
+                    customer: userId,
+                    groupChat: current._id,
+                    status: { $in: ['completed', 'pending', 'withheld'] },
+                });
+                if (samePayment) {
+                    return res.status(200).json({ success: true, alreadyRegistered: true });
+                }
                 const ownedElsewhere = held && !!(await PaymentHistory.exists({
                     paymentIntent: String(payment_intent),
                     paymentType: 'charge',
@@ -3078,11 +3092,13 @@ export type BookingPaymentResolution = {
     held?: boolean;
     /** Wallet payment still clearing — booked now, confirmed by the webhook. */
     settling?: boolean;
+    /** Stripe has not finished this wallet payment, and it has not declined it. */
+    stillSettling?: boolean;
     code?: number;
     message?: string;
 };
 
-const resolveBookingPayment = async ({
+const resolveBookingPaymentNow = async ({
     payment_intent,
     expectedCents,
     advertisedCents = 0,
@@ -3091,7 +3107,7 @@ const resolveBookingPayment = async ({
     customer,
     expert,
     groupChatId,
-}: any): Promise<BookingPaymentResolution> => {
+}: any): Promise<BookingPaymentResolution | 'not_ready'> => {
     if (!(expectedCents > 0)) return { ok: true, charge: null, held: false };
     if (!payment_intent) return { ok: false, code: 400, message: BOOKING_PAYMENT_UNVERIFIED };
 
@@ -3166,11 +3182,50 @@ const resolveBookingPayment = async ({
             groupChatId,
             boundTo,
         });
-        if (!charge) return { ok: false, code: 400, message: BOOKING_PAYMENT_UNVERIFIED };
+        if (!charge) return 'not_ready';
         return { ok: true, charge, held: false };
     } catch (verifyErr: any) {
+        if (String(verifyErr?.message || '') === 'Payment intent not succeeded') return 'not_ready';
         return { ok: false, code: 400, message: BOOKING_PAYMENT_UNVERIFIED };
     }
+};
+
+const resolveBookingPayment = async (args: any): Promise<BookingPaymentResolution> => {
+    const ready = await resolveBookingPaymentNow(args);
+    if (ready !== 'not_ready') return ready;
+
+    const serverMode = await resolveServerStripeMode();
+    const readIntent = async () => {
+        const reader = require('./stripe.controller').readPaymentIntent;
+        if (typeof reader !== 'function') return null;
+        return reader(args.payment_intent, serverMode);
+    };
+
+    let snapshot = await readIntent();
+    if (!paymentIntentStillSettling(snapshot)) {
+        return { ok: false, code: 400, message: BOOKING_PAYMENT_UNVERIFIED };
+    }
+
+    const polls = bookingSettlePollCount();
+    const waitMs = bookingSettlePollMs();
+    for (let attempt = 0; attempt < polls; attempt += 1) {
+        if (waitMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, waitMs));
+        }
+        const again = await resolveBookingPaymentNow(args);
+        if (again !== 'not_ready') return again;
+        snapshot = await readIntent();
+        if (!paymentIntentStillSettling(snapshot)) {
+            return { ok: false, code: 400, message: BOOKING_PAYMENT_UNVERIFIED };
+        }
+    }
+
+    return {
+        ok: false,
+        code: 409,
+        message: BOOKING_PAYMENT_STILL_CONFIRMING,
+        stillSettling: true,
+    };
 };
 
 const captureBookingHold = async ({ payment_intent, charge, customer, expert, groupChat, description }: any): Promise<

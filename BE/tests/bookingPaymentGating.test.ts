@@ -26,6 +26,8 @@ stripeController.checkPaymentIntentAuthorized = async (pi: string, mode: string)
   record("authorized", [pi, mode]);
   return stubs.authorized ? stubs.authorized(pi, mode) : false;
 };
+stripeController.checkPaymentIntentProcessing = async () => false;
+stripeController.readPaymentIntent = async () => null;
 stripeController.checkPaymentIntentSucceeded = async (pi: string, mode: string) => {
   record("succeeded", [pi, mode]);
   return stubs.succeeded ? stubs.succeeded(pi, mode) : false;
@@ -50,7 +52,9 @@ notifications.sendEmailMeetingRequestToExpert = async () => {};
 notifications.sendEmailMeetingRequestToCustomer = async () => {};
 notifications.sendEmailSessionPaidToExpert = async () => {};
 notifications.sendEmailMeetingAcceptance = async () => {};
-notifications.sendNotificationEmail = async () => {};
+notifications.sendNotificationEmail = async (to: string, subject: string) => {
+  record("email", [to, subject]);
+};
 notifications.sendSessionReminderEmail = async () => {};
 paymentController.appendPaymentHistory = async (data: any) => {
   record("appendPaymentHistory", [data]);
@@ -658,6 +662,183 @@ test("orphan recovery matches a 1:1 on the advertised price, not the charged tot
   } finally {
     GroupChat.exists = originalExists;
     SeminarSeatRequest.exists = originalSeatExists;
+    restore();
+  }
+});
+
+const seminarDoc = () => ({
+  _id: CHAT_ID,
+  name: "test booking",
+  type: "seminar",
+  price: 100,
+  status: "active",
+  admin: EXPERT_ID,
+  participants: [EXPERT_ID],
+  start: bookingStart,
+  duration: 30,
+});
+
+const succeededWalletIntent = () => ({
+  id: "pi_booking",
+  status: "succeeded",
+  amount: EXPECTED_CENTS,
+  currency: "usd",
+  latest_charge: { id: "ch_wallet", balance_transaction: "txn_wallet" },
+  metadata: {
+    bookingType: "groupChat",
+    groupChatId: CHAT_ID,
+    userId: STUDENT_ID,
+  },
+});
+
+test("seminar WeChat registration waits out a succeeded redirect that has not settled yet", async () => {
+  resetCalls();
+  const restore = withOneToOneModels();
+  const SeminarSeatRequest = require("../models/SeminarSeatRequest");
+  const originalFindOne = GroupChat.findOne;
+  const originalFind = GroupChat.find;
+  const originalFindById = GroupChat.findById;
+  const originalUpdateMany = GroupChat.updateMany;
+  const originalUserFindOne = User.findOne;
+  const originalHistoryFindOne = PaymentHistory.findOne;
+  const originalCount = SeminarSeatRequest.countDocuments;
+  const originalRead = stripeController.readPaymentIntent;
+  const previousPolls = process.env.BOOKING_SETTLE_POLLS;
+  const previousPollMs = process.env.BOOKING_SETTLE_POLL_MS;
+  process.env.BOOKING_SETTLE_POLLS = "4";
+  process.env.BOOKING_SETTLE_POLL_MS = "0";
+  try {
+    GroupChat.findOne = async () => seminarDoc();
+    GroupChat.find = async () => [];
+    GroupChat.findById = () => ({ populate: () => ({ populate: async () => null }) });
+    GroupChat.updateMany = async () => ({ modifiedCount: 1 });
+    PaymentHistory.findOne = async () => null;
+    User.findOne = () => ({
+      select() { return this; },
+      populate() { return Promise.resolve(studentDoc()); },
+    });
+    SeminarSeatRequest.countDocuments = async () => 0;
+    let reads = 0;
+    stripeController.readPaymentIntent = async () => {
+      reads += 1;
+      return reads < 2
+        ? { status: "requires_action" }
+        : { status: "succeeded" };
+    };
+    let succeededReads = 0;
+    stubs.succeeded = () => {
+      succeededReads += 1;
+      return succeededReads < 2 ? false : succeededWalletIntent();
+    };
+
+    const req: any = {
+      user: { userId: STUDENT_ID },
+      body: { groupChatId: CHAT_ID, payment_intent: "pi_booking" },
+    };
+    const res = createRes();
+    await groupController.registerForSeminar(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body?.success, true);
+    assert.equal(calls.refund, undefined);
+    const subjects = (calls.email || []).map((args: any[]) => String(args[1]));
+    assert.equal(subjects.some((subject) => /couldn't complete your booking/i.test(subject)), false);
+    assert.ok(reads >= 1);
+  } finally {
+    GroupChat.findOne = originalFindOne;
+    GroupChat.find = originalFind;
+    GroupChat.findById = originalFindById;
+    GroupChat.updateMany = originalUpdateMany;
+    User.findOne = originalUserFindOne;
+    PaymentHistory.findOne = originalHistoryFindOne;
+    SeminarSeatRequest.countDocuments = originalCount;
+    stripeController.readPaymentIntent = originalRead;
+    if (previousPolls === undefined) delete process.env.BOOKING_SETTLE_POLLS;
+    else process.env.BOOKING_SETTLE_POLLS = previousPolls;
+    if (previousPollMs === undefined) delete process.env.BOOKING_SETTLE_POLL_MS;
+    else process.env.BOOKING_SETTLE_POLL_MS = previousPollMs;
+    restore();
+  }
+});
+
+test("a WeChat provider decline fails seminar registration immediately and emails the student", async () => {
+  resetCalls();
+  const restore = withOneToOneModels();
+  const originalFindOne = GroupChat.findOne;
+  const originalRead = stripeController.readPaymentIntent;
+  const previousPolls = process.env.BOOKING_SETTLE_POLLS;
+  const previousPollMs = process.env.BOOKING_SETTLE_POLL_MS;
+  process.env.BOOKING_SETTLE_POLLS = "4";
+  process.env.BOOKING_SETTLE_POLL_MS = "0";
+  try {
+    GroupChat.findOne = async () => seminarDoc();
+    let reads = 0;
+    stripeController.readPaymentIntent = async () => {
+      reads += 1;
+      return {
+        status: "requires_payment_method",
+        last_payment_error: { decline_code: "partner_generic_decline" },
+      };
+    };
+    stubs.succeeded = () => false;
+
+    const req: any = {
+      user: { userId: STUDENT_ID },
+      body: { groupChatId: CHAT_ID, payment_intent: "pi_booking" },
+    };
+    const res = createRes();
+    await groupController.registerForSeminar(req, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(reads, 1);
+    const subjects = (calls.email || []).map((args: any[]) => String(args[1]));
+    assert.equal(subjects.some((subject) => /couldn't complete your booking/i.test(subject)), true);
+  } finally {
+    GroupChat.findOne = originalFindOne;
+    stripeController.readPaymentIntent = originalRead;
+    if (previousPolls === undefined) delete process.env.BOOKING_SETTLE_POLLS;
+    else process.env.BOOKING_SETTLE_POLLS = previousPolls;
+    if (previousPollMs === undefined) delete process.env.BOOKING_SETTLE_POLL_MS;
+    else process.env.BOOKING_SETTLE_POLL_MS = previousPollMs;
+    restore();
+  }
+});
+
+test("a second seminar register for the same succeeded WeChat payment does not refund it", async () => {
+  resetCalls();
+  const restore = withOneToOneModels();
+  const SeminarSeatRequest = require("../models/SeminarSeatRequest");
+  const originalFindOne = GroupChat.findOne;
+  const originalFindById = GroupChat.findById;
+  const originalCount = SeminarSeatRequest.countDocuments;
+  const originalExists = PaymentHistory.exists;
+  try {
+    const enrolled = {
+      ...seminarDoc(),
+      participants: [EXPERT_ID, STUDENT_ID],
+    };
+    GroupChat.findOne = async () => enrolled;
+    GroupChat.findOneAndUpdate = async () => null;
+    GroupChat.findById = async () => enrolled;
+    SeminarSeatRequest.countDocuments = async () => 0;
+    PaymentHistory.exists = async (query: any) => query?.paymentIntent === "pi_booking";
+    stubs.succeeded = () => succeededWalletIntent();
+
+    const req: any = {
+      user: { userId: STUDENT_ID },
+      body: { groupChatId: CHAT_ID, payment_intent: "pi_booking" },
+    };
+    const res = createRes();
+    await groupController.registerForSeminar(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body?.alreadyRegistered, true);
+    assert.equal(calls.refund, undefined);
+  } finally {
+    GroupChat.findOne = originalFindOne;
+    GroupChat.findById = originalFindById;
+    SeminarSeatRequest.countDocuments = originalCount;
+    PaymentHistory.exists = originalExists;
     restore();
   }
 });
