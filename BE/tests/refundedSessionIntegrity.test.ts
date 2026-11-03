@@ -35,7 +35,7 @@ stripeController.cancelPaymentIntent = async (pi: string, mode: string) => {
 };
 stripeController.refundPaymentIntent = async (pi: string, amount: any, mode: string) => {
   record("refund", [pi, amount, mode]);
-  return { payment_intent: pi };
+  return { id: `re_${pi}`, payment_intent: pi, amount: typeof amount === "number" ? amount : PRICE_CENTS };
 };
 stripeController.checkPaymentIntentProcessing = async () => false;
 stripeController.sendBookingReceiptAndConfirmation = async () => {};
@@ -148,6 +148,9 @@ const withModels = ({ chat, historyRows = [] as any[] }: any) => {
     appStateFindOne: AppState.findOne,
     historyExists: PaymentHistory.exists,
     historyFind: PaymentHistory.find,
+    historyFindOne: PaymentHistory.findOne,
+    historyCreate: PaymentHistory.create,
+    historyUpdateOne: PaymentHistory.updateOne,
     historyFindOneAndUpdate: PaymentHistory.findOneAndUpdate,
     seatExists: SeminarSeatRequest.exists,
   };
@@ -171,17 +174,43 @@ const withModels = ({ chat, historyRows = [] as any[] }: any) => {
   });
   AppState.findOne = async () => ({ stripeMode: "test" });
   PaymentHistory.exists = async () => null;
-  PaymentHistory.find = (query: any) => ({
-    select: async () => {
+  PaymentHistory.find = (query: any) => {
+    const rows = () => {
       const wantedTypes = query?.paymentType?.$in || [query?.paymentType];
       return historyRows.filter((row: any) => {
-        if (!wantedTypes.includes(row.paymentType)) return false;
+        if (query?.paymentType?.$ne && row.paymentType === query.paymentType.$ne) return false;
+        if (wantedTypes[0] != null && !wantedTypes.includes(row.paymentType) && !query?.paymentType?.$ne) return false;
         if (query?.paymentIntent && String(query.paymentIntent) !== String(row.paymentIntent)) return false;
         if (query?.groupChat && String(query.groupChat) !== String(row.groupChat)) return false;
         return true;
       });
-    },
-  });
+    };
+    const box: any = {
+      select: () => box,
+      lean: async () => rows(),
+      then: (resolve: any, reject: any) => Promise.resolve(rows()).then(resolve, reject),
+    };
+    box.select = async () => rows();
+    return box;
+  };
+  PaymentHistory.findOne = async (filter: any) => {
+    record("historyFindOne", [filter]);
+    if (filter?.stripeRefundId) return null;
+    return historyRows.find((row: any) => {
+      if (filter?.paymentIntent && String(row.paymentIntent) !== String(filter.paymentIntent)) return false;
+      if (filter?.paymentType?.$ne && row.paymentType === filter.paymentType.$ne) return false;
+      if (filter?.paymentType && !filter.paymentType.$ne && row.paymentType !== filter.paymentType) return false;
+      return true;
+    }) || null;
+  };
+  PaymentHistory.create = async (data: any) => {
+    record("appendPaymentHistory", [data]);
+    return { _id: "refund_row", ...data };
+  };
+  PaymentHistory.updateOne = async (filter: any, update: any) => {
+    record("historyUpdate", [filter, update]);
+    return { modifiedCount: 1 };
+  };
   PaymentHistory.findOneAndUpdate = async () => null;
   SeminarSeatRequest.exists = async () => null;
 
@@ -194,6 +223,9 @@ const withModels = ({ chat, historyRows = [] as any[] }: any) => {
     AppState.findOne = original.appStateFindOne;
     PaymentHistory.exists = original.historyExists;
     PaymentHistory.find = original.historyFind;
+    PaymentHistory.findOne = original.historyFindOne;
+    PaymentHistory.create = original.historyCreate;
+    PaymentHistory.updateOne = original.historyUpdateOne;
     PaymentHistory.findOneAndUpdate = original.historyFindOneAndUpdate;
     SeminarSeatRequest.exists = original.seatExists;
   };
