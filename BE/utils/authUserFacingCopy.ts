@@ -21,6 +21,11 @@ export const AUTH_LOGIN_REQUEST_EXPIRED =
 
 export const AUTH_INCORRECT_CODE = 'Incorrect verification code. Please try again.';
 
+/** Lead-ins for the "You have N attempts left." replies (utils/loginAttempts.ts). */
+export const AUTH_WRONG_PASSWORD_LEAD = 'Incorrect email or password.';
+
+export const AUTH_WRONG_CODE_LEAD = 'Incorrect verification code.';
+
 export const AUTH_CODE_EXPIRED = 'Verification code expired. Please request a new code.';
 
 export const AUTH_PASSWORD_RESET_EXPIRED =
