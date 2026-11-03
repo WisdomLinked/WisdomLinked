@@ -24,6 +24,13 @@ const ManageModal = ({
         getFullUserData(selectedUser?.email)
     }, [selectedUser])
 
+    // The forms compare against these details to decide whether Save has anything to do, so after a
+    // save they must become what was saved — otherwise Save stays enabled as if nothing had been saved.
+    const onSaved = (saved: any) => {
+        if (saved) set_userDetails(saved)
+        updateOneUser(saved)
+    }
+
     return (
         <div className={`absolute top-0 left-0 w-full h-full bg-white bg-opacity-10 backdrop-blur-sm z-10 p-5 sm:p-8`}>
             <div 
@@ -44,13 +51,13 @@ const ManageModal = ({
                             <ExpertProfile 
                                 userDetails={userDetails} 
                                 isFromAdminPanel={true} 
-                                updateOneUser={updateOneUser}
+                                updateOneUser={onSaved}
                             /> :
                             userDetails?.role === 'customer' ?
                                 <CustomerProfile 
                                     userDetails={userDetails} 
                                     isFromAdminPanel={true} 
-                                    updateOneUser={updateOneUser}
+                                    updateOneUser={onSaved}
                                 /> :
                                 <Loading loading={true} />
                     }

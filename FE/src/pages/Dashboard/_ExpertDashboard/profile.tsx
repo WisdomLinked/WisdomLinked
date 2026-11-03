@@ -172,18 +172,8 @@ const ExpertProfile = ({
 
     const loadData = async () => {
         if (!userDetails) return;
-        if (userDetails.image) {
-            const img: any = await profileImageFetch(userDetails.image, "small");
-            if (img) {
-                set_imageSrc(img);
-                set_oldImageSrc(img);
-                set_image(userDetails.image);
-            }
-        } else {
-            set_imageSrc(null);
-            set_oldImageSrc(null);
-            set_image('');
-        }
+        // Fields are filled before the photo is fetched: the fetch takes seconds, and filling them
+        // afterwards wiped anything typed meanwhile and let an older load overwrite a newer one.
         set_name(userDetails.username || '');
         set_title(userDetails.title || '');
         set_description(userDetails.description || '');
@@ -198,6 +188,18 @@ const ExpertProfile = ({
         set_saveAttempted(false);
         set_resume(userDetails.resume || '');
         set_specialNote(userDetails.specialNote || '');
+        if (userDetails.image) {
+            const img: any = await profileImageFetch(userDetails.image, "small");
+            if (img) {
+                set_imageSrc(img);
+                set_oldImageSrc(img);
+                set_image(userDetails.image);
+            }
+        } else {
+            set_imageSrc(null);
+            set_oldImageSrc(null);
+            set_image('');
+        }
     };
 
     const saveSpecialNote = async () => {
@@ -332,9 +334,9 @@ const ExpertProfile = ({
             const res = await doUpdateProfileByAdmin(updates);
             if (res) {
                 set_saveAttempted(false);
+                // The Manage dialog passes the saved details back in, which reloads the form from them.
                 updateOneUser(res.result);
                 notify.success('Profile saved');
-                await loadData();
             } else {
                 notify.error('Could not save profile');
             }
