@@ -21,7 +21,7 @@ stripeController.cancelPaymentIntent = async (pi: string, mode: string) => {
 };
 stripeController.refundPaymentIntent = async (pi: string, amount: any, mode: string) => {
   record("refund", [pi, amount, mode]);
-  return { payment_intent: pi };
+  return { id: `re_${pi}`, payment_intent: pi, amount: typeof amount === "number" ? amount : 10000 };
 };
 stripeController.sendBookingReceiptAndConfirmation = async () => {};
 stripeController.listReconcilableBookingIntents = async () => [];
@@ -75,9 +75,11 @@ const bookingEvent = (type: string, overrides: any = {}) => {
 const withWebhookModels = (opts: any = {}) => {
   const original = {
     historyFind: PaymentHistory.find,
+    historyFindOne: PaymentHistory.findOne,
     historyExists: PaymentHistory.exists,
     historyUpdateOne: PaymentHistory.updateOne,
     historyFindOneAndUpdate: PaymentHistory.findOneAndUpdate,
+    historyCreate: PaymentHistory.create,
     groupExists: GroupChat.exists,
     groupFindById: GroupChat.findById,
     groupUpdateOne: GroupChat.updateOne,
@@ -88,7 +90,21 @@ const withWebhookModels = (opts: any = {}) => {
   PaymentHistory.find = () => ({
     select: async () => opts.pendingRows ?? [],
   });
+  PaymentHistory.findOne = (filter: any) => {
+    record("historyFindOne", [filter]);
+    const row = opts.recorded
+      ? { _id: opts.recorded._id || "ph1", receiptUrl: opts.recorded.receiptUrl || null, ...opts.recorded }
+      : opts.chargeRow || null;
+    return {
+      select: async () => row,
+      then: (resolve: any, reject: any) => Promise.resolve(row).then(resolve, reject),
+    };
+  };
   PaymentHistory.exists = async () => opts.recorded ?? null;
+  PaymentHistory.create = async (data: any) => {
+    record("appendPaymentHistory", [data]);
+    return { _id: "refund_row", ...data };
+  };
   PaymentHistory.updateOne = async (filter: any, update: any) => {
     record("historyUpdateOne", [filter, update]);
     return { modifiedCount: 1 };
@@ -119,9 +135,11 @@ const withWebhookModels = (opts: any = {}) => {
 
   return () => {
     PaymentHistory.find = original.historyFind;
+    PaymentHistory.findOne = original.historyFindOne;
     PaymentHistory.exists = original.historyExists;
     PaymentHistory.updateOne = original.historyUpdateOne;
     PaymentHistory.findOneAndUpdate = original.historyFindOneAndUpdate;
+    PaymentHistory.create = original.historyCreate;
     GroupChat.exists = original.groupExists;
     GroupChat.findById = original.groupFindById;
     GroupChat.updateOne = original.groupUpdateOne;

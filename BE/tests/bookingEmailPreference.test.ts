@@ -21,7 +21,9 @@ const record = (name: string, args: any[]) => {
 
 stripeController.refundPaymentIntent = async (pi: string, amount: any, mode: string) => {
   record("refund", [pi, amount, mode]);
-  return stubs.refund ? stubs.refund(pi, amount, mode) : { payment_intent: pi };
+  return stubs.refund
+    ? stubs.refund(pi, amount, mode)
+    : { id: `re_${pi}`, payment_intent: pi, amount: typeof amount === "number" ? amount : 10000 };
 };
 stripeController.checkPaymentIntentAuthorized = async () =>
   (stubs.authorized ? stubs.authorized() : false);
@@ -119,6 +121,9 @@ const withModels = ({ chat, payment, parked, claimWins = true }: any) => {
     userFindById: User.findById,
     userUpdateOne: User.updateOne,
     historyFindOne: PaymentHistory.findOne,
+    historyFind: PaymentHistory.find,
+    historyCreate: PaymentHistory.create,
+    historyUpdateOne: PaymentHistory.updateOne,
     historyExists: PaymentHistory.exists,
     historyFindByIdAndUpdate: PaymentHistory.findByIdAndUpdate,
     appStateFindOne: AppState.findOne,
@@ -145,8 +150,24 @@ const withModels = ({ chat, payment, parked, claimWins = true }: any) => {
   };
   PaymentHistory.findOne = async (filter: any) => {
     record("historyFindOne", [filter]);
+    if (filter?.stripeRefundId) return null;
     if (filter?.status === "withheld") return parked || null;
-    return payment || null;
+    return payment || parked || null;
+  };
+  PaymentHistory.find = () => {
+    const box: any = {
+      select: () => box,
+      lean: async () => [],
+    };
+    return box;
+  };
+  PaymentHistory.create = async (data: any) => {
+    record("appendPaymentHistory", [data]);
+    return { _id: "refund_row", ...data };
+  };
+  PaymentHistory.updateOne = async (filter: any, update: any) => {
+    record("historyUpdate", [filter?._id || filter, update?.$set || update]);
+    return { modifiedCount: 1 };
   };
   PaymentHistory.exists = async () => null;
   PaymentHistory.findByIdAndUpdate = async (id: any, update: any) => {
@@ -162,6 +183,9 @@ const withModels = ({ chat, payment, parked, claimWins = true }: any) => {
     User.findById = original.userFindById;
     User.updateOne = original.userUpdateOne;
     PaymentHistory.findOne = original.historyFindOne;
+    PaymentHistory.find = original.historyFind;
+    PaymentHistory.create = original.historyCreate;
+    PaymentHistory.updateOne = original.historyUpdateOne;
     PaymentHistory.exists = original.historyExists;
     PaymentHistory.findByIdAndUpdate = original.historyFindByIdAndUpdate;
     AppState.findOne = original.appStateFindOne;

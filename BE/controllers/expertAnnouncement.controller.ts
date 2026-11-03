@@ -314,7 +314,9 @@ const sweepExpiredExpertAnnouncements = async () => {
 };
 
 const loadPublicAnnouncementForExpert = async (expertId: string) => {
-  const doc = await ExpertAnnouncement.findOne({ expertId });
+  const mongoose = require('mongoose');
+  if (!expertId || !mongoose.isValidObjectId(String(expertId))) return null;
+  const doc = await ExpertAnnouncement.findOne({ expertId: String(expertId) });
   if (!doc) return null;
   await expireIfNeeded(doc);
   return toPublicAnnouncement(doc);
