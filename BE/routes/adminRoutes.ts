@@ -138,6 +138,8 @@ router.get("/getChatBotQA", adminAuth, getChatBotQA)
 router.post("/updateChatBotQA/:id", adminAuth, updateChatBotQA)
 router.post("/deleteChatBotQA/:id", adminAuth, deleteChatBotQA)
 router.post("/announcement", adminAuth, setAnnouncement)
+const { adminDeleteAnnouncement } = require('../controllers/expertAnnouncement.controller');
+router.delete('/expert-announcement/:id', adminAuth, adminDeleteAnnouncement)
 router.get("/experts", adminAuth, listAdminFeaturedExperts)
 router.post("/experts/reorder", adminAuth, reorderFeaturedExpert)
 router.post("/experts", adminAuth, createFeaturedExpert)

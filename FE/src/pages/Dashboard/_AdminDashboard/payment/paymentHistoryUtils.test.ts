@@ -3,37 +3,30 @@ import {
   countActiveFilters,
   EMPTY_FILTERS,
   formatAmount,
-  formatAmountTotals,
+  formatPaymentStatusTotals,
   historySearchFromState,
   lastPageIndex,
   parseHistorySearch,
   shortPaymentIntent,
-  sumAmountsByCurrency,
 } from './paymentHistoryUtils';
 
 describe('paymentHistoryUtils', () => {
-  it('formats amount with currency', () => {
+  it('formats amount with currency and thousands separators', () => {
     expect(formatAmount(10000, 'usd')).toBe('100.00 USD');
+    expect(formatAmount(546987, 'usd')).toBe('5,469.87 USD');
   });
 
-  it('sums amounts by currency for a table footer', () => {
+  it('formats paid/failed/refunded totals across currencies', () => {
     expect(
-      sumAmountsByCurrency([
-        { amount: 5150, currency: 'usd' },
-        { amount: 1030, currency: 'usd' },
-        { amount: 2000, currency: 'cad' },
-        { amount: undefined, currency: 'usd' },
-      ]),
-    ).toEqual([
-      { cents: 2000, currency: 'CAD' },
-      { cents: 6180, currency: 'USD' },
-    ]);
-    expect(
-      formatAmountTotals([
-        { amount: 5150, currency: 'usd' },
-        { amount: 1030, currency: 'usd' },
-      ]),
-    ).toBe('61.80 USD');
+      formatPaymentStatusTotals({
+        paid: [
+          { currency: 'CAD', cents: 2000 },
+          { currency: 'USD', cents: 10000 },
+        ],
+        failed: [{ currency: 'USD', cents: 3000 }],
+        refunded: [],
+      }),
+    ).toBe('Total: Paid 20.00 CAD · 100.00 USD, Failed 30.00 USD, Refunded 0.00 USD');
   });
 
   it('shortens payment intents', () => {

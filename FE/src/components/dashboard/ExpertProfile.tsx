@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import {
   ArrowLeft,
@@ -52,6 +52,8 @@ import { detectUserTimeZone, formatPickedSlotWhenDisplay } from '../../utils/sch
 import { SetLoadingStatus } from '../../actions/appActions';
 import { notify } from '../../utils/notify';
 import { paymentBannerMessage, stripeTransactionId } from '../../utils/paymentBanner';
+import ProfileAnnouncement from './announcement/ProfileAnnouncement';
+import type { Announcement } from '../../utils/expertAnnouncement';
 
 type BookingStep = 'pick' | 'review' | 'pay' | 'success';
 
@@ -86,6 +88,7 @@ export default function ExpertProfile({
   paymentReturnSuccess = false,
   onPaymentReturnHandled,
   onGoToCalendar,
+  onMessage,
 }: {
   mentor: ExpertCardProps;
   onBack: () => void;
@@ -97,9 +100,12 @@ export default function ExpertProfile({
   paymentReturnSuccess?: boolean;
   onPaymentReturnHandled?: () => void;
   onGoToCalendar?: () => void;
+  /** Open DM with this expert (student dashboard chat flow). */
+  onMessage?: () => void;
 }) {
   const dispatch = useDispatch();
   const { auth: { userDetails } } = useAppSelector((state: any) => state);
+  const bookingSectionRef = useRef<HTMLElement | null>(null);
 
   const [expertDetails, setExpertDetails] = useState<any>(null);
   const [expertLoading, setExpertLoading] = useState(false);
@@ -713,6 +719,54 @@ export default function ExpertProfile({
     }
   }, [mentor.resume, resumePreviewOpen]);
 
+  const profileAnnouncement = useMemo((): Announcement | null => {
+    const raw = expertDetails?.announcement;
+    if (!raw || typeof raw !== 'object') return null;
+    const row = raw as Partial<Announcement>;
+    if (!row.id || !row.title || !row.message || !row.type || !row.endsAt || !row.publishedAt || !row.status) {
+      return null;
+    }
+    return {
+      id: String(row.id),
+      expertId: String(row.expertId || mentor.id),
+      title: String(row.title),
+      message: String(row.message),
+      type: row.type,
+      link: row.link ? String(row.link) : undefined,
+      visibility: row.visibility || 'profile',
+      feedReview: row.feedReview,
+      publishedAt: String(row.publishedAt),
+      endsAt: String(row.endsAt),
+      status: row.status,
+      createdAt: row.createdAt ? String(row.createdAt) : undefined,
+      updatedAt: row.updatedAt ? String(row.updatedAt) : undefined,
+    };
+  }, [expertDetails?.announcement, mentor.id]);
+
+  const isOwnProfile =
+    String(userDetails?._id || userDetails?.id || '') === String(mentor.id);
+
+  const handleAnnouncementMessage = () => {
+    if (onMessage) {
+      onMessage();
+      return;
+    }
+    // Fallback: stash DM target the same way StudentDashboard.openMentorDm does.
+    localStorage.setItem(
+      'wl_open_dm_userid',
+      JSON.stringify({
+        id: String(mentor.id),
+        title: mentor.name || 'Your mentor',
+        image: null,
+      }),
+    );
+    window.dispatchEvent(new Event('wl-open-chat-nav'));
+  };
+
+  const handleAnnouncementBook = () => {
+    bookingSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <>
     <div className="min-h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF] px-6 py-8 text-[#1A3A4A]">
@@ -727,6 +781,14 @@ export default function ExpertProfile({
         </button>
       </div>
 
+      <ProfileAnnouncement
+        announcement={profileAnnouncement}
+        expertName={mentor.name}
+        isOwnProfile={isOwnProfile}
+        onMessage={handleAnnouncementMessage}
+        onBookSession={handleAnnouncementBook}
+      >
+        {({ pill, strip }) => (
       <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
         <section className="rounded-2xl border border-[#E5E2DB] bg-white p-6">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
@@ -736,9 +798,12 @@ export default function ExpertProfile({
               </div>
 
               <div className="min-w-0 flex-1">
-                <h1 className="font-serif text-[2rem] font-medium text-[#1A3A4A] leading-tight">
-                  {mentor.name}
-                </h1>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="font-serif text-[2rem] font-medium text-[#1A3A4A] leading-tight">
+                    {mentor.name}
+                  </h1>
+                  {pill}
+                </div>
                 <div className="mt-1.5">
                   <span className="inline-flex items-center gap-1 rounded-[3px] border border-slate-200 bg-slate-100 px-2 py-0.5 text-[12px] font-semibold tabular-nums text-slate-700">
                     <Users className="h-3.5 w-3.5" aria-hidden />
@@ -783,6 +848,7 @@ export default function ExpertProfile({
                     </span>
                   ))}
                 </div>
+                {strip ? <div className="mt-4">{strip}</div> : null}
               </div>
             </div>
 
@@ -1141,7 +1207,10 @@ export default function ExpertProfile({
         </section>
 
         <aside className="space-y-6">
-          <section className="rounded-2xl border border-[#E5E2DB] bg-white p-6">
+          <section
+            ref={bookingSectionRef}
+            className="rounded-2xl border border-[#E5E2DB] bg-white p-6"
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="font-serif text-[1.15rem] font-medium text-[#1A3A4A]">
@@ -1321,6 +1390,8 @@ export default function ExpertProfile({
           </section>
         </aside>
       </div>
+        )}
+      </ProfileAnnouncement>
     </div>
     {resumePreviewOpen && hasResume ? (
       <FilePreviewModal

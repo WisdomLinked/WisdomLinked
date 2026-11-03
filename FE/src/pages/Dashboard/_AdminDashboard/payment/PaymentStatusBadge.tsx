@@ -7,6 +7,7 @@ const STATUS_LABELS: Record<string, string> = {
   released: 'Released',
   failed: 'Failed',
   refunded: 'Refunded',
+  partially_refunded: 'Partially refunded',
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -16,6 +17,7 @@ const STATUS_STYLES: Record<string, string> = {
   released: 'bg-slate-500/20 text-slate-600',
   failed: 'bg-red-500/20 text-red-600',
   refunded: 'bg-slate-500/20 text-slate-600',
+  partially_refunded: 'bg-slate-500/20 text-slate-600',
 };
 
 const STATUS_HINTS: Record<string, string> = {
@@ -25,6 +27,7 @@ const STATUS_HINTS: Record<string, string> = {
   released: 'Authorization released. The card was never charged.',
   failed: 'The payment did not go through.',
   refunded: 'Money was captured, then returned to the customer.',
+  partially_refunded: 'Part of this payment was returned; the remainder is still paid.',
 };
 
 export default function PaymentStatusBadge({ status }: { status?: string }) {

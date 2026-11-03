@@ -44,8 +44,8 @@ export default function PaymentFilterBar({
           </button>
         ) : null}
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <div>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-0 flex-[1_1_160px]">
           <label htmlFor="payment-filter-email" className="mb-1 block text-[12px] text-wl-muted">
             Filter by email
           </label>
@@ -57,7 +57,7 @@ export default function PaymentFilterBar({
             placeholder="Exact user email"
           />
         </div>
-        <div data-testid="payment-filter-mode">
+        <div className="min-w-0 flex-[1_1_120px]" data-testid="payment-filter-mode">
           <label htmlFor="payment-filter-mode" className="mb-1 block text-[12px] text-wl-muted">
             Stripe mode
           </label>
@@ -70,7 +70,7 @@ export default function PaymentFilterBar({
             size="filter"
           />
         </div>
-        <div data-testid="payment-filter-status">
+        <div className="min-w-0 flex-[1_1_120px]" data-testid="payment-filter-status">
           <label htmlFor="payment-filter-status" className="mb-1 block text-[12px] text-wl-muted">
             Status
           </label>
@@ -83,7 +83,7 @@ export default function PaymentFilterBar({
             size="filter"
           />
         </div>
-        <div data-testid="payment-filter-type">
+        <div className="min-w-0 flex-[1_1_120px]" data-testid="payment-filter-type">
           <label htmlFor="payment-filter-type" className="mb-1 block text-[12px] text-wl-muted">
             Payment type
           </label>
@@ -96,8 +96,8 @@ export default function PaymentFilterBar({
             size="filter"
           />
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
+        <div className="flex w-full basis-full flex-wrap gap-3 xl:w-auto xl:basis-auto xl:flex-nowrap">
+          <div className="min-w-[160px] flex-1 xl:flex-none">
             <label htmlFor="payment-filter-from" className="mb-1 block text-[12px] text-wl-muted">
               From
             </label>
@@ -106,10 +106,10 @@ export default function PaymentFilterBar({
               type="date"
               value={filters.from}
               onChange={e => onChange({ from: e.target.value })}
-              className={field}
+              className={`${field} min-w-[160px]`}
             />
           </div>
-          <div>
+          <div className="min-w-[160px] flex-1 xl:flex-none">
             <label htmlFor="payment-filter-to" className="mb-1 block text-[12px] text-wl-muted">
               To
             </label>
@@ -118,7 +118,7 @@ export default function PaymentFilterBar({
               type="date"
               value={filters.to}
               onChange={e => onChange({ to: e.target.value })}
-              className={field}
+              className={`${field} min-w-[160px]`}
             />
           </div>
         </div>

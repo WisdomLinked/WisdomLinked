@@ -1449,6 +1449,75 @@ export const doGetExpertPaymentHistory = async () => {
     }
 };
 
+export type ExpertAnnouncementFieldError = { field: string; message: string };
+
+export const getMyExpertAnnouncement = async () => {
+    try {
+        const res = await api.get('expert/announcement');
+        return res.data;
+    } catch (err: unknown) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const createExpertAnnouncement = async (body: Record<string, unknown>) => {
+    try {
+        const res = await api.post('expert/announcement', body);
+        return res.data;
+    } catch (err: unknown) {
+        const ax = err as { response?: { data?: unknown; status?: number } };
+        if (ax.response?.data) return ax.response.data;
+        return checkForAuthorization(err);
+    }
+};
+
+export const updateExpertAnnouncement = async (body: Record<string, unknown>) => {
+    try {
+        const res = await api.patch('expert/announcement', body);
+        return res.data;
+    } catch (err: unknown) {
+        const ax = err as { response?: { data?: unknown; status?: number } };
+        if (ax.response?.data) return ax.response.data;
+        return checkForAuthorization(err);
+    }
+};
+
+export const unpublishExpertAnnouncement = async () => {
+    try {
+        const res = await api.post('expert/announcement/unpublish', {});
+        return res.data;
+    } catch (err: unknown) {
+        const ax = err as { response?: { data?: unknown; status?: number } };
+        if (ax.response?.data) return ax.response.data;
+        return checkForAuthorization(err);
+    }
+};
+
+export const deleteExpertAnnouncement = async () => {
+    try {
+        const res = await api.delete('expert/announcement');
+        return res.data;
+    } catch (err: unknown) {
+        const ax = err as { response?: { data?: unknown; status?: number } };
+        if (ax.response?.data) return ax.response.data;
+        return checkForAuthorization(err);
+    }
+};
+
+export const reportExpertAnnouncement = async (
+    id: string,
+    body: { reason: string; details?: string },
+) => {
+    try {
+        const res = await api.post(`customer/expert-announcement/${id}/report`, body);
+        return res.data;
+    } catch (err: unknown) {
+        const ax = err as { response?: { data?: unknown; status?: number } };
+        if (ax.response?.data) return ax.response.data;
+        return checkForAuthorization(err);
+    }
+};
+
 export const doGetCustomerPaymentHistory = async () => {
     try {
         const res = await api.post("customer/getMyPaymentHistory", {});
