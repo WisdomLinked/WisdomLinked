@@ -12,6 +12,7 @@ const mongoose = require("mongoose");
 const AdminAuditLog = require("../models/AdminAuditLog");
 const AppState = require("../models/AppState");
 const User = require("../models/User");
+const Service = require("../models/Service");
 const {
     AUDIT_STRUCTURE_LIMIT,
     AUDIT_TEXT_LIMIT,
@@ -365,3 +366,79 @@ test("the profile save still succeeds when the audit read fails", async t => {
     assert.equal(res.body.result.city, "Dallas");
     assert.equal(audits.length, 0);
 });
+
+// The Manage dialog sends services by name; User.services holds Service ids.
+const STUDY = { _id: new mongoose.Types.ObjectId("64b000000000000000000001"), value: "Study abroad consultation" };
+const WORK = { _id: new mongoose.Types.ObjectId("64b000000000000000000002"), value: "Work Abroad" };
+const installServices = (t: any) => {
+    const created: any[] = [];
+    t.mock.method(Service, "findOne", async (filter: any) => {
+        const rx: RegExp = filter?.value?.$regex;
+        return [STUDY, WORK].find(s => rx && rx.test(s.value)) || null;
+    });
+    t.mock.method(Service, "findById", async (id: any) => [STUDY, WORK].find(s => String(s._id) === String(id)) || null);
+    t.mock.method(Service, "create", async (doc: any) => {
+        const made = { _id: new mongoose.Types.ObjectId(), ...doc };
+        created.push(made);
+        return made;
+    });
+    return created;
+};
+
+test("an admin edit saves when the user has services, storing them as Service ids", async t => {
+    captureAudits(t);
+    const created = installServices(t);
+    const updates: any[] = [];
+    const user = profileUser();
+    installUserStore(t, user);
+    t.mock.method(User, "findOneAndUpdate", async (_filter: any, u: any) => { updates.push(u); Object.assign(user, u); return user; });
+
+    const res = makeRes();
+    await updateProfileOfUser({
+        user: ADMIN,
+        body: { email: "expert@example.com", title: "Professor", services: ["Study Abroad", "Work Abroad"] },
+    }, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].title, "Professor");
+    assert.deepEqual(updates[0].services.map(String), [String(STUDY._id), String(WORK._id)]);
+    assert.ok(updates[0].services.every((id: any) => mongoose.isValidObjectId(id)));
+    assert.equal(created.length, 0);
+});
+
+test("an admin edit resolves services like the user's own save: unknown names are created, ids are kept", async t => {
+    captureAudits(t);
+    const created = installServices(t);
+    const updates: any[] = [];
+    const user = profileUser();
+    installUserStore(t, user);
+    t.mock.method(User, "findOneAndUpdate", async (_filter: any, u: any) => { updates.push(u); return user; });
+
+    const res = makeRes();
+    await updateProfileOfUser({
+        user: ADMIN,
+        body: { email: "expert@example.com", services: [String(WORK._id), { value: "Research Guidance" }, "", null] },
+    }, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(created.length, 1);
+    assert.equal(created[0].value, "Research Guidance");
+    assert.deepEqual(updates[0].services.map(String), [String(WORK._id), String(created[0]._id)]);
+});
+
+test("an admin edit can clear a user's services", async t => {
+    captureAudits(t);
+    installServices(t);
+    const updates: any[] = [];
+    const user = profileUser();
+    installUserStore(t, user);
+    t.mock.method(User, "findOneAndUpdate", async (_filter: any, u: any) => { updates.push(u); return user; });
+
+    const res = makeRes();
+    await updateProfileOfUser({ user: ADMIN, body: { email: "expert@example.com", services: [] } }, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(updates[0].services, []);
+});
+

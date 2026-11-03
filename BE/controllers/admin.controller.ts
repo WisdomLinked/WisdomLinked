@@ -336,6 +336,29 @@ const getFullUserDataByEmail = async (req, res) => {
     }
 }
 
+/**
+ * The profile forms send services by name ("Study Abroad"), but `User.services` holds Service ids;
+ * writing the names as-is made Mongoose reject the whole update. Resolved the same way the user's own
+ * profile save does (auth.controller `updateProfile`); an id of an existing Service is kept as-is.
+ */
+const serviceIdsForProfile = async (services: any[]): Promise<any[]> => {
+    const ids: any[] = [];
+    for (const entry of services) {
+        const value = String(typeof entry === 'string' ? entry : entry?.value ?? '').trim();
+        if (!value) continue;
+        if (/^[a-f0-9]{24}$/i.test(value)) {
+            const byId = await Service.findById(value);
+            if (byId) {
+                ids.push(byId._id);
+                continue;
+            }
+        }
+        const existing = await Service.findOne({ value: { $regex: new RegExp(`^${escapeRegExp(value)}`, 'i') } });
+        ids.push(existing ? existing._id : (await Service.create({ value, label: value }))._id);
+    }
+    return ids;
+};
+
 const updateProfileOfUser = async (req, res) => {
     try {
         const { email, username, title, description, image, keywords, services, country, state, city, phoneNumber, price, joinPopupBlocked, status, specialNote } = req.body;
@@ -352,8 +375,8 @@ const updateProfileOfUser = async (req, res) => {
         if (image) {
             updates.image = image
         }
-        if (services) {
-            updates.services = services
+        if (Array.isArray(services)) {
+            updates.services = await serviceIdsForProfile(services)
         }
         if (price) {
             updates.price = price

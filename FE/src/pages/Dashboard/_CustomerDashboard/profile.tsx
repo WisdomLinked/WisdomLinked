@@ -95,6 +95,14 @@ const CustomerProfile = ({
     }
 
     const loadData = async () => {
+        // Fields first: the photo fetch takes seconds, and filling them afterwards wiped anything typed meanwhile.
+        set_name(userDetails.username)
+        set_selectedKeywords(toMajorStrings(userDetails))
+        set_selectedServices(userDetails.services)
+        set_country(userDetails.country)
+        set_state(userDetails.state)
+        set_city(userDetails.city)
+        set_phoneNumber(userDetails.phoneNumber)
         if (userDetails.image) {
             const image: any = await profileImageFetch(userDetails.image, "small");
             if (image) {
@@ -107,13 +115,6 @@ const CustomerProfile = ({
             set_originalImageSrc(null);
             set_image(null);
         }
-        set_name(userDetails.username)
-        set_selectedKeywords(toMajorStrings(userDetails))
-        set_selectedServices(userDetails.services)
-        set_country(userDetails.country)
-        set_state(userDetails.state)
-        set_city(userDetails.city)
-        set_phoneNumber(userDetails.phoneNumber)
     }
 
 
