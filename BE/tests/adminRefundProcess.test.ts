@@ -71,6 +71,9 @@ const createRes = () => ({
 const original = {
   findById: PaymentHistory.findById,
   find: PaymentHistory.find,
+  findOne: PaymentHistory.findOne,
+  create: PaymentHistory.create,
+  updateOne: PaymentHistory.updateOne,
   save: PaymentHistory.prototype.save,
   appState: AppState.findOne,
   release: groupController.releaseSeatAfterAdminRefund,
@@ -86,6 +89,12 @@ const setup = () => {
   released.length = 0;
   PaymentHistory.findById = () => ({ populate: async () => chargeDoc() });
   PaymentHistory.find = () => ({ select: () => ({ lean: async () => [] }) });
+  PaymentHistory.findOne = async () => null;
+  PaymentHistory.create = async (data: any) => {
+    order.push(`created ${data.paymentType}`);
+    return { _id: "refund_row", ...data };
+  };
+  PaymentHistory.updateOne = async () => ({ modifiedCount: 1 });
   PaymentHistory.prototype.save = async function save() {
     order.push(`saved ${this.paymentType}`);
     return this;
@@ -101,6 +110,9 @@ const setup = () => {
 const restore = () => {
   PaymentHistory.findById = original.findById;
   PaymentHistory.find = original.find;
+  PaymentHistory.findOne = original.findOne;
+  PaymentHistory.create = original.create;
+  PaymentHistory.updateOne = original.updateOne;
   PaymentHistory.prototype.save = original.save;
   AppState.findOne = original.appState;
   groupController.releaseSeatAfterAdminRefund = original.release;
@@ -123,7 +135,7 @@ test("an admin refund releases the seat after the refund is recorded, and says s
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.status, "SUCCESS");
     assert.equal(res.body.message, "Refund processed successfully. student@test.com was removed from “Weekly Visa Clinic”.");
-    assert.deepEqual(order, ["stripe refund", "saved refund", "release seat"], "the refund row exists before the seat check runs");
+    assert.deepEqual(order, ["stripe refund", "created refund", "release seat"], "the refund row exists before the seat check runs");
     assert.equal(String(released[0].groupChat), CHAT_ID);
     assert.match(sentEmails[0].html, /your seat in <strong>Weekly Visa Clinic<\/strong> has been released/);
     assert.equal(audits[0].meta.seatReleased, true);

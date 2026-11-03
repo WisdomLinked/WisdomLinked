@@ -14,6 +14,7 @@ import {
   UserCheck,
   AlertCircle,
   MessageSquareMore,
+  Megaphone,
   Video,
 } from 'lucide-react';
 
@@ -62,6 +63,7 @@ import ExpertSeminarHub from './Dashboard/_ExpertDashboard/ExpertSeminarHub';
 import ExpertSearch from './Dashboard/_ExpertDashboard/search';
 import ExpertProfile from './Dashboard/_ExpertDashboard/profile';
 import ExpertRevenue from './Dashboard/_ExpertDashboard/ExpertRevenue';
+import ExpertAnnouncement from './Dashboard/_ExpertDashboard/ExpertAnnouncement';
 import ContactAdmin from './Dashboard/_ExpertDashboard/ContactAdmin';
 import StudentChat from '../components/dashboard/StudentChat';
 import LogoutConfirmModal from '../components/dashboard/LogoutConfirmModal';
@@ -808,6 +810,7 @@ export default function ExpertDashboard() {
       { id: 'calendar', label: 'Calendar', icon: Calendar },
       { id: 'join-meeting', label: 'Join Meeting', icon: Video },
       { id: 'availability', label: 'Availability', icon: Clock },
+      { id: 'announcement', label: 'Announcement', icon: Megaphone },
       { id: 'contact-admin', label: 'Contact admin', icon: MessageSquareMore },
       { id: 'revenue', label: 'Revenue', icon: Wallet },
       { id: 'settings', label: 'Settings', icon: Settings },
@@ -1243,11 +1246,13 @@ export default function ExpertDashboard() {
                 ? 'Join meeting'
               : activeItem === 'availability'
                 ? 'Availability'
-                : activeItem === 'profile'
-                  ? 'Profile'
-                  : activeItem === 'settings'
-                    ? 'Settings'
-                    : 'Expert Dashboard';
+                : activeItem === 'announcement'
+                  ? 'Announcement'
+                  : activeItem === 'profile'
+                    ? 'Profile'
+                    : activeItem === 'settings'
+                      ? 'Settings'
+                      : 'Expert Dashboard';
 
   const content =
     activeItem === 'chat' ? (
@@ -1279,6 +1284,10 @@ export default function ExpertDashboard() {
     ) : activeItem === 'availability' ? (
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
         <ExpertAvailability />
+      </div>
+    ) : activeItem === 'announcement' ? (
+      <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">
+        <ExpertAnnouncement />
       </div>
     ) : activeItem === 'profile' ? (
       <div className="h-[calc(100vh-56px)] overflow-y-auto bg-[#F5F3EF]">

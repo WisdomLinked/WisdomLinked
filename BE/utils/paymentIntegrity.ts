@@ -83,8 +83,8 @@ export function checkSeat(input: SeatCheckInput): SeatCheck {
 }
 
 /**
- * An admin refund adds a refund row and leaves the charge 'completed'. A completed charge
- * whose payment intent has any refund row is read as refunded, partial refunds included.
+ * A completed charge whose payment intent has any refund row is read as refunded for
+ * Seats to check. Charges already marked refunded / partially_refunded are left alone.
  */
 export function markRefundedCharges<T extends { status?: string; paymentIntent?: string | null }>(
     rows: T[],
@@ -152,7 +152,8 @@ export function foldChargeRows(rows: Array<{ status?: string }>): Omit<BookingCh
     let hasRefundedCharge = false;
     let hasWithheldCharge = false;
     for (const row of rows || []) {
-        if (row?.status === 'completed') hasCompletedCharge = true;
+        // Partial refunds still leave net paid access; full refunds need review.
+        if (row?.status === 'completed' || row?.status === 'partially_refunded') hasCompletedCharge = true;
         else if (row?.status === 'withheld') hasWithheldCharge = true;
         else if (row?.status === 'pending') hasPendingCharge = true;
         else if (row?.status === 'refunded') hasRefundedCharge = true;

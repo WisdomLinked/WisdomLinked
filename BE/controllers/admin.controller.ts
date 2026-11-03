@@ -197,6 +197,67 @@ const filterUsers = async (req, res) => {
     }
 }
 
+const EMPTY_PAYMENT_STATUS_TOTALS = { paid: [], failed: [], refunded: [] };
+
+/** Sum amounts for paid/failed/refunded under the same match as the list filter. */
+async function paymentStatusTotals(match: Record<string, unknown>) {
+    const rows = await PaymentHistory.aggregate([
+        { $match: match },
+        {
+            $group: {
+                _id: {
+                    bucket: {
+                        $switch: {
+                            branches: [
+                                {
+                                    case: {
+                                        $and: [
+                                            { $ne: ['$paymentType', 'refund'] },
+                                            { $in: ['$status', ['completed', 'refunded', 'partially_refunded']] },
+                                        ],
+                                    },
+                                    then: 'paid',
+                                },
+                                {
+                                    case: {
+                                        $and: [
+                                            { $ne: ['$paymentType', 'refund'] },
+                                            { $eq: ['$status', 'failed'] },
+                                        ],
+                                    },
+                                    then: 'failed',
+                                },
+                                { case: { $eq: ['$paymentType', 'refund'] }, then: 'refunded' },
+                            ],
+                            default: null,
+                        },
+                    },
+                    currency: { $toUpper: { $ifNull: ['$currency', 'usd'] } },
+                },
+                cents: { $sum: { $ifNull: ['$amount', 0] } },
+            },
+        },
+        { $match: { '_id.bucket': { $ne: null } } },
+    ]);
+    const totals: {
+        paid: { currency: string; cents: number }[];
+        failed: { currency: string; cents: number }[];
+        refunded: { currency: string; cents: number }[];
+    } = { paid: [], failed: [], refunded: [] };
+    for (const row of rows) {
+        const bucket = row?._id?.bucket as 'paid' | 'failed' | 'refunded' | null;
+        if (!bucket || !totals[bucket]) continue;
+        totals[bucket].push({
+            currency: String(row._id.currency || 'USD'),
+            cents: Number(row.cents) || 0,
+        });
+    }
+    for (const key of ['paid', 'failed', 'refunded'] as const) {
+        totals[key].sort((a, b) => a.currency.localeCompare(b.currency));
+    }
+    return totals;
+}
+
 const filterPaymentHistories = async (req, res) => {
     try {
         const { email, stripeMode, paymentType, status, dateFrom, dateTo, numPerPage, currentPage, q, bookingScope, excludeRefunds } = req.body
@@ -208,7 +269,8 @@ const filterPaymentHistories = async (req, res) => {
             if (!user) {
                 return res.status(200).json({
                     result: [],
-                    totalCount: 0
+                    totalCount: 0,
+                    totals: EMPTY_PAYMENT_STATUS_TOTALS,
                 })
             }
             query.where({ [user.role]: user._id.toString() })
@@ -293,9 +355,13 @@ const filterPaymentHistories = async (req, res) => {
                 ])
                 : [];
             const byId = new Map(histories.map((row: any) => [String(row._id), row]));
+            const totals = leanRows.length
+                ? await paymentStatusTotals({ _id: { $in: leanRows.map((row: any) => row._id) } })
+                : EMPTY_PAYMENT_STATUS_TOTALS;
             return res.status(200).json({
                 result: pageIds.map((id: any) => byId.get(String(id))).filter(Boolean),
                 totalCount,
+                totals,
             });
         }
 
@@ -311,11 +377,16 @@ const filterPaymentHistories = async (req, res) => {
 
         query.sort({ createdAt: -1 })
         query.skip(pageSize * page).limit(pageSize)
-        const totalCount = await countQuery.exec()
-        const histories = await query.exec();
+        const match = query.getFilter();
+        const [totalCount, histories, totals] = await Promise.all([
+            countQuery.exec(),
+            query.exec(),
+            paymentStatusTotals(match),
+        ]);
         return res.status(200).json({
             result: histories,
-            totalCount: totalCount
+            totalCount: totalCount,
+            totals,
         })
     } catch (err) {
         console.log(err)
@@ -1800,7 +1871,8 @@ const getPaymentIntegrityReport = async (req, res) => {
             for (const studentId of students) {
                 const ownCharges = rowsByPair.get(`${String(booking._id)}|${studentId}`) || [];
                 const seriesHasCompletedCharge = seriesGroupIds.some((id) =>
-                    (rowsByPair.get(`${id}|${studentId}`) || []).some((row: any) => row?.status === 'completed'),
+                    (rowsByPair.get(`${id}|${studentId}`) || []).some((row: any) =>
+                        row?.status === 'completed' || row?.status === 'partially_refunded'),
                 );
                 const seriesHasRefundedCharge = seriesGroupIds.some((id) =>
                     (rowsByPair.get(`${id}|${studentId}`) || []).some((row: any) => row?.status === 'refunded'),

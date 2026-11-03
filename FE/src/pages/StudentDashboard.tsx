@@ -1662,6 +1662,9 @@ export default function StudentDashboard() {
                   setPaymentReturnSuccess(false);
                   setActiveItem('calendar');
                 }}
+                onMessage={() =>
+                  openMentorDm(String(selectedExpert.id), selectedExpert.name)
+                }
                 onBack={() => {
                   setPaymentReturnSuccess(false);
                   setActiveItem('experts');

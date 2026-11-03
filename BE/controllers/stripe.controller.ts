@@ -538,6 +538,24 @@ const listReconcilableBookingIntents = async (
     }
 };
 
+/** Pull Stripe receipt fields off a PaymentIntent's latest charge. */
+const receiptFieldsFromPaymentIntent = async (paymentIntentId: string, stripeMode: string) => {
+    try {
+        if (!paymentIntentId) return { receiptUrl: null, receiptNumber: null, balanceTransaction: null };
+        const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        const intent = await stripe.paymentIntents.retrieve(String(paymentIntentId), { expand: ['latest_charge'] });
+        const charge = intent?.latest_charge && typeof intent.latest_charge === 'object' ? intent.latest_charge : null;
+        return {
+            receiptUrl: charge?.receipt_url ?? null,
+            receiptNumber: charge?.receipt_number ?? null,
+            balanceTransaction: balanceTransactionId(charge),
+        };
+    } catch (err: any) {
+        console.log('[receiptFieldsFromPaymentIntent]', err?.message);
+        return { receiptUrl: null, receiptNumber: null, balanceTransaction: null };
+    }
+};
+
 const enrichPaymentIntentReceipt = async ({ payment_intent, stripeMode, description, metadata, receiptEmail }) => {
     try {
         if (!payment_intent) return;
@@ -834,6 +852,75 @@ const sendPaymentLinkToUser = async (req, res) => {
     }
 };
 
+/**
+ * Insert refund ledger rows from Stripe refunds; never overwrite the charge amount/date.
+ * Idempotent via stripeRefundId unique key.
+ */
+const applyStripeRefundWebhook = async (event: any) => {
+    const { recordChargeRefund } = require('../utils/paymentRefundLedger');
+    const obj = event?.data?.object;
+    if (!obj) return { skipped: 'empty' };
+
+    const refunds: any[] = [];
+    let receiptUrl: string | null = null;
+    let paymentIntentId = '';
+
+    if (event.type === 'charge.refunded') {
+        paymentIntentId = String(
+            typeof obj.payment_intent === 'string' ? obj.payment_intent : obj.payment_intent?.id || '',
+        );
+        receiptUrl = obj.receipt_url || null;
+        const listed = Array.isArray(obj.refunds?.data) ? obj.refunds.data : [];
+        if (listed.length) {
+            refunds.push(...listed);
+        } else if (obj.id) {
+            const mode = obj.livemode ? 'live' : 'test';
+            const stripe = require('stripe')(mode === 'live' ? process.env.STRIPE_SECRET_KEY_LIVE : process.env.STRIPE_SECRET_KEY_TEST);
+            const page = await stripe.refunds.list({ charge: obj.id, limit: 100 });
+            refunds.push(...(page?.data || []));
+        }
+    } else {
+        // refund.created / refund.updated
+        if (obj.status && obj.status !== 'succeeded' && obj.status !== 'pending') {
+            return { skipped: `refund status ${obj.status}` };
+        }
+        paymentIntentId = String(
+            typeof obj.payment_intent === 'string' ? obj.payment_intent : obj.payment_intent?.id || '',
+        );
+        refunds.push(obj);
+    }
+
+    if (!paymentIntentId || !refunds.length) return { skipped: 'missing pi or refunds' };
+
+    const chargeRow = await PaymentHistory.findOne({
+        paymentIntent: paymentIntentId,
+        paymentType: { $ne: 'refund' },
+    });
+    if (!chargeRow) return { skipped: 'no charge row', paymentIntentId };
+
+    let created = 0;
+    let chargeStatus = chargeRow.status;
+    for (const refund of refunds) {
+        if (!refund?.id) continue;
+        if (refund.status && refund.status !== 'succeeded' && event.type !== 'charge.refunded') continue;
+        const result = await recordChargeRefund({
+            charge: chargeRow,
+            refund: {
+                id: refund.id,
+                amount: refund.amount,
+                currency: refund.currency,
+                payment_intent: paymentIntentId,
+            },
+            receiptUrl,
+        });
+        if (result.created) created += 1;
+        chargeStatus = result.chargeStatus;
+        // Refresh local receipt flag so later loop iterations don't re-set.
+        if (receiptUrl && !chargeRow.receiptUrl) chargeRow.receiptUrl = receiptUrl;
+    }
+    return { created, chargeStatus, paymentIntentId, refundCount: refunds.length };
+};
+
 const handleStripeWebhook = async (req, res) => {
     const stripe = require('stripe');
     const PaymentHistory = require("../models/PaymentHistory");
@@ -883,6 +970,18 @@ const handleStripeWebhook = async (req, res) => {
             console.error('[handleStripeWebhook] booking event failed', event.id, bookingErr?.message);
             if (claimId) await StripeWebhookEvent.deleteOne({ _id: claimId }).catch(() => null);
             return res.status(500).json({ status: 'FAILED', message: safeErrorMessage(bookingErr) });
+        }
+
+        try {
+            if (event.type === 'refund.created' || event.type === 'refund.updated' || event.type === 'charge.refunded') {
+                const outcome = await applyStripeRefundWebhook(event);
+                console.log('[handleStripeWebhook]', event.type, event.id, outcome);
+                return res.json({ received: true, outcome });
+            }
+        } catch (refundErr: any) {
+            console.error('[handleStripeWebhook] refund event failed', event.id, refundErr?.message);
+            if (claimId) await StripeWebhookEvent.deleteOne({ _id: claimId }).catch(() => null);
+            return res.status(500).json({ status: 'FAILED', message: safeErrorMessage(refundErr) });
         }
 
         if (event.type === 'checkout.session.completed') {
@@ -947,16 +1046,22 @@ const handleStripeWebhook = async (req, res) => {
                             description: metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`
                         }).sort({ createdAt: -1 });
 
+                        const retryMode = metadata.stripeMode || currentStripeMode;
+                        const retryReceipt = await receiptFieldsFromPaymentIntent(session.payment_intent, retryMode);
+
                         if (pendingPayment) {
                             // Update the existing pending payment record
                             pendingPayment.status = 'completed';
                             pendingPayment.paymentIntent = session.payment_intent;
+                            if (retryReceipt.receiptUrl) pendingPayment.receiptUrl = retryReceipt.receiptUrl;
+                            if (retryReceipt.receiptNumber) pendingPayment.receiptNumber = retryReceipt.receiptNumber;
+                            if (retryReceipt.balanceTransaction) pendingPayment.balanceTransaction = retryReceipt.balanceTransaction;
                             await pendingPayment.save();
                             console.log('Updated pending payment to completed:', pendingPayment._id);
 
                             // Update payment intent to send receipt
                             try {
-                                const stripe = require('stripe')(metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+                                const stripe = require('stripe')(retryMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
                                 await stripe.paymentIntents.update(session.payment_intent, {
                                     receipt_email: authorizedEmail,
                                 });
@@ -968,13 +1073,16 @@ const handleStripeWebhook = async (req, res) => {
                         } else {
                             // Fallback: create new payment record if pending not found
                             const newPaymentHistory = new PaymentHistory({
-                                stripeMode: metadata.stripeMode || currentStripeMode,
+                                stripeMode: retryMode,
                                 paymentType: 'retry',
                                 amount: session.amount_total,
                                 currency: session.currency,
                                 description: metadata.customDescription || `Retry payment for: ${originalPaymentHistory.description}`,
                                 paymentIntent: session.payment_intent,
                                 status: 'completed',
+                                receiptUrl: retryReceipt.receiptUrl,
+                                receiptNumber: retryReceipt.receiptNumber,
+                                balanceTransaction: retryReceipt.balanceTransaction,
                                 customer: originalPaymentHistory.customer,
                                 expert: originalPaymentHistory.expert,
                                 pendingAppointmentToGroup: originalPaymentHistory.pendingAppointmentToGroup,
@@ -987,7 +1095,7 @@ const handleStripeWebhook = async (req, res) => {
 
                             // Update payment intent to send receipt
                             try {
-                                const stripe = require('stripe')(metadata.stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+                                const stripe = require('stripe')(retryMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
                                 await stripe.paymentIntents.update(session.payment_intent, {
                                     receipt_email: authorizedEmail,
                                 });
@@ -1031,8 +1139,15 @@ const handleStripeWebhook = async (req, res) => {
 
                     if (pendingAdHocPayment) {
                         // Update the existing pending payment record
+                        const adhocReceipt = await receiptFieldsFromPaymentIntent(
+                            session.payment_intent,
+                            pendingAdHocPayment.stripeMode || metadata.stripeMode || currentStripeMode,
+                        );
                         pendingAdHocPayment.status = 'completed';
                         pendingAdHocPayment.paymentIntent = session.payment_intent;
+                        if (adhocReceipt.receiptUrl) pendingAdHocPayment.receiptUrl = adhocReceipt.receiptUrl;
+                        if (adhocReceipt.receiptNumber) pendingAdHocPayment.receiptNumber = adhocReceipt.receiptNumber;
+                        if (adhocReceipt.balanceTransaction) pendingAdHocPayment.balanceTransaction = adhocReceipt.balanceTransaction;
                         await pendingAdHocPayment.save();
                         console.log('Updated pending ad-hoc payment to completed:', pendingAdHocPayment._id);
 
@@ -1200,24 +1315,26 @@ const processRefund = async (req, res) => {
 
         const isFullRefund = alreadyRefundedCents + refundAmountCents >= originalCents;
 
-        // Create a refund record. Leave the original charge status as completed so
-        // revenue history shows Completed +$X and Refunded −$X on the same PI.
-        const refundHistory = new PaymentHistory({
-            stripeMode: currentStripeMode,
-            paymentType: 'refund',
-            amount: refundAmountCents,
-            currency: paymentHistory.currency,
+        // Insert a refund ledger row keyed by Stripe refund id; keep the charge amount/date.
+        const { recordChargeRefund } = require('../utils/paymentRefundLedger');
+        let receiptUrl = paymentHistory.receiptUrl || null;
+        try {
+            if (!receiptUrl && paymentHistory.paymentIntent) {
+                const stripe = require('stripe')(currentStripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+                const intent = await stripe.paymentIntents.retrieve(String(paymentHistory.paymentIntent), { expand: ['latest_charge'] });
+                const chargeObj = intent?.latest_charge && typeof intent.latest_charge === 'object' ? intent.latest_charge : null;
+                if (chargeObj?.receipt_url) receiptUrl = chargeObj.receipt_url;
+            }
+        } catch (receiptErr: any) {
+            console.log('[processRefund] receipt lookup failed', receiptErr?.message);
+        }
+        const { refundRow: refundHistory } = await recordChargeRefund({
+            charge: paymentHistory,
+            refund: refundResult,
+            amountCents: refundAmountCents,
             description: `Refund: ${refundReason}`,
-            paymentIntent: refundResult.payment_intent,
-            status: isFullRefund ? 'refunded' : 'completed',
-            customer: paymentHistory.customer,
-            expert: paymentHistory.expert,
-            pendingAppointmentToGroup: paymentHistory.pendingAppointmentToGroup,
-            groupChat: paymentHistory.groupChat,
-            event: paymentHistory.event,
+            receiptUrl,
         });
-
-        await refundHistory.save();
 
         // Every automatic refund takes the seat back with the money; this one has to as well.
         let seatRelease: any = { released: false };

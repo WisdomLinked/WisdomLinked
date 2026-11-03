@@ -170,6 +170,10 @@ mongoose
         sweepOrphanedBookingIntents();
         setInterval(sweepOrphanedBookingIntents, 15 * 60 * 1000);
 
+        const { sweepExpiredExpertAnnouncements } = require('./controllers/expertAnnouncement.controller');
+        sweepExpiredExpertAnnouncements();
+        setInterval(sweepExpiredExpertAnnouncements, 15 * 60 * 1000);
+
         // One backend container per environment. Staging and production each
         // write search/${NODE_ENV}/catalog.txt and do not share this timer.
         const { rebuildSearchCatalog } = require('./services/searchCatalogExport');

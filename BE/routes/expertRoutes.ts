@@ -106,4 +106,18 @@ router.post("/filterSeminars", expertAuth(false), filterSeminars);
 
 router.get("/followers", expertAuth(false), getMyFollowers);
 
+const {
+    getMyAnnouncement,
+    createAnnouncement,
+    updateAnnouncement,
+    unpublishAnnouncement,
+    deleteAnnouncement,
+} = require('../controllers/expertAnnouncement.controller');
+
+router.get('/announcement', expertAuth(false), getMyAnnouncement);
+router.post('/announcement', expertAuth(false), createAnnouncement);
+router.patch('/announcement', expertAuth(false), updateAnnouncement);
+router.post('/announcement/unpublish', expertAuth(false), unpublishAnnouncement);
+router.delete('/announcement', expertAuth(false), deleteAnnouncement);
+
 module.exports = router;
