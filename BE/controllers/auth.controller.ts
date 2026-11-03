@@ -60,8 +60,12 @@ import {
     AUTH_PROFILE_PHOTO_UPLOAD_FAILED,
     AUTH_OAUTH_PASSWORD_RESET_UNAVAILABLE,
     AUTH_EMAIL_NOT_FOUND,
+    AUTH_WRONG_PASSWORD_LEAD,
+    AUTH_WRONG_CODE_LEAD,
 } from '../utils/authUserFacingCopy';
 import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
+import { attemptsLeft as attemptsLeftAfter, attemptsLeftSentence, lockedMessage, shouldLock } from '../utils/loginAttempts';
+const { claimLoginAttempt, clearLoginFailures, lockLoginStep, loginLockRemainingMs } = require('../services/loginThrottle');
 const {
     gateSignupAgreement,
     assertPendingSignupCanCreateAccount,
@@ -570,25 +574,51 @@ const checkVerificationStatus = async (req: Request, res: Response) => {
     }
 };
 
+/** A sign-in step refused because it is locked; `lockedForSeconds` lets the page count down. */
+const loginLockedReply = (res: Response, kind: 'password' | 'otp', remainingMs: number) =>
+    res.status(200).json({
+        status: 'FAIL',
+        error: lockedMessage(kind, remainingMs),
+        attemptsLeft: 0,
+        lockedStep: kind,
+        lockedForSeconds: Math.ceil(remainingMs / 1000),
+    });
+
+/** Replies to a wrong password or code (try number `attemptNo`): the tries left, or the lock the last one starts. */
+const loginFailureReply = async (res: Response, email: unknown, kind: 'password' | 'otp', attemptNo: number | null) => {
+    if (attemptNo === null) {
+        return res.status(200).json({ status: 'FAIL', error: kind === 'password' ? AUTH_INVALID_CREDENTIALS : AUTH_INCORRECT_CODE });
+    }
+    if (shouldLock(attemptNo)) return loginLockedReply(res, kind, await lockLoginStep(email, kind));
+    const left = attemptsLeftAfter(attemptNo);
+    const lead = kind === 'password' ? AUTH_WRONG_PASSWORD_LEAD : AUTH_WRONG_CODE_LEAD;
+    return res.status(200).json({ status: 'FAIL', error: `${lead} ${attemptsLeftSentence(left)}`, attemptsLeft: left });
+};
+
 const login = async (req: Request, res: Response) => {
     try {
         const { email, password } = req.body;
 
-        const user = await getFullUserData(email)
-        if (!user) {
-            return res.status(200).json({ status: 'FAIL', error: AUTH_INVALID_CREDENTIALS });
-        }
+        // A locked code step must not be escaped by asking for a fresh code.
+        const codeLockMs = await loginLockRemainingMs(email, 'otp');
+        if (codeLockMs > 0) return loginLockedReply(res, 'otp', codeLockMs);
 
-        if (!user.password) {
+        const user = await getFullUserData(email)
+
+        if (user && !user.password) {
             const provider = user.oauthProvider ? (user.oauthProvider.charAt(0).toUpperCase() + user.oauthProvider.slice(1)) : 'Google';
             return res.status(200).json({ status: 'FAIL', error: AUTH_OAUTH_LOGIN_REQUIRED(provider) });
         }
 
-        const passwordsMatch = await bcrypt.compare(String(password), user.password);
+        // Counted whether or not the account exists, so the replies never reveal which emails are real.
+        const passwordTry = await claimLoginAttempt(email, 'password');
+        if (!passwordTry.allowed) return loginLockedReply(res, 'password', passwordTry.lockedForMs);
 
-        if (!passwordsMatch) {
-            return res.status(200).json({ status: 'FAIL', error: AUTH_INVALID_CREDENTIALS });
+        if (!user || !(await bcrypt.compare(String(password), user.password))) {
+            return loginFailureReply(res, email, 'password', passwordTry.attemptNo);
         }
+
+        await clearLoginFailures(email, ['password']);
 
         if (user.status === 'blocked') {
             return res.status(200).json({ status: 'FAIL', error: AUTH_USER_BLOCKED });
@@ -603,10 +633,6 @@ const login = async (req: Request, res: Response) => {
                 code,
             })
         } else {
-            const lockError = checkRateLimit(loginRequest);
-            if (lockError) {
-                return res.status(200).json({ status: 'FAIL', error: lockError });
-            }
             loginRequest.code = code
             loginRequest.validUntil = new Date(Date.now() + 60 * 1000)
         }
@@ -645,22 +671,22 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
     try {
 
         const { email, password, code } = req.body;
+
+        const codeLockMs = await loginLockRemainingMs(email, 'otp');
+        if (codeLockMs > 0) return loginLockedReply(res, 'otp', codeLockMs);
+
         const loginRequest = await PendingLogin.findOne({ email: { $regex: new RegExp(`^${utils.escapeRegExp(email)}$`, 'i') } })
         if (!loginRequest) {
             return res.status(200).json({ status: 'FAIL', error: AUTH_LOGIN_REQUEST_EXPIRED });
         }
 
-        const lockError = checkRateLimit(loginRequest);
-        if (lockError) {
-            return res.status(200).json({ status: 'FAIL', error: lockError });
-        }
+        const codeTry = await claimLoginAttempt(email, 'otp');
+        if (!codeTry.allowed) return loginLockedReply(res, 'otp', codeTry.lockedForMs);
 
         if (loginRequest.code !== Number(code)) {
-            await handleFailedAttempt(loginRequest);
-            return res.status(200).json({ status: 'FAIL', error: AUTH_INCORRECT_CODE });
+            return loginFailureReply(res, email, 'otp', codeTry.attemptNo);
         }
-
-        await resetFailedAttempts(loginRequest);
+        await clearLoginFailures(email, ['otp']);
 
         if ((new Date() >= loginRequest.validUntil)) {
             return res.status(200).json({ status: 'FAIL', error: AUTH_CODE_EXPIRED });
@@ -682,6 +708,7 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
         }
 
         await loginRequest.deleteOne()
+        await clearLoginFailures(email);
 
         // Timezone is captured once at signup (register/verifyRegistration); logins never touch it.
 
@@ -862,6 +889,8 @@ const confirmPasswordResetByCode = async (req: Request, res: Response) => {
         await user.save()
 
         await request.deleteOne()
+        // A new password ends any sign-in lock, as on most sites: the owner just proved control of the inbox.
+        await clearLoginFailures(email);
 
         return res.status(200).json({
             status: "SUCCESS"

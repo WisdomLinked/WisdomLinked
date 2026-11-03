@@ -13,6 +13,14 @@ import { actionTypes } from '../actions/types';
 import SocialAuthBlock from '../components/SocialAuthBlock';
 import SignupModal from '../components/SignupModal';
 import BrandWordmark from '../components/BrandWordmark';
+import {
+    type LoginLock,
+    type LoginStep,
+    isAttemptLimitReply,
+    lockCountdownText,
+    lockFromReply,
+    lockRemainingMs,
+} from '../utils/loginAttemptNotice';
 
 const BTN_PRIMARY_STYLE = { background: 'linear-gradient(135deg, #234C6A 0%, #456882 100%)' };
 const FOCUS_RING = 'focus:ring-2 focus:ring-[#234C6A]/60 focus:border-[#234C6A]';
@@ -47,6 +55,13 @@ export default function WLLogin() {
     const [resending, setResending] = useState(false);
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Attempt limits: "N attempts left" under the field, and a countdown while a step is locked.
+    const [attemptNotice, setAttemptNotice] = useState<{ step: LoginStep; text: string } | null>(null);
+    const [lock, setLock] = useState<LoginLock | null>(null);
+    const [nowMs, setNowMs] = useState(() => Date.now());
+    const lockMs = lockRemainingMs(lock, form.email, nowMs);
+    const isLocked = lockMs > 0;
 
     const inputBase = `w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 ${FOCUS_RING}`;
     const inputNormal = `${inputBase} border-slate-200`;
@@ -102,6 +117,36 @@ export default function WLLogin() {
         }
         return response?.error || 'Invalid credentials. Please try again.';
     };
+
+    /** Shows a wrong-try or locked reply under the field; false when the reply is something else. */
+    const applyAttemptLimitReply = (response: any, step: LoginStep) => {
+        const now = Date.now();
+        const nextLock = lockFromReply(response, form.email, now);
+        if (nextLock) {
+            setLock(nextLock);
+            setNowMs(now);
+            setAttemptNotice(null);
+            return true;
+        }
+        if (isAttemptLimitReply(response)) {
+            setAttemptNotice({ step, text: String(response.error || '') });
+            return true;
+        }
+        return false;
+    };
+
+    useEffect(() => {
+        if (!lock) return;
+        const tick = setInterval(() => {
+            const now = Date.now();
+            setNowMs(now);
+            if (now >= lock.untilMs) {
+                setLock(null);
+                setAttemptNotice(null);
+            }
+        }, 1000);
+        return () => clearInterval(tick);
+    }, [lock]);
 
     const bootstrapCsrf = async () => {
         setCsrfBootstrapping(true);
@@ -168,8 +213,10 @@ export default function WLLogin() {
     const handleSubmit = async () => {
         const e = validate();
         if (Object.keys(e).length > 0) { setErrors(e); return; }
+        if (isLocked) return;
         setSubmitting(true);
         clearFormAlert();
+        setAttemptNotice(null);
         try {
             const response = await requestLogin();
             if (response === false) {
@@ -183,7 +230,7 @@ export default function WLLogin() {
                 setTimeout(() => inputRefs.current[0]?.focus(), 400);
             } else if (isCsrfFailResponse(response)) {
                 await handleCsrfFailure();
-            } else {
+            } else if (!applyAttemptLimitReply(response, 'password')) {
                 setFormError(formatLoginError(response));
             }
         } catch (err) {
@@ -250,8 +297,10 @@ export default function WLLogin() {
     }, [otpDigits]);
 
     const confirmCode = async (code: string) => {
+        if (isLocked) return;
         setVerifying(true);
         clearFormAlert();
+        setAttemptNotice(null);
         try {
             const response: any = await requestConfirmLogin(code);
             if (response === false) {
@@ -280,7 +329,9 @@ export default function WLLogin() {
             } else if (isCsrfFailResponse(response)) {
                 await handleCsrfFailure();
             } else {
-                setFormError(formatLoginError(response) || 'Verification failed. Please try again.');
+                if (!applyAttemptLimitReply(response, 'otp')) {
+                    setFormError(formatLoginError(response) || 'Verification failed. Please try again.');
+                }
                 setOtpDigits(['', '', '', '', '', '']);
                 setTimeout(() => inputRefs.current[0]?.focus(), 100);
             }
@@ -294,6 +345,7 @@ export default function WLLogin() {
     const handleResend = async () => {
         setResending(true);
         clearFormAlert();
+        setAttemptNotice(null);
         try {
             const response: any = await requestLogin();
             if (response === false) {
@@ -307,7 +359,7 @@ export default function WLLogin() {
                 setTimeout(() => inputRefs.current[0]?.focus(), 100);
             } else if (isCsrfFailResponse(response)) {
                 await handleCsrfFailure();
-            } else {
+            } else if (!applyAttemptLimitReply(response, 'otp')) {
                 setFormError(formatLoginError(response) || 'Failed to resend code.');
             }
         } catch {
@@ -320,7 +372,21 @@ export default function WLLogin() {
         setCodeSent(false);
         setOtpDigits(['', '', '', '', '', '']);
         clearFormAlert();
+        setAttemptNotice(null);
         if (timerRef.current) clearInterval(timerRef.current);
+    };
+
+    const attemptLimitText = (step: LoginStep) =>
+        isLocked && lock ? lockCountdownText(lock.step, lockMs) : attemptNotice?.step === step ? attemptNotice.text : '';
+
+    const renderAttemptLimitText = (step: LoginStep) => {
+        const text = attemptLimitText(step);
+        if (!text) return null;
+        return (
+            <p role="alert" data-testid={`login-attempts-${step}`} className="mt-1.5 text-xs font-medium text-rose-600 flex items-start gap-1">
+                <AlertCircle size={12} className="mt-px shrink-0" />{text}
+            </p>
+        );
     };
 
     return (
@@ -407,7 +473,7 @@ export default function WLLogin() {
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-600 mb-1.5"><span className="flex items-center gap-1.5"><Mail size={12} /> Email</span></label>
                                         <input type="email" placeholder="you@example.com" value={form.email}
-                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, email: e.target.value })); setErrors(er => ({ ...er, email: '' })); }}
+                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, email: e.target.value })); setErrors(er => ({ ...er, email: '' })); setAttemptNotice(null); }}
                                             onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleSubmit()}
                                             className={errors.email ? inputError : inputNormal} />
                                         {errors.email && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.email}</p>}
@@ -424,14 +490,15 @@ export default function WLLogin() {
                                             </button>
                                         </div>
                                         {errors.password && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.password}</p>}
+                                        {renderAttemptLimitText('password')}
                                     </div>
                                 </div>
                                 <div className="flex justify-end mt-2">
                                     <button type="button" onClick={() => navigate('/forgotpassword')} className="text-xs font-semibold hover:underline" style={{ color: '#234C6A' }}>Forgot password?</button>
                                 </div>
-                                <button onClick={handleSubmit} disabled={submitting || csrfBootstrapping || !csrfReady}
+                                <button onClick={handleSubmit} disabled={submitting || csrfBootstrapping || !csrfReady || isLocked}
                                     className="mt-4 w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl text-sm font-semibold text-white shadow-lg transition-all duration-200 disabled:opacity-70"
-                                    style={submitting || csrfBootstrapping || !csrfReady ? { background: '#9AA6B2' } : BTN_PRIMARY_STYLE}>
+                                    style={submitting || csrfBootstrapping || !csrfReady || isLocked ? { background: '#9AA6B2' } : BTN_PRIMARY_STYLE}>
                                     {submitting ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Signing in...</>) : csrfBootstrapping ? (<><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>Preparing...</>) : 'Sign in'}
                                 </button>
                                 {!csrfReady && !csrfBootstrapping && (
@@ -481,11 +548,12 @@ export default function WLLogin() {
                                             onChange={e => handleOtpChange(i, e.target.value)}
                                             onKeyDown={e => handleOtpKeyDown(i, e)}
                                             className={`otp-box ${digit ? 'filled' : ''}`}
-                                            disabled={verifying}
+                                            disabled={verifying || isLocked}
                                             autoComplete="one-time-code"
                                         />
                                     ))}
                                 </div>
+                                <div className="flex justify-center -mt-2 mb-2">{renderAttemptLimitText('otp')}</div>
 
                                 {/* Timer & Status */}
                                 {verifying ? (
@@ -509,7 +577,7 @@ export default function WLLogin() {
                                 {/* Resend */}
                                 <button
                                     onClick={handleResend}
-                                    disabled={resending || (timeRemaining > 0 && timeRemaining > 45)}
+                                    disabled={resending || isLocked || (timeRemaining > 0 && timeRemaining > 45)}
                                     className="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                     <RefreshCw size={14} className={resending ? 'animate-spin' : ''} />

@@ -1,0 +1,74 @@
+import { describe, expect, it } from 'vitest';
+import {
+  formatCountdown,
+  isAttemptLimitReply,
+  lockCountdownText,
+  lockFromReply,
+  lockRemainingMs,
+} from './loginAttemptNotice';
+
+const NOW = 1_000_000;
+
+describe('isAttemptLimitReply', () => {
+  it('is true for a wrong-try reply carrying the tries left', () => {
+    expect(isAttemptLimitReply({ status: 'FAIL', error: 'x', attemptsLeft: 4 })).toBe(true);
+    expect(isAttemptLimitReply({ status: 'FAIL', error: 'x', attemptsLeft: 0 })).toBe(true);
+  });
+
+  it('is false for other failures, successes and nothing', () => {
+    expect(isAttemptLimitReply({ status: 'FAIL', error: 'Your account is blocked.' })).toBe(false);
+    expect(isAttemptLimitReply({ status: 'FAIL', attemptsLeft: null })).toBe(false);
+    expect(isAttemptLimitReply({ status: 'SUCCESS', attemptsLeft: 4 })).toBe(false);
+    expect(isAttemptLimitReply(false)).toBe(false);
+  });
+});
+
+describe('lockFromReply', () => {
+  it('turns a locked reply into a lock for that email and step', () => {
+    expect(lockFromReply({ status: 'FAIL', lockedForSeconds: 900, lockedStep: 'otp' }, ' A@B.com ', NOW)).toEqual({
+      step: 'otp',
+      untilMs: NOW + 900_000,
+      email: 'a@b.com',
+    });
+  });
+
+  it('treats an unnamed step as the password step', () => {
+    expect(lockFromReply({ status: 'FAIL', lockedForSeconds: 60 }, 'a@b.com', NOW)?.step).toBe('password');
+  });
+
+  it('ignores replies with no lock', () => {
+    expect(lockFromReply({ status: 'FAIL', attemptsLeft: 3 }, 'a@b.com', NOW)).toBeNull();
+    expect(lockFromReply({ status: 'FAIL', lockedForSeconds: 0 }, 'a@b.com', NOW)).toBeNull();
+    expect(lockFromReply({ status: 'SUCCESS', lockedForSeconds: 60 }, 'a@b.com', NOW)).toBeNull();
+    expect(lockFromReply(undefined, 'a@b.com', NOW)).toBeNull();
+  });
+});
+
+describe('lockRemainingMs', () => {
+  const lock = { step: 'password' as const, untilMs: NOW + 5000, email: 'a@b.com' };
+
+  it('counts down for the locked email, whatever its capitals', () => {
+    expect(lockRemainingMs(lock, 'A@B.com', NOW + 1000)).toBe(4000);
+  });
+
+  it('is zero for another email, after the lock ends, or with no lock', () => {
+    expect(lockRemainingMs(lock, 'other@b.com', NOW)).toBe(0);
+    expect(lockRemainingMs(lock, 'a@b.com', NOW + 5000)).toBe(0);
+    expect(lockRemainingMs(null, 'a@b.com', NOW)).toBe(0);
+  });
+});
+
+describe('countdown text', () => {
+  it('shows minutes and seconds, rounding up so 0:00 never shows while locked', () => {
+    expect(formatCountdown(900_000)).toBe('15:00');
+    expect(formatCountdown(65_000)).toBe('1:05');
+    expect(formatCountdown(8_001)).toBe('0:09');
+    expect(formatCountdown(1)).toBe('0:01');
+    expect(formatCountdown(-5)).toBe('0:00');
+  });
+
+  it('names the step that is locked', () => {
+    expect(lockCountdownText('password', 900_000)).toBe('Too many failed sign-in attempts. Please try again in 15:00.');
+    expect(lockCountdownText('otp', 61_000)).toBe('Too many incorrect codes. Please try again in 1:01.');
+  });
+});

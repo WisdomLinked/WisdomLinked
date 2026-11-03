@@ -7,7 +7,15 @@ import { isCsrfError } from './csrf';
 
 export type ApiFailure = false;
 
-export type AuthApiFailBody = { status: 'FAIL'; error: string; code?: 'USER_BLOCKED' };
+export type AuthApiFailBody = {
+    status: 'FAIL';
+    error: string;
+    code?: 'USER_BLOCKED';
+    /** Sign-in attempt limits (utils/loginAttemptNotice.ts). */
+    attemptsLeft?: number;
+    lockedStep?: 'password' | 'otp';
+    lockedForSeconds?: number;
+};
 
 export type HandleApiFailureOptions = {
     /** When false, caller shows inline FormAlert (auth flows). Default true. */
