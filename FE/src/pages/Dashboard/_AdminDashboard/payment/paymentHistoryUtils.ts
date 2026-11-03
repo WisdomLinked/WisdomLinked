@@ -42,6 +42,7 @@ export const EMPTY_FILTERS: HistoryFilters = {
 export const HISTORY_STATUS_OPTIONS = [
   { value: '', label: 'All' },
   { value: 'completed', label: 'Paid' },
+  { value: 'partially_refunded', label: 'Partially refunded' },
   { value: 'refunded', label: 'Refunded' },
   { value: 'pending', label: 'In Flight' },
   { value: 'withheld', label: 'Withheld' },
@@ -114,28 +115,37 @@ export function countActiveFilters(filters: HistoryFilters): number {
 
 export function formatAmount(amount?: number, currency?: string): string {
   if (typeof amount !== 'number' || Number.isNaN(amount)) return '—';
-  const value = (amount / 100).toFixed(2);
+  const value = (amount / 100).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
   return currency ? `${value} ${String(currency).toUpperCase()}` : value;
 }
 
-export function sumAmountsByCurrency(
-  rows: PaymentHistoryRow[],
-): { cents: number; currency: string }[] {
-  const totals = new Map<string, number>();
-  for (const row of rows) {
-    if (typeof row.amount !== 'number' || !Number.isFinite(row.amount)) continue;
-    const currency = String(row.currency || 'usd').toUpperCase();
-    totals.set(currency, (totals.get(currency) ?? 0) + row.amount);
-  }
-  return [...totals.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([currency, cents]) => ({ cents, currency }));
+export type PaymentStatusAmount = { currency: string; cents: number };
+
+export type PaymentStatusTotals = {
+  paid: PaymentStatusAmount[];
+  failed: PaymentStatusAmount[];
+  refunded: PaymentStatusAmount[];
+};
+
+export const EMPTY_PAYMENT_STATUS_TOTALS: PaymentStatusTotals = {
+  paid: [],
+  failed: [],
+  refunded: [],
+};
+
+function formatStatusBucket(amounts: PaymentStatusAmount[] | undefined): string {
+  if (!amounts?.length) return formatAmount(0, 'usd');
+  return amounts
+    .map(row => formatAmount(row.cents, row.currency))
+    .join(' · ');
 }
 
-export function formatAmountTotals(rows: PaymentHistoryRow[]): string {
-  const totals = sumAmountsByCurrency(rows);
-  if (totals.length === 0) return '—';
-  return totals.map(total => formatAmount(total.cents, total.currency)).join(' · ');
+export function formatPaymentStatusTotals(totals?: PaymentStatusTotals | null): string {
+  const value = totals || EMPTY_PAYMENT_STATUS_TOTALS;
+  return `Total: Paid ${formatStatusBucket(value.paid)}, Failed ${formatStatusBucket(value.failed)}, Refunded ${formatStatusBucket(value.refunded)}`;
 }
 
 export function shortPaymentIntent(id?: string | null): string {
@@ -202,7 +212,11 @@ export function canRetryPayment(item: PaymentHistoryRow): boolean {
 }
 
 export function canRefundPayment(item: PaymentHistoryRow): boolean {
-  return item.status === 'completed' && Boolean(item.paymentIntent) && item.paymentType !== 'refund';
+  return (
+    (item.status === 'completed' || item.status === 'partially_refunded') &&
+    Boolean(item.paymentIntent) &&
+    item.paymentType !== 'refund'
+  );
 }
 
 export function lastPageIndex(totalCount: number, pageSize: number): number {

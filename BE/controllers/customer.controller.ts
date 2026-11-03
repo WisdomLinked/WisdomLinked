@@ -220,8 +220,13 @@ const getExpertById = async (req, res) => {
             return res.status(404).send("Expert not found");
         }
 
+        const { loadPublicAnnouncementForExpert } = require('./expertAnnouncement.controller');
+        const announcement = await loadPublicAnnouncementForExpert(String(id));
+        const result = withFollowInfo(query, followingIdSet(req.user));
+        const payload = typeof result?.toObject === 'function' ? result.toObject() : { ...result };
+
         return res.status(200).json({
-            result: withFollowInfo(query, followingIdSet(req.user))
+            result: { ...payload, announcement: announcement || null },
         })
     }
     catch (err) {

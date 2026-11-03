@@ -27,14 +27,16 @@ import PaymentIntegrityCard from './payment/PaymentIntegrityCard';
 import PaymentSettingRow from './payment/PaymentSettingRow';
 import {
   EMPTY_FILTERS,
+  EMPTY_PAYMENT_STATUS_TOTALS,
   countActiveFilters,
-  formatAmountTotals,
   hasAnyParty,
   historySearchFromState,
   parseHistorySearch,
   type HistoryFilters,
   type PaymentHistoryRow as HistoryRow,
+  type PaymentStatusTotals,
 } from './payment/paymentHistoryUtils';
+import PaymentStatusTotalsBar from './payment/PaymentStatusTotalsBar';
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
 const UTC_MONTHS = [
@@ -96,6 +98,7 @@ const Payment = () => {
   const [integrityReport, setIntegrityReport] = useState<any>(null);
   const [integrityLoading, setIntegrityLoading] = useState(false);
   const [histories, setHistories] = useState<HistoryRow[]>([]);
+  const [statusTotals, setStatusTotals] = useState<PaymentStatusTotals>(EMPTY_PAYMENT_STATUS_TOTALS);
   const [payrollCheques, setPayrollCheques] = useState<PayrollChequeRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -112,8 +115,6 @@ const Payment = () => {
   const showParty = hasAnyParty(histories);
   const genuineEmpty = hasLoaded && !loading && totalCount === 0 && activeCount === 0;
   const filteredEmpty = hasLoaded && !loading && totalCount === 0 && activeCount > 0;
-  const pageAmountTotal = formatAmountTotals(histories);
-  const pageTotalLabel = totalCount > histories.length ? 'Total (this page)' : 'Total';
 
   const parsedRef = useRef(parsed);
   parsedRef.current = parsed;
@@ -175,9 +176,11 @@ const Payment = () => {
     if (response) {
       setHistories(Array.isArray(response.result) ? response.result : []);
       setTotalCount(Number(response.totalCount) || 0);
+      setStatusTotals(response.totals || EMPTY_PAYMENT_STATUS_TOTALS);
     } else {
       setHistories([]);
       setTotalCount(0);
+      setStatusTotals(EMPTY_PAYMENT_STATUS_TOTALS);
     }
     setHasLoaded(true);
     setLoading(false);
@@ -547,10 +550,9 @@ const Payment = () => {
                   ))}
                   <div
                     data-testid="payment-history-total-cards"
-                    className="flex items-center justify-between rounded-xl border border-wl-line bg-wl-brandSoft/60 px-4 py-3 text-sm"
+                    className="rounded-xl border border-wl-line bg-wl-brandSoft/60 px-4 py-4"
                   >
-                    <span className="font-semibold text-wl-ink">{pageTotalLabel}</span>
-                    <span className="tabular-nums font-semibold text-wl-ink">{pageAmountTotal}</span>
+                    <PaymentStatusTotalsBar totals={statusTotals} />
                   </div>
                 </div>
                 <div className="hidden max-h-[640px] overflow-y-auto md:block" data-testid="payment-history-table">
@@ -592,19 +594,9 @@ const Payment = () => {
                     </tbody>
                     <tfoot className="sticky bottom-0 bg-wl-brandSoft text-sm text-wl-ink">
                       <tr data-testid="payment-history-total">
-                        <td className="px-3 py-3 text-right font-semibold" colSpan={2}>
-                          {pageTotalLabel}
+                        <td className="px-3 py-4" colSpan={showParty ? 10 : 9}>
+                          <PaymentStatusTotalsBar totals={statusTotals} />
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap tabular-nums font-semibold">
-                          {pageAmountTotal}
-                        </td>
-                        {showParty ? <td className="px-3 py-3" /> : null}
-                        <td className="px-3 py-3" />
-                        <td className="hidden px-3 py-3 lg:table-cell" />
-                        <td className="px-3 py-3" />
-                        <td className="px-3 py-3" />
-                        <td className="hidden px-3 py-3 lg:table-cell" />
-                        <td className="px-3 py-3" />
                       </tr>
                     </tfoot>
                   </table>

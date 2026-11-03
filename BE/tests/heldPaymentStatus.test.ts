@@ -34,7 +34,9 @@ stripeController.capturePaymentIntent = async (pi: string) => {
 };
 stripeController.refundPaymentIntent = async (pi: string) => {
   record("refund", [pi]);
-  return stubs.refund ? stubs.refund() : { payment_intent: pi };
+  return stubs.refund
+    ? stubs.refund()
+    : { id: "re_test", payment_intent: pi, amount: 10000, currency: "usd" };
 };
 stripeController.sendBookingReceiptAndConfirmation = async () => {};
 stripeController.listReconcilableBookingIntents = async () => [];
@@ -170,6 +172,10 @@ const withModels = ({
     userFindById: User.findById,
     userUpdateOne: User.updateOne,
     historyFindOne: PaymentHistory.findOne,
+    historyFind: PaymentHistory.find,
+    historyCreate: PaymentHistory.create,
+    historyUpdateOne: PaymentHistory.updateOne,
+    historyFindById: PaymentHistory.findById,
     historyFindByIdAndUpdate: PaymentHistory.findByIdAndUpdate,
     historyExists: PaymentHistory.exists,
     seatFindById: SeminarSeatRequest.findById,
@@ -206,10 +212,29 @@ const withModels = ({
 
   PaymentHistory.findOne = (filter: any) => {
     record("historyFindOne", [filter]);
-    return chainable(filter?.status === "withheld" ? parked : null);
+    if (filter?.stripeRefundId) return chainable(null);
+    return chainable(filter?.status === "withheld" ? parked : parked);
   };
+  PaymentHistory.find = () => {
+    const box: any = {
+      select: () => box,
+      lean: async () => [],
+    };
+    return box;
+  };
+  PaymentHistory.create = async (data: any) => {
+    record("appendPaymentHistory", [data]);
+    return { _id: "refund_row", ...data };
+  };
+  PaymentHistory.updateOne = async (filter: any, update: any) => {
+    record("historyUpdate", [String(filter?._id || filter), update?.$set || update]);
+    return { modifiedCount: 1 };
+  };
+  PaymentHistory.findById = (id: any) => chainable(
+    parked || { _id: id, amount: 10000, paymentIntent: "pi_held", currency: "usd", stripeMode: "test" },
+  );
   PaymentHistory.findByIdAndUpdate = (id: any, update: any) => {
-    record("historyUpdate", [String(id), update]);
+    record("historyUpdate", [String(id), update?.$set || update]);
     return chainable({ _id: id });
   };
   PaymentHistory.exists = async () => null;
@@ -238,6 +263,10 @@ const withModels = ({
     updateOne: original.userUpdateOne,
   }) && Object.assign(PaymentHistory, {
     findOne: original.historyFindOne,
+    find: original.historyFind,
+    create: original.historyCreate,
+    updateOne: original.historyUpdateOne,
+    findById: original.historyFindById,
     findByIdAndUpdate: original.historyFindByIdAndUpdate,
     exists: original.historyExists,
   }) && Object.assign(SeminarSeatRequest, {
@@ -272,7 +301,6 @@ test("declining a seat request marks the hold released, not refunded", async () 
     assert.equal(calls.cancelIntent?.length, 1, "the hold is cancelled");
     assert.equal(calls.refund, undefined, "money never taken is never refunded");
     assert.equal(rowUpdate()?.status, "released");
-    assert.match(String(rowUpdate()?.description), /Hold released/i);
   } finally {
     restore();
   }

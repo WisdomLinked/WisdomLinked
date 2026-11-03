@@ -20,6 +20,8 @@ const PaymentHistorySchema = new mongoose.Schema(
         currency: { type: String, default: 'usd' },
         description: { type: String },
         paymentIntent: { type: String },
+        /** Stripe refund id (re_… / pyr_…). Set only on paymentType=refund rows. */
+        stripeRefundId: { type: String },
         receiptUrl: { type: String },
         receiptNumber: { type: String },
         balanceTransaction: { type: String },
@@ -27,7 +29,7 @@ const PaymentHistorySchema = new mongoose.Schema(
         cardLast4: { type: String },
         status: {
             type: String,
-            enum: ['pending', 'completed', 'failed', 'refunded', 'withheld', 'released'],
+            enum: ['pending', 'completed', 'failed', 'refunded', 'partially_refunded', 'withheld', 'released'],
             default: 'completed'
         },
         customer: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -48,6 +50,17 @@ PaymentHistorySchema.index(
         partialFilterExpression: {
             paymentType: 'charge',
             paymentIntent: { $type: 'string' },
+        },
+    }
+);
+
+PaymentHistorySchema.index(
+    { stripeRefundId: 1 },
+    {
+        unique: true,
+        partialFilterExpression: {
+            paymentType: 'refund',
+            stripeRefundId: { $type: 'string' },
         },
     }
 );

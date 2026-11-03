@@ -114,6 +114,34 @@ const ALL_ROWS = [
   },
 ];
 
+function statusTotalsFromRows(rows: typeof ALL_ROWS) {
+  const buckets = {
+    paid: new Map<string, number>(),
+    failed: new Map<string, number>(),
+    refunded: new Map<string, number>(),
+  };
+  const mapStatus = {
+    completed: 'paid',
+    failed: 'failed',
+    refunded: 'refunded',
+  } as const;
+  for (const row of rows) {
+    const bucket = mapStatus[row.status as keyof typeof mapStatus];
+    if (!bucket) continue;
+    const currency = String(row.currency || 'usd').toUpperCase();
+    buckets[bucket].set(currency, (buckets[bucket].get(currency) || 0) + row.amount);
+  }
+  const toArr = (map: Map<string, number>) =>
+    [...map.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([currency, cents]) => ({ currency, cents }));
+  return {
+    paid: toArr(buckets.paid),
+    failed: toArr(buckets.failed),
+    refunded: toArr(buckets.refunded),
+  };
+}
+
 function applyFilter(filter: any) {
   let rows = [...ALL_ROWS];
   if (filter.email) {
@@ -130,7 +158,11 @@ function applyFilter(filter: any) {
   if (filter.dateTo) rows = rows.filter(r => r.createdAt <= `${filter.dateTo}T23:59:59.000Z`);
   const totalCount = rows.length;
   const start = (filter.currentPage || 0) * filter.numPerPage;
-  return { result: rows.slice(start, start + filter.numPerPage), totalCount };
+  return {
+    result: rows.slice(start, start + filter.numPerPage),
+    totalCount,
+    totals: statusTotalsFromRows(rows),
+  };
 }
 
 const integritySummary = {
@@ -201,8 +233,13 @@ describe('Admin Payment Management', () => {
     );
     expect(screen.getByRole('columnheader', { name: 'Description' })).toHaveClass('lg:table-cell');
     const totalRow = screen.getByTestId('payment-history-total');
-    expect(totalRow).toHaveTextContent('Total');
-    expect(totalRow).toHaveTextContent('240.00 USD');
+    expect(totalRow).toHaveTextContent(/Total \(filtered\)/);
+    expect(totalRow).toHaveTextContent(/Paid/);
+    expect(totalRow).toHaveTextContent(/100\.00 USD/);
+    expect(totalRow).toHaveTextContent(/Failed/);
+    expect(totalRow).toHaveTextContent(/30\.00 USD/);
+    expect(totalRow).toHaveTextContent(/Refunded/);
+    expect(totalRow).toHaveTextContent(/20\.00 USD/);
     expect(totalRow).not.toHaveTextContent('this page');
   });
 
@@ -267,8 +304,7 @@ describe('Admin Payment Management', () => {
     chooseSelect('Stripe mode', 'All');
     await screen.findByText(/Showing 5 of 6 histories/);
     const totalRow = screen.getByTestId('payment-history-total');
-    expect(totalRow).toHaveTextContent('Total (this page)');
-    expect(totalRow).toHaveTextContent('280.00 USD');
+    expect(totalRow).toHaveTextContent(/Total \(filtered\).*Paid.*100\.00 USD.*Failed.*30\.00 USD.*Refunded.*20\.00 USD/s);
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
     await waitFor(() => {
@@ -277,6 +313,9 @@ describe('Admin Payment Management', () => {
       );
     });
     expect(await screen.findByText(/Showing 1 of 6 histories/)).toBeInTheDocument();
+    expect(screen.getByTestId('payment-history-total')).toHaveTextContent(
+      /Total \(filtered\).*Paid.*100\.00 USD.*Failed.*30\.00 USD.*Refunded.*20\.00 USD/s,
+    );
     fireEvent.change(screen.getByLabelText('Rows per page'), { target: { value: '25' } });
     await waitFor(() => {
       expect(doFilterPaymentHistories).toHaveBeenCalledWith(

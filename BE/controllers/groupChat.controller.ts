@@ -2944,18 +2944,35 @@ const refundBookingCharge = async ({ payment_intent, charge, name, customer, exp
         console.log('[refundBookingCharge] refund failed', payment_intent, reason);
         return false;
     }
-    await appendPaymentHistory({
-        stripeMode: charge.paidBy,
-        paymentType: 'refund',
-        amount: charge.amount,
-        currency: charge.currency,
-        description: `Refund: ${name || 'Booking'} — ${reason}`,
-        paymentIntent: refund.payment_intent,
-        status: recordStatus || 'refunded',
-        customer: customer?._id?.toString(),
-        expert: expert?._id?.toString(),
-        groupChat: groupChatId,
+    const { recordChargeRefund } = require('../utils/paymentRefundLedger');
+    const chargeRow = await PaymentHistory.findOne({
+        paymentIntent: String(payment_intent),
+        paymentType: { $ne: 'refund' },
     });
+    const description = `Refund: ${name || 'Booking'} — ${reason}`;
+    if (chargeRow) {
+        await recordChargeRefund({
+            charge: chargeRow,
+            refund,
+            description,
+            amountCents: charge.amount,
+            receiptUrl: charge.receiptUrl || null,
+        });
+    } else {
+        await appendPaymentHistory({
+            stripeMode: charge.paidBy,
+            paymentType: 'refund',
+            amount: charge.amount,
+            currency: charge.currency,
+            description,
+            paymentIntent: refund.payment_intent,
+            stripeRefundId: refund.id || undefined,
+            status: recordStatus || 'refunded',
+            customer: customer?._id?.toString(),
+            expert: expert?._id?.toString(),
+            groupChat: groupChatId,
+        });
+    }
     if (customer?.email) {
         await sendSeminarEmail(
             customer.email,
@@ -3598,8 +3615,8 @@ const approveSeminarSeatRequest = async (req, res) => {
             if (!claimedInvalid) {
                 return res.status(409).send("This request has already been decided.");
             }
-            const outcome = await releaseSeatRequestHold(request);
-            await settleSeatRequestPayment(request, outcome, `Hold released — ${rejection.msg}`);
+            const release = await releaseSeatRequestHold(request);
+            await settleSeatRequestPayment(request, release, `Hold released — ${rejection.msg}`);
             return res.status(rejection.code).send(rejection.msg);
         }
 
@@ -4074,46 +4091,83 @@ const paySeminarSeatRequest = async (req, res) => {
     }
 };
 
-const releaseSeatRequestHold = async (request: any) => {
-    if (!request.paymentIntent) return 'released';
-    if (await cancelPaymentIntent(request.paymentIntent, request.stripeMode)) return 'released';
+const releaseSeatRequestHold = async (
+    request: any,
+): Promise<{ outcome: 'released' | 'refunded' | 'stuck'; refund?: any }> => {
+    if (!request.paymentIntent) return { outcome: 'released' };
+    if (await cancelPaymentIntent(request.paymentIntent, request.stripeMode)) return { outcome: 'released' };
 
     if (await checkPaymentIntentSucceeded(request.paymentIntent, request.stripeMode)) {
         const refund = await refundPaymentIntent(request.paymentIntent, null, request.stripeMode);
-        if (refund) return 'refunded';
+        if (refund) return { outcome: 'refunded', refund };
         console.error('[releaseSeatRequestHold] captured payment could not be refunded', request.paymentIntent);
-        return 'stuck';
+        return { outcome: 'stuck' };
     }
     if (await checkPaymentIntentAuthorized(request.paymentIntent, request.stripeMode)) {
         console.error('[releaseSeatRequestHold] hold could not be released', request.paymentIntent);
-        return 'stuck';
+        return { outcome: 'stuck' };
     }
-    return 'released';
+    return { outcome: 'released' };
 };
 
-const releaseParkedHold = async (parked: any): Promise<'released' | 'refunded' | 'stuck'> => {
-    if (!parked?.paymentIntent) return 'released';
-    if (await cancelPaymentIntent(parked.paymentIntent, parked.stripeMode)) return 'released';
+const releaseParkedHold = async (
+    parked: any,
+): Promise<{ outcome: 'released' | 'refunded' | 'stuck'; refund?: any }> => {
+    if (!parked?.paymentIntent) return { outcome: 'released' };
+    if (await cancelPaymentIntent(parked.paymentIntent, parked.stripeMode)) return { outcome: 'released' };
 
     if (await checkPaymentIntentSucceeded(parked.paymentIntent, parked.stripeMode)) {
         const refund = await refundPaymentIntent(parked.paymentIntent, null, parked.stripeMode);
-        if (refund) return 'refunded';
+        if (refund) return { outcome: 'refunded', refund };
         console.error('[releaseParkedHold] captured payment could not be refunded', parked.paymentIntent);
-        return 'stuck';
+        return { outcome: 'stuck' };
     }
     if (await checkPaymentIntentAuthorized(parked.paymentIntent, parked.stripeMode)) {
         console.error('[releaseParkedHold] hold could not be released', parked.paymentIntent);
-        return 'stuck';
+        return { outcome: 'stuck' };
     }
-    return 'released';
+    return { outcome: 'released' };
 };
 
-const settleSeatRequestPayment = async (request: any, outcome: string, note: string) => {
+const recordParkedRefund = async (parked: any, refund: any, description: string) => {
+    const { recordChargeRefund } = require('../utils/paymentRefundLedger');
+    await recordChargeRefund({
+        charge: parked,
+        refund: {
+            id: refund?.id,
+            amount: refund?.amount ?? parked.amount,
+            currency: refund?.currency || parked.currency,
+            payment_intent: refund?.payment_intent || parked.paymentIntent,
+        },
+        description,
+        amountCents: typeof refund?.amount === 'number' ? refund.amount : parked.amount,
+    });
+};
+
+const settleSeatRequestPayment = async (
+    request: any,
+    release: { outcome: 'released' | 'refunded' | 'stuck'; refund?: any },
+    note: string,
+) => {
     if (!request.paymentHistory) return;
-    const update = outcome === 'stuck'
-        ? { status: 'pending', description: `ACTION REQUIRED — hold not released (${note})` }
-        : { status: outcome === 'refunded' ? 'refunded' : 'released', description: note };
-    await PaymentHistory.findByIdAndUpdate(request.paymentHistory, update).catch(() => null);
+    if (release.outcome === 'refunded' && release.refund) {
+        const charge = await PaymentHistory.findById(request.paymentHistory);
+        if (charge) {
+            await recordParkedRefund(charge, release.refund, note).catch(() => null);
+            return;
+        }
+    }
+    if (release.outcome === 'stuck') {
+        await PaymentHistory.findByIdAndUpdate(request.paymentHistory, {
+            status: 'pending',
+            description: `ACTION REQUIRED — hold not released (${note})`,
+        }).catch(() => null);
+        return;
+    }
+    await PaymentHistory.updateOne(
+        { _id: request.paymentHistory },
+        { $set: { status: 'released' } },
+    ).catch(() => null);
 };
 
 const getGroupMemberCandidates = async (req, res) => {
@@ -4368,8 +4422,9 @@ const rejectSeminarSeatRequest = async (req, res) => {
             return res.status(409).send("This request has already been decided.");
         }
 
-        const outcome = await releaseSeatRequestHold(request);
-        await settleSeatRequestPayment(request, outcome, `Hold released — seat request declined: ${groupChat.name}`);
+        const release = await releaseSeatRequestHold(request);
+        await settleSeatRequestPayment(request, release, `Hold released — seat request declined: ${groupChat.name}`);
+        const outcome = release.outcome;
 
         const customer = await User.findById(request.customer.toString());
         const decliningHost = await User.findById(normalizeId(groupChat.admin)).catch(() => null);
@@ -4596,8 +4651,9 @@ const sweepExpiredSeatRequests = async () => {
             if (!claimed) continue;
             expired += 1;
 
-            const outcome = await releaseSeatRequestHold(request);
-            await settleSeatRequestPayment(request, outcome, `Hold released — seat request expired: ${request.groupChat?.name || 'Seminar'}`);
+            const release = await releaseSeatRequestHold(request);
+            await settleSeatRequestPayment(request, release, `Hold released — seat request expired: ${request.groupChat?.name || 'Seminar'}`);
+            const outcome = release.outcome;
 
             const customer = await User.findById(request.customer.toString());
             if (customer?.email) {
@@ -4705,27 +4761,20 @@ const sweepExpiredSessionHolds = async () => {
             expired += 1;
 
             const sessionName = chat.name || '1:1 session';
-            const outcome = await releaseParkedHold(parked);
-            if (outcome === 'refunded') {
-                await appendPaymentHistory({
-                    stripeMode: parked.stripeMode,
-                    amount: parked.amount,
-                    currency: parked.currency,
-                    description: `Refund — session request expired: ${sessionName}`,
-                    customer: parked.customer,
-                    expert: parked.expert,
-                    groupChat: parked.groupChat,
-                    paymentType: 'refund',
-                    paymentIntent: parked.paymentIntent,
-                    status: 'refunded',
-                });
-            }
-            await PaymentHistory.findByIdAndUpdate(parked._id, outcome === 'stuck'
-                ? { status: 'pending', description: `ACTION REQUIRED — hold not released (session request expired: ${sessionName})` }
-                : {
-                    status: outcome === 'refunded' ? 'refunded' : 'released',
-                    description: `Hold released — session request expired: ${sessionName}`,
+            const { outcome, refund } = await releaseParkedHold(parked);
+            if (outcome === 'refunded' && refund) {
+                await recordParkedRefund(parked, refund, `Refund — session request expired: ${sessionName}`);
+            } else if (outcome === 'stuck') {
+                await PaymentHistory.findByIdAndUpdate(parked._id, {
+                    status: 'pending',
+                    description: `ACTION REQUIRED — hold not released (session request expired: ${sessionName})`,
                 }).catch(() => null);
+            } else if (outcome === 'released') {
+                await PaymentHistory.updateOne(
+                    { _id: parked._id },
+                    { $set: { status: 'released' } },
+                ).catch(() => null);
+            }
 
             const customer = await User.findById(String(parked.customer));
             if (customer?.email) {
@@ -4958,7 +5007,7 @@ const sweepPendingSeminarPayments = async () => {
             });
             if (action === 'wait') continue;
 
-            let update: Record<string, any>;
+            let update: Record<string, any> | null = null;
             let preExistingRefund = false;
             if (action === 'settle') {
                 const chargeObj = captured.latest_charge && typeof captured.latest_charge === 'object'
@@ -4981,12 +5030,37 @@ const sweepPendingSeminarPayments = async () => {
                 // Already refunded elsewhere: settle our books quietly rather than
                 // announcing a refund the student was told about long ago.
                 preExistingRefund = !!refund.alreadyRefunded;
-                update = {
-                    status: 'refunded',
+                const { recordChargeRefund } = require('../utils/paymentRefundLedger');
+                await recordChargeRefund({
+                    charge: row,
+                    refund,
                     description: preExistingRefund
                         ? 'Refund — recorded from an existing Stripe refund (reconciled)'
                         : 'Refund — captured without enrollment',
-                };
+                });
+                settled += 1;
+                console.log('[sweepPendingSeminarPayments]', action, row.paymentIntent);
+                if (!preExistingRefund) {
+                    await releaseUncapturedSeatClaim(row.groupChat, row.customer);
+                    const student = await User.findById(String(row.customer));
+                    if (student?.email) {
+                        await sendSeminarEmail(
+                            student.email,
+                            'Unable to complete your booking — payment refunded',
+                            {
+                                heading: 'Your payment has been refunded',
+                                previewText: 'You were not enrolled.',
+                                blocks: [
+                                    emailParagraph('A booking payment did not complete, so it has been refunded in full. You have <strong>not</strong> been enrolled.'),
+                                    emailFacts([['Transaction ID', String(row.paymentIntent)]]),
+                                    emailCallout('The refund will be credited to your original payment method and may take 5–10 business days to appear, depending on your bank.', 'bad'),
+                                    emailParagraph('You are welcome to try again. If you need help, contact the administrator through WisdomLinked.'),
+                                ],
+                            },
+                        );
+                    }
+                }
+                continue;
             } else if (action === 'release') {
                 const cancelled = await cancelPaymentIntent(row.paymentIntent, row.stripeMode);
                 if (!cancelled) {
@@ -5128,6 +5202,7 @@ const sweepOrphanedBookingIntentsForMode = async (stripeMode: 'test' | 'live') =
             if (action === 'record') {
                 const snap = pricingSnapshotFromMetadata(meta);
                 const snapTotal = snapshotChargeCents(meta);
+                const settledIntent = (await checkPaymentIntentSucceeded(intent.id, stripeMode).catch(() => null)) || intent;
                 await appendPaymentHistory({
                     stripeMode,
                     paymentType: 'charge',
@@ -5136,6 +5211,9 @@ const sweepOrphanedBookingIntentsForMode = async (stripeMode: 'test' | 'live') =
                     description: 'Booking payment recovered from Stripe',
                     paymentIntent: intent.id,
                     status: 'completed',
+                    receiptUrl: chargeReceiptUrl(settledIntent),
+                    receiptNumber: chargeReceiptNumber(settledIntent),
+                    balanceTransaction: chargeBalanceTransaction(settledIntent),
                     customer: meta.userId,
                     expert: expertId,
                     groupChat: meta.groupChatId,
@@ -5152,21 +5230,37 @@ const sweepOrphanedBookingIntentsForMode = async (stripeMode: 'test' | 'live') =
                 const preExisting = !!refund.alreadyRefunded;
                 const refundSnap = pricingSnapshotFromMetadata(meta);
                 const refundSnapTotal = snapshotChargeCents(meta);
-                await appendPaymentHistory({
-                    stripeMode,
-                    paymentType: 'refund',
-                    amount: intent.amount,
-                    currency: intent.currency,
-                    description: preExisting
-                        ? 'Refund — recorded from an existing Stripe refund (reconciled)'
-                        : 'Refund — booking never completed (reconciled from Stripe)',
+                const existingCharge = await PaymentHistory.findOne({
                     paymentIntent: intent.id,
-                    status: 'refunded',
-                    customer: meta.userId,
-                    expert: expertId,
-                    groupChat: meta.groupChatId,
-                    ...(refundSnap && refundSnapTotal === intent.amount ? refundSnap : {}),
+                    paymentType: { $ne: 'refund' },
                 });
+                if (existingCharge) {
+                    const { recordChargeRefund } = require('../utils/paymentRefundLedger');
+                    await recordChargeRefund({
+                        charge: existingCharge,
+                        refund,
+                        description: preExisting
+                            ? 'Refund — recorded from an existing Stripe refund (reconciled)'
+                            : 'Refund — booking never completed (reconciled from Stripe)',
+                    });
+                } else {
+                    await appendPaymentHistory({
+                        stripeMode,
+                        paymentType: 'refund',
+                        amount: intent.amount,
+                        currency: intent.currency,
+                        description: preExisting
+                            ? 'Refund — recorded from an existing Stripe refund (reconciled)'
+                            : 'Refund — booking never completed (reconciled from Stripe)',
+                        paymentIntent: intent.id,
+                        stripeRefundId: refund.id || undefined,
+                        status: 'refunded',
+                        customer: meta.userId,
+                        expert: expertId,
+                        groupChat: meta.groupChatId,
+                        ...(refundSnap && refundSnapTotal === intent.amount ? refundSnap : {}),
+                    });
+                }
                 handled += 1;
                 console.log(
                     preExisting
@@ -5350,11 +5444,26 @@ const handleBookingPaymentIntentEvent = async (event: any): Promise<string> => {
         return 'settled_pending';
     }
 
-    const recorded = await PaymentHistory.exists({
+    const existingCharge = await PaymentHistory.findOne({
         paymentIntent: String(intent.id),
         paymentType: 'charge',
-    });
-    if (recorded) return 'already_recorded';
+    }).select('_id receiptUrl');
+    if (existingCharge) {
+        const url = chargeReceiptUrl(settledIntent);
+        if (url && !existingCharge.receiptUrl) {
+            await PaymentHistory.updateOne(
+                { _id: existingCharge._id },
+                {
+                    $set: {
+                        receiptUrl: url,
+                        ...(chargeReceiptNumber(settledIntent) ? { receiptNumber: chargeReceiptNumber(settledIntent) } : {}),
+                        ...(chargeBalanceTransaction(settledIntent) ? { balanceTransaction: chargeBalanceTransaction(settledIntent) } : {}),
+                    },
+                },
+            ).catch(() => null);
+        }
+        return 'already_recorded';
+    }
 
     const heldByRequest = await SeminarSeatRequest.exists({
         paymentIntent: String(intent.id),
@@ -5381,7 +5490,7 @@ const handleBookingPaymentIntentEvent = async (event: any): Promise<string> => {
         ? (await GroupChat.findById(String(meta.groupChatId)).select('admin'))?.admin
         : meta.expertId;
 
-    const capturedCents = capturedAmountCents(intent);
+    const capturedCents = capturedAmountCents(settledIntent);
     const snap = pricingSnapshotFromMetadata(intent.metadata);
     const snapTotal = snap
         ? Number(snap.advertisedCents) + Number(snap.platformFeeCents) + Number(snap.taxCents)
@@ -5390,10 +5499,13 @@ const handleBookingPaymentIntentEvent = async (event: any): Promise<string> => {
         stripeMode,
         paymentType: 'charge',
         amount: capturedCents,
-        currency: intent.currency,
+        currency: settledIntent.currency || intent.currency,
         description: 'Booking payment confirmed by Stripe webhook',
         paymentIntent: String(intent.id),
         status: 'completed',
+        receiptUrl: chargeReceiptUrl(settledIntent),
+        receiptNumber: chargeReceiptNumber(settledIntent),
+        balanceTransaction: chargeBalanceTransaction(settledIntent),
         customer: meta.userId,
         expert: expertId,
         groupChat: meta.groupChatId,
@@ -6211,35 +6323,20 @@ const cancelIndividualAppointment = async (req, res) => {
 
         let refundMessage = '';
         if (parked) {
-            const outcome = await releaseParkedHold(parked);
+            const { outcome, refund } = await releaseParkedHold(parked);
             if (outcome === 'stuck') {
                 await restorePending();
                 return res.status(502).send("We couldn't release the student's payment authorization, so the session was not declined. Please try again or contact support.");
             }
 
-            if (outcome === 'refunded') {
-                await appendPaymentHistory({
-                    stripeMode: parked.stripeMode,
-                    amount: parked.amount,
-                    currency: parked.currency,
-                    description: `Refund — session request declined: ${sessionName}`,
-                    customer: parked.customer,
-                    expert: parked.expert,
-                    groupChat: parked.groupChat,
-                    paymentType: 'refund',
-                    paymentIntent: parked.paymentIntent,
-                    status: 'refunded',
-                });
-                await PaymentHistory.findByIdAndUpdate(parked._id, {
-                    status: 'refunded',
-                    description: `Refund — session request declined: ${sessionName}`,
-                });
+            if (outcome === 'refunded' && refund) {
+                await recordParkedRefund(parked, refund, `Refund — session request declined: ${sessionName}`);
                 refundMessage = ' The payment has been refunded in full.';
             } else {
-                await PaymentHistory.findByIdAndUpdate(parked._id, {
-                    status: 'released',
-                    description: `Hold released — session request declined: ${sessionName}`,
-                });
+                await PaymentHistory.updateOne(
+                    { _id: parked._id },
+                    { $set: { status: 'released' } },
+                );
                 refundMessage = ' The payment authorization has been released.';
             }
 
@@ -6278,20 +6375,13 @@ const cancelIndividualAppointment = async (req, res) => {
                         await restorePending();
                         return res.status(502).send("We couldn't refund the payment, so the session was not cancelled. Please try again or contact support.");
                     }
-                    await appendPaymentHistory({
-                        stripeMode: payment.stripeMode,
-                        amount: refundCents,
-                        currency: payment.currency,
-                        description: payment.description,
-                        customer: payment.customer,
-                        expert: payment.expert,
-                        groupChat: payment.groupChat,
-                        event: payment.event,
-                        paymentType: 'refund',
-                        paymentIntent: refund.payment_intent,
-                        status: 'refunded',
-                    })
-                    await PaymentHistory.findByIdAndUpdate(payment._id, { status: 'refunded' });
+                    const { recordChargeRefund } = require('../utils/paymentRefundLedger');
+                    await recordChargeRefund({
+                        charge: payment,
+                        refund,
+                        amountCents: refundCents,
+                        description: payment.description || 'Refund',
+                    });
                 }
                 refundMessage = copy.responseSuffix;
                 if (student?.email) {
@@ -6470,21 +6560,13 @@ const leftSeminar = async (req, res) => {
                     if (!refund) {
                         return res.status(502).send("We couldn't refund your seminar payment, so you're still enrolled. Please try again or contact support.");
                     }
-                    await appendPaymentHistory({
-                        stripeMode: payment.stripeMode,
-                        amount: refundCents,
-                        currency: payment.currency,
-                        description: payment.description,
-                        customer: payment.customer,
-                        expert: payment.expert,
-                        pendingAppointmentToGroup: payment.pendingAppointmentToGroup,
-                        groupChat: payment.groupChat,
-                        event: payment.event,
-                        paymentType: 'refund',
-                        paymentIntent: refund.payment_intent,
-                        status: 'refunded',
+                    const { recordChargeRefund } = require('../utils/paymentRefundLedger');
+                    await recordChargeRefund({
+                        charge: payment,
+                        refund,
+                        amountCents: refundCents,
+                        description: payment.description || 'Refund',
                     });
-                    await PaymentHistory.findByIdAndUpdate(payment._id, { status: 'refunded' });
                 }
                 refundMessage = copy.responseSuffix.trim() ? ` ${copy.responseSuffix.trim()}` : '';
             }
