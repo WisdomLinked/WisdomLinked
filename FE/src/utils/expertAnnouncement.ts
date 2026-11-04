@@ -120,6 +120,15 @@ export function validateDraft(
   return errors;
 }
 
+export function isHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function getEffectiveStatus(a: Pick<Announcement, 'status' | 'endsAt'>, now: Date): AnnouncementStatus {
   if (a.status === 'live' && new Date(a.endsAt).getTime() <= now.getTime()) return 'expired';
   return a.status;

@@ -5,6 +5,7 @@ import RecommendedForYouCard from './discovery/RecommendedForYouCard';
 import { DiscoveryCardSkeleton } from './discovery/FeedCard';
 import type { DiscoveryExpert, DiscoverySeminar } from '../../utils/studentDiscovery';
 import { DASHBOARD_PAGE_TITLE } from './pageTitle';
+import useDashboardRecommendations from '../../hooks/useDashboardRecommendations';
 
 /** @deprecated Kept for any lingering imports; discovery now uses typed props. */
 export type CarouselItem = {
@@ -36,8 +37,10 @@ export type DiscoverySectionProps = {
   /** True when `recommended` holds popular experts because there are no personal matches. */
   recommendedPopular: boolean;
   onViewExpert: (id: string) => void;
+  onMessageExpert: (expertId: string, expertName: string) => void;
   onOpenSeminar: (id: string) => void;
   onBrowseSeminars: () => void;
+  onFindExperts: () => void;
   onCompleteProfile: () => void;
 };
 
@@ -48,10 +51,23 @@ export default function CarouselSection({
   recommended = [],
   recommendedPopular = false,
   onViewExpert,
+  onMessageExpert,
   onOpenSeminar,
   onBrowseSeminars,
+  onFindExperts,
   onCompleteProfile,
 }: DiscoverySectionProps) {
+  const {
+    items: recommendedItems,
+    popular,
+    error: recommendedError,
+    refetch: refetchRecommended,
+  } = useDashboardRecommendations({
+    experts: recommended,
+    popular: recommendedPopular,
+    enabled: !loading,
+  });
+
   return (
     <section className="mt-6">
       <div className="mb-3 flex items-start justify-between gap-4">
@@ -79,9 +95,13 @@ export default function CarouselSection({
             onBrowseAll={onBrowseSeminars}
           />
           <RecommendedForYouCard
-            items={recommended}
-            popular={recommendedPopular}
+            items={recommendedItems}
+            popular={popular}
+            error={recommendedError}
+            onRetry={refetchRecommended}
             onViewProfile={onViewExpert}
+            onMessageExpert={onMessageExpert}
+            onFindExperts={onFindExperts}
             onUpdateInterests={onCompleteProfile}
           />
         </div>

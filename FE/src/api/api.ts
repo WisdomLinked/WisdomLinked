@@ -1528,6 +1528,16 @@ export const reportExpertAnnouncement = async (
     }
 };
 
+/** Live announcements for the student "Recommended for you" carousel. */
+export const getDashboardAnnouncements = async () => {
+    try {
+        const res = await api.get('customer/announcements/dashboard');
+        return res.data;
+    } catch (err: unknown) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const doGetCustomerPaymentHistory = async () => {
     try {
         const res = await api.post("customer/getMyPaymentHistory", {});

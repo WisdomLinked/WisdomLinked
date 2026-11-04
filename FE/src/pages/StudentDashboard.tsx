@@ -1759,11 +1759,13 @@ export default function StudentDashboard() {
                 recommended={recommendedExperts}
                 recommendedPopular={recommendedPopular}
                 onViewExpert={(id) => void handleDiscoveryExpert(id)}
+                onMessageExpert={(expertId, expertName) => openMentorDm(expertId, expertName)}
                 onOpenSeminar={handleOpenSeminarDiscovery}
                 onBrowseSeminars={() => {
                   setOpenSeminarId(null);
                   setActiveItem('seminars');
                 }}
+                onFindExperts={() => setActiveItem('experts')}
                 onCompleteProfile={() => {
                   setProfileFocusSectionId(null);
                   setActiveItem('profile');

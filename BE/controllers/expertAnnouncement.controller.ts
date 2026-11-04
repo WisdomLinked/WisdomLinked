@@ -322,6 +322,143 @@ const loadPublicAnnouncementForExpert = async (expertId: string) => {
   return toPublicAnnouncement(doc);
 };
 
+/**
+ * Live announcements for the student dashboard "Recommended for you" carousel.
+ * Relevance: experts the student follows or has booked with; if none, experts
+ * that share keywords with the student (field match). Backend only returns
+ * status=live and endsAt > now (and expires stale live rows first).
+ */
+const listDashboardAnnouncements = async (req: any, res: Response) => {
+  try {
+    const mongoose = require('mongoose');
+    const User = require('../models/User');
+    const PaymentHistory = require('../models/PaymentHistory');
+    const studentId = String(req.user?.userId || '');
+    if (!studentId || !mongoose.isValidObjectId(studentId)) {
+      return res.status(401).json({ status: 'FAILED', announcements: [] });
+    }
+
+    const now = new Date();
+    await ExpertAnnouncement.updateMany(
+      { status: 'live', endsAt: { $lte: now } },
+      { $set: { status: 'expired' } },
+    );
+
+    const student = await User.findById(studentId)
+      .select('following keywords customKeywords')
+      .lean();
+    if (!student) {
+      return res.status(200).json({ announcements: [], source: 'none' });
+    }
+
+    const followedIds = (Array.isArray(student.following) ? student.following : [])
+      .map((id: any) => String(id))
+      .filter((id: string) => mongoose.isValidObjectId(id));
+
+    const bookedRows = await PaymentHistory.find({
+      customer: studentId,
+      expert: { $exists: true, $ne: null },
+      paymentType: { $ne: 'refund' },
+    })
+      .select('expert')
+      .limit(200)
+      .lean();
+    const bookedIds = bookedRows
+      .map((row: any) => String(row.expert))
+      .filter((id: string) => mongoose.isValidObjectId(id));
+
+    const relationshipIds = Array.from(new Set([...followedIds, ...bookedIds]));
+    let expertIds = relationshipIds;
+    let source: 'relationship' | 'field' | 'none' = relationshipIds.length
+      ? 'relationship'
+      : 'none';
+
+    if (!expertIds.length) {
+      const keywordIds = [
+        ...(Array.isArray(student.keywords) ? student.keywords : []),
+        ...(Array.isArray(student.customKeywords) ? student.customKeywords : []),
+      ]
+        .map((id: any) => String(id?._id || id))
+        .filter((id: string) => mongoose.isValidObjectId(id));
+
+      if (keywordIds.length) {
+        const matched = await User.find({
+          role: 'expert',
+          status: 'active',
+          keywords: { $in: keywordIds },
+        })
+          .select('_id')
+          .limit(40)
+          .lean();
+        expertIds = matched.map((u: any) => String(u._id));
+        source = expertIds.length ? 'field' : 'none';
+      }
+    }
+
+    if (!expertIds.length) {
+      return res.status(200).json({ announcements: [], source });
+    }
+
+    const objectIds = expertIds.map((id) => new mongoose.Types.ObjectId(id));
+    const docs = await ExpertAnnouncement.find({
+      expertId: { $in: objectIds },
+      status: 'live',
+      endsAt: { $gt: now },
+    })
+      .sort({ publishedAt: -1 })
+      .limit(10)
+      .lean();
+
+    type ExpertLean = {
+      _id: unknown;
+      username?: string;
+      title?: string;
+      description?: string;
+      image?: unknown;
+      keywords?: Array<{ value?: string } | string>;
+    };
+    const expertDocs = (await User.find({ _id: { $in: objectIds } })
+      .select('_id username title description keywords image')
+      .populate('keywords', 'value')
+      .lean()) as ExpertLean[];
+    const expertById = new Map(
+      expertDocs.map((e) => [String(e._id), e]),
+    );
+
+    const announcements = docs
+      .map((doc: any) => {
+        const publicRow = toPublicAnnouncement(doc, now);
+        if (!publicRow) return null;
+        const expert = expertById.get(String(doc.expertId));
+        if (!expert) return null;
+        const firstKeyword = Array.isArray(expert.keywords) ? expert.keywords[0] : null;
+        const fieldFromKeyword =
+          firstKeyword && typeof firstKeyword === 'object'
+            ? String(firstKeyword.value || '')
+            : typeof firstKeyword === 'string'
+              ? firstKeyword
+              : '';
+        const field = fieldFromKeyword || String(expert.description || '').slice(0, 80);
+        return {
+          ...publicRow,
+          expert: {
+            id: String(expert._id),
+            name: String(expert.username || 'Expert'),
+            title: String(expert.title || ''),
+            field,
+            image: expert.image || null,
+          },
+        };
+      })
+      .filter(Boolean);
+
+    return res.status(200).json({ announcements, source });
+  } catch (err) {
+    console.log('[listDashboardAnnouncements]', err);
+    return res.status(500).send(safeErrorMessage(err));
+  }
+};
+
 module.exports = {
   getMyAnnouncement,
   createAnnouncement,
@@ -332,5 +469,6 @@ module.exports = {
   reportAnnouncement,
   sweepExpiredExpertAnnouncements,
   loadPublicAnnouncementForExpert,
+  listDashboardAnnouncements,
   toPublicAnnouncement,
 };

@@ -35,7 +35,11 @@ router.post("/follow/:expertId", customerAuth(false), followExpert);
 router.post("/unfollow/:expertId", customerAuth(false), unfollowExpert);
 router.post("/getMyPaymentHistory", customerAuth(false), sensitiveLimiter, getMyPaymentHistory);
 
-const { reportAnnouncement } = require('../controllers/expertAnnouncement.controller');
+const {
+  reportAnnouncement,
+  listDashboardAnnouncements,
+} = require('../controllers/expertAnnouncement.controller');
+router.get('/announcements/dashboard', customerAuth(false), listDashboardAnnouncements);
 router.post('/expert-announcement/:id/report', customerAuth(false), reportAnnouncement);
 
 module.exports = router;
