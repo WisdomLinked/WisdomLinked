@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, MessageSquare } from 'lucide-react';
 import Avatar from '../../../../components/Avatar';
 import { resolveResumePublicUrl } from '../../../../utils/resumeUrl';
 import UserActionsMenu from './UserActionsMenu';
@@ -43,15 +43,37 @@ function UserIdentity({ user }: { user: AdminUserRow }) {
   );
 }
 
-function UserStatusText({ user }: { user: AdminUserRow }) {
+function UserStatusText({
+  user,
+  onViewBlockReason,
+}: {
+  user: AdminUserRow;
+  onViewBlockReason: (user: AdminUserRow) => void;
+}) {
   const option = userStatusOption(user.status);
   return (
-    <span className={`text-[13px] ${option.className}`}>
-      {option.label}
-      {isLoginLocked(user.loginLock) ? (
-        <span data-testid="user-locked-tag" className="ml-1 text-[11px] font-normal text-rose-600">
-          (locked)
-        </span>
+    <span className="inline-flex items-center gap-1">
+      <span className={`text-[13px] ${option.className}`}>
+        {option.label}
+        {isLoginLocked(user.loginLock) ? (
+          <span data-testid="user-locked-tag" className="ml-1 text-[11px] font-normal text-rose-600">
+            (locked)
+          </span>
+        ) : null}
+      </span>
+      {option.value === 'blocked' ? (
+        <button
+          type="button"
+          aria-label="View reason for blocking"
+          title="View reason for blocking"
+          onClick={e => {
+            e.stopPropagation();
+            onViewBlockReason(user);
+          }}
+          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-wl-muted hover:bg-wl-brandSoft hover:text-wl-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/50"
+        >
+          <MessageSquare size={14} aria-hidden />
+        </button>
       ) : null}
     </span>
   );
@@ -105,11 +127,13 @@ export default function UserListTable({
   onImpersonate,
   onAudit,
   onUnlock,
+  onViewBlockReason,
 }: {
   users: AdminUserRow[];
   emptyMessage: string;
   onStatusChange: (user: AdminUserRow, status: UserStatus) => void;
   onUnlock: (user: AdminUserRow) => void;
+  onViewBlockReason: (user: AdminUserRow) => void;
   onManage: (user: AdminUserRow) => void;
   onImpersonate: (user: AdminUserRow) => void;
   onAudit: (user: AdminUserRow) => void;
@@ -165,7 +189,7 @@ export default function UserListTable({
                 />
               </div>
               <div className="mt-3 pl-11">
-                <UserStatusText user={u} />
+                <UserStatusText user={u} onViewBlockReason={onViewBlockReason} />
               </div>
               {expanded ? (
                 <div id={detailsId} className="mt-3 border-t border-wl-line pt-3">
@@ -232,7 +256,7 @@ export default function UserListTable({
                   </td>
                   <td className={`px-3 py-2 text-sm uppercase ${roleClass(u.role)}`}>{dash(u.role)}</td>
                   <td className="px-3 py-2">
-                    <UserStatusText user={u} />
+                    <UserStatusText user={u} onViewBlockReason={onViewBlockReason} />
                   </td>
                   <td className="px-2 py-2 text-right">
                     <UserActionsMenu

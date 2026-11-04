@@ -7,6 +7,7 @@ vi.mock('../../../../api/api', () => ({
   doFilterUsers: vi.fn(),
   doUpdateProfileByAdmin: vi.fn(),
   doUnlockUserLogin: vi.fn(),
+  doGetUserBlockReason: vi.fn(),
   profileImageFetch: vi.fn(),
   impersonateUser: vi.fn(),
   doGetPendingUsers: vi.fn(async () => []),
@@ -25,11 +26,12 @@ vi.mock('../../../../components/ImpersonationBanner', () => ({ setImpersonationS
 vi.mock('./manageModal', () => ({ default: () => null }));
 vi.mock('./auditModal', () => ({ default: () => null }));
 
-import { doFilterUsers, doUpdateProfileByAdmin } from '../../../../api/api';
+import { doFilterUsers, doGetUserBlockReason, doUpdateProfileByAdmin } from '../../../../api/api';
 import UserMgmt from './index';
 
 const mockedFilter = vi.mocked(doFilterUsers);
 const mockedUpdate = vi.mocked(doUpdateProfileByAdmin);
+const mockedReason = vi.mocked(doGetUserBlockReason);
 
 const ANN = { _id: 'u1', email: 'ann@x.com', username: 'ann', role: 'customer', status: 'active' };
 
@@ -44,6 +46,7 @@ describe('User Management: changing a status', () => {
   beforeEach(() => {
     mockedFilter.mockReset();
     mockedUpdate.mockReset();
+    mockedReason.mockReset();
     mockedFilter.mockResolvedValue({ result: [ANN], totalCount: 1 } as any);
   });
 
@@ -89,6 +92,20 @@ describe('User Management: changing a status', () => {
     expect(screen.getByRole('textbox', { name: /reason for blocking/ })).toHaveValue('Spam');
   });
 
+  it('blocking a user another admin already blocked updates the row and says the reason was not saved', async () => {
+    mockedUpdate.mockResolvedValue({ result: { ...ANN, status: 'blocked' }, alreadyBlocked: true } as any);
+    const actor = userEvent.setup();
+    render(<UserMgmt />);
+    await pickStatus(actor, 'Blocked');
+    await actor.type(screen.getByRole('textbox', { name: /reason for blocking/ }), 'Second reason');
+    await actor.click(screen.getByRole('button', { name: 'Block user' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('already blocked');
+    expect(screen.getAllByRole('button', { name: 'View reason for blocking' })).toHaveLength(2);
+    await actor.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(mockedUpdate).toHaveBeenCalledTimes(1);
+  });
+
   it('a reason typed for one user does not carry over to the next', async () => {
     const actor = userEvent.setup();
     render(<UserMgmt />);
@@ -97,6 +114,39 @@ describe('User Management: changing a status', () => {
     await actor.click(screen.getByRole('button', { name: 'Cancel' }));
     await pickStatus(actor, 'Blocked');
     expect(screen.getByRole('textbox', { name: /reason for blocking/ })).toHaveValue('');
+  });
+
+  it('the icon on a blocked row opens the reason for that user, and closes again', async () => {
+    mockedFilter.mockResolvedValue({ result: [{ ...ANN, status: 'blocked' }], totalCount: 1 } as any);
+    mockedReason.mockResolvedValue({ status: 'SUCCESS', reason: 'Spamming students' } as any);
+    const actor = userEvent.setup();
+    render(<UserMgmt />);
+    await screen.findAllByText('ann@x.com');
+    const icons = screen.getAllByRole('button', { name: 'View reason for blocking' });
+    await actor.click(icons[icons.length - 1]);
+    const dialog = screen.getByRole('dialog', { name: 'Reason for blocking this user' });
+    expect(await within(dialog).findByText('Spamming students')).toBeInTheDocument();
+    expect(mockedReason).toHaveBeenCalledWith('u1');
+    await actor.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(mockedUpdate).not.toHaveBeenCalled();
+  });
+
+  it('the icon appears once a user is blocked, and goes when they are unblocked', async () => {
+    const actor = userEvent.setup();
+    render(<UserMgmt />);
+    await screen.findAllByText('ann@x.com');
+    expect(screen.queryByRole('button', { name: 'View reason for blocking' })).toBeNull();
+
+    mockedUpdate.mockResolvedValueOnce({ result: { ...ANN, status: 'blocked' } } as any);
+    await pickStatus(actor, 'Blocked');
+    await actor.type(screen.getByRole('textbox', { name: /reason for blocking/ }), 'Spam');
+    await actor.click(screen.getByRole('button', { name: 'Block user' }));
+    expect(screen.getAllByRole('button', { name: 'View reason for blocking' })).toHaveLength(2);
+
+    mockedUpdate.mockResolvedValueOnce({ result: ANN } as any);
+    await pickStatus(actor, 'Active');
+    expect(screen.queryByRole('button', { name: 'View reason for blocking' })).toBeNull();
   });
 
   it('In review applies straight away, with no popup and no reason', async () => {

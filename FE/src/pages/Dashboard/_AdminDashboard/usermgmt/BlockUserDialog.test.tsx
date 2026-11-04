@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import BlockUserDialog from './BlockUserDialog';
 
-const setup = (onConfirm = vi.fn(async () => true)) => {
+const setup = (onConfirm: any = vi.fn(async () => 'blocked')) => {
   const onCancel = vi.fn();
   render(<BlockUserDialog user={{ email: 'ann@x.com', username: 'ann' }} onCancel={onCancel} onConfirm={onConfirm} />);
   return { actor: userEvent.setup(), onCancel, onConfirm };
@@ -11,6 +11,15 @@ const setup = (onConfirm = vi.fn(async () => true)) => {
 
 const reasonBox = () => screen.getByRole('textbox');
 const blockButton = () => screen.getByRole('button', { name: 'Block user' });
+
+const pressBackdrop = () => {
+  const now = Date.now();
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(now + 1000);
+  const dialog = screen.getByRole('dialog');
+  fireEvent.mouseDown(dialog);
+  fireEvent.click(dialog);
+  clock.mockRestore();
+};
 
 describe('BlockUserDialog', () => {
   it('asks for the reason, names the user, and starts in the text box', () => {
@@ -27,12 +36,33 @@ describe('BlockUserDialog', () => {
     expect(blockButton().className).not.toMatch(/bg-red-\d/);
   });
 
-  it.each(['', '    ', '\n\n'])('cannot block with the blank reason %j', async text => {
+  it.each(['', '    ', '\n\n', '\u200b\u200b', '\u00a0', '\u200f\u200d'])('cannot block with the blank reason %j', async text => {
     const { onConfirm } = setup();
     fireEvent.change(reasonBox(), { target: { value: text } });
     expect(blockButton()).toBeDisabled();
     fireEvent.click(blockButton());
     expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('an emoji joined with an invisible character still counts as a reason', () => {
+    setup();
+    fireEvent.change(reasonBox(), { target: { value: '\u200d🚫' } });
+    expect(blockButton()).not.toBeDisabled();
+  });
+
+  it('says so when the user was already blocked, and offers only Close', async () => {
+    const onConfirm = vi.fn(async () => 'alreadyBlocked');
+    const { actor, onCancel } = setup(onConfirm);
+    await actor.type(reasonBox(), 'Second reason');
+    await actor.click(blockButton());
+    expect(await screen.findByRole('alert')).toHaveTextContent('already blocked, so this reason was not saved');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Could not block');
+    expect(blockButton()).toBeDisabled();
+    expect(reasonBox()).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    await actor.click(screen.getByRole('button', { name: 'Close' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
   it('sends the reason without its surrounding spaces', async () => {
@@ -55,7 +85,7 @@ describe('BlockUserDialog', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
     await actor.keyboard('{Escape}');
     expect(onCancel).toHaveBeenCalledTimes(2);
-    fireEvent.click(screen.getByRole('dialog'));
+    pressBackdrop();
     expect(onCancel).toHaveBeenCalledTimes(3);
     expect(onConfirm).not.toHaveBeenCalled();
   });
@@ -68,7 +98,7 @@ describe('BlockUserDialog', () => {
   });
 
   it('keeps the typed reason and says so when blocking fails, and can try again', async () => {
-    const onConfirm = vi.fn(async () => false);
+    const onConfirm = vi.fn(async () => 'failed');
     const { actor } = setup(onConfirm);
     await actor.type(reasonBox(), 'Spam');
     await actor.click(blockButton());
@@ -80,8 +110,8 @@ describe('BlockUserDialog', () => {
   });
 
   it('cannot be sent twice or cancelled while saving', async () => {
-    let finish: (blocked: boolean) => void = () => undefined;
-    const onConfirm = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));
+    let finish: (result: string) => void = () => undefined;
+    const onConfirm = vi.fn(() => new Promise<string>(resolve => { finish = resolve; }));
     const { actor, onCancel } = setup(onConfirm);
     await actor.type(reasonBox(), 'Spam');
     await actor.click(blockButton());
@@ -89,9 +119,9 @@ describe('BlockUserDialog', () => {
     fireEvent.click(blockButton());
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('dialog'));
+    pressBackdrop();
     fireEvent.keyDown(reasonBox(), { key: 'Escape' });
     expect(onCancel).not.toHaveBeenCalled();
-    finish(true);
+    finish('blocked');
   });
 });

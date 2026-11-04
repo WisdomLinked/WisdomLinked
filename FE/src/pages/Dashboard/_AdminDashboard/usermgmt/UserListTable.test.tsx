@@ -28,6 +28,7 @@ describe('UserListTable', () => {
         onImpersonate={vi.fn()}
         onAudit={vi.fn()}
         onUnlock={vi.fn()}
+        onViewBlockReason={vi.fn()}
       />,
     );
 
@@ -56,6 +57,7 @@ describe('UserListTable', () => {
         onImpersonate={vi.fn()}
         onAudit={vi.fn()}
         onUnlock={vi.fn()}
+        onViewBlockReason={vi.fn()}
       />,
     );
 
@@ -75,6 +77,7 @@ describe('UserListTable', () => {
         onImpersonate={vi.fn()}
         onAudit={vi.fn()}
         onUnlock={vi.fn()}
+        onViewBlockReason={vi.fn()}
       />,
     );
 
@@ -107,6 +110,7 @@ describe('UserListTable', () => {
         onImpersonate={vi.fn()}
         onAudit={vi.fn()}
         onUnlock={vi.fn()}
+        onViewBlockReason={vi.fn()}
       />,
     );
 
@@ -128,6 +132,7 @@ describe('UserListTable', () => {
         onImpersonate={vi.fn()}
         onAudit={vi.fn()}
         onUnlock={vi.fn()}
+        onViewBlockReason={vi.fn()}
       />,
     );
     const label = { active: 'Active', review: 'In review', blocked: 'Blocked' }[status];
@@ -141,6 +146,67 @@ describe('UserListTable', () => {
     }
   });
 
+  it.each(['active', 'review', undefined])('offers no block reason for a %s user', status => {
+    render(
+      <UserListTable
+        users={[{ ...user, status }]}
+        emptyMessage="None"
+        onStatusChange={vi.fn()}
+        onManage={vi.fn()}
+        onImpersonate={vi.fn()}
+        onAudit={vi.fn()}
+        onUnlock={vi.fn()}
+        onViewBlockReason={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'View reason for blocking' })).toBeNull();
+  });
+
+  it.each([
+    ['mobile card', 0],
+    ['desktop row', 1],
+  ])('opens the reason from the %s without expanding it, and keeps the row closed', async (_where, index) => {
+    const actor = userEvent.setup();
+    const onViewBlockReason = vi.fn();
+    const blocked = { ...user, status: 'blocked' };
+    render(
+      <UserListTable
+        users={[blocked]}
+        emptyMessage="None"
+        onStatusChange={vi.fn()}
+        onManage={vi.fn()}
+        onImpersonate={vi.fn()}
+        onAudit={vi.fn()}
+        onUnlock={vi.fn()}
+        onViewBlockReason={onViewBlockReason}
+      />,
+    );
+    const icons = screen.getAllByRole('button', { name: 'View reason for blocking' });
+    expect(icons).toHaveLength(2);
+    await actor.click(icons[index]);
+    expect(onViewBlockReason).toHaveBeenCalledTimes(1);
+    expect(onViewBlockReason).toHaveBeenCalledWith(blocked);
+    expect(screen.queryByText('555-0100')).toBeNull();
+  });
+
+  it('a blocked and locked user shows both the "(locked)" tag and the reason icon', () => {
+    const lockedUntil = new Date(Date.now() + 10 * 60_000).toISOString();
+    render(
+      <UserListTable
+        users={[{ ...user, status: 'blocked', loginLock: { step: 'password', lockedUntil } }]}
+        emptyMessage="None"
+        onStatusChange={vi.fn()}
+        onManage={vi.fn()}
+        onImpersonate={vi.fn()}
+        onAudit={vi.fn()}
+        onUnlock={vi.fn()}
+        onViewBlockReason={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByTestId('user-locked-tag')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'View reason for blocking' })).toHaveLength(2);
+  });
+
   it('shows no "(locked)" when the lock has run out or there is none', () => {
     render(
       <UserListTable
@@ -151,6 +217,7 @@ describe('UserListTable', () => {
         onImpersonate={vi.fn()}
         onAudit={vi.fn()}
         onUnlock={vi.fn()}
+        onViewBlockReason={vi.fn()}
       />,
     );
     expect(screen.queryByTestId('user-locked-tag')).toBeNull();

@@ -25,7 +25,7 @@ const {
 const { normalizePricingRates } = require("../utils/bookingPrice");
 const { setSeminarApprovalDeadline, setPaymentWindow, setPricingSettings } = require("../controllers/stripe.controller");
 const { publishTerms } = require("../controllers/terms.controller");
-const { updateProfileOfUser } = require("../controllers/admin.controller");
+const { getUserBlockReason, updateProfileOfUser } = require("../controllers/admin.controller");
 
 const ADMIN = { userId: "507f1f77bcf86cd799439011", email: "admin@example.com" };
 
@@ -384,7 +384,7 @@ for (const [from, to, statusReason] of [
     });
 }
 
-for (const statusReason of [undefined, null, "", "    ", 42]) {
+for (const statusReason of [undefined, null, "", "    ", 42, "\u200b\u200b", "\u00a0", "\u200f\u200d "]) {
     test(`blocking with the reason ${JSON.stringify(statusReason)} is refused, changing and recording nothing`, async t => {
         const audits = captureAudits(t);
         const user = profileUser();
@@ -407,6 +407,97 @@ test("the block reason is stored trimmed, cut at 500 characters, and only in the
     assert.equal(audits[0].meta.reason, "x".repeat(500));
     assert.equal(user.statusReason, undefined);
 });
+
+const askBlockReason = async (t: any, entry: any) => {
+    const asked: any = {};
+    t.mock.method(AdminAuditLog, "findOne", (filter: any) => {
+        asked.filter = filter;
+        return {
+            sort(order: any) { asked.sort = order; return this; },
+            lean: async () => entry,
+        };
+    });
+    const res = makeRes();
+    await getUserBlockReason({ user: ADMIN, params: { userId: "64b000000000000000000009" } }, res);
+    return { asked, res };
+};
+
+test("the block reason comes from that user's newest block entry", async t => {
+    const { asked, res } = await askBlockReason(t, { meta: { from: "active", to: "blocked", reason: "Spamming students" } });
+    assert.deepEqual(asked.filter, {
+        action: "user_status_change",
+        targetId: "64b000000000000000000009",
+        "meta.to": "blocked",
+    });
+    assert.deepEqual(asked.sort, { createdAt: -1 });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body, { status: "SUCCESS", reason: "Spamming students" });
+});
+
+for (const [label, entry] of [
+    ["a block from before reasons existed", { meta: { from: "active", to: "blocked" } }],
+    ["no block entry at all", null],
+] as const) {
+    test(`${label} has no block reason`, async t => {
+        const { res } = await askBlockReason(t, entry);
+        assert.equal(res.statusCode, 200);
+        assert.deepEqual(res.body, { status: "SUCCESS", reason: null });
+    });
+}
+
+test("a failed block reason lookup answers with an error, not an empty reason", async t => {
+    t.mock.method(AdminAuditLog, "findOne", () => ({
+        sort() { return this; },
+        lean: async () => { throw new Error("read failed"); },
+    }));
+    const res = makeRes();
+    await getUserBlockReason({ user: ADMIN, params: { userId: "x" } }, res);
+    assert.equal(res.statusCode, 500);
+});
+
+test("an emoji joined with an invisible character still counts as a reason", async t => {
+    const audits = captureAudits(t);
+    installUserStore(t, profileUser());
+    const res = makeRes();
+    await updateProfileOfUser({ user: ADMIN, body: { email: "expert@example.com", status: "blocked", statusReason: "\u200d🚫" } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(audits[0].meta.reason, "\u200d🚫");
+});
+
+test("blocking someone already blocked says so, keeps the first reason and records nothing", async t => {
+    const audits = captureAudits(t);
+    installUserStore(t, { ...profileUser(), status: "blocked" });
+    const res = makeRes();
+    await updateProfileOfUser({ user: ADMIN, body: { email: "expert@example.com", status: "blocked", statusReason: "Second reason" } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.alreadyBlocked, true);
+    assert.equal(res.body.result.status, "blocked");
+    assert.equal(audits.length, 0);
+});
+
+for (const body of [{ status: "blocked", statusReason: "First block" }, { status: "active" }, { city: "Dallas" }]) {
+    test(`${JSON.stringify(body)} on an active user is not reported as already blocked`, async t => {
+        stubEmail(t);
+        captureAudits(t);
+        installUserStore(t, profileUser());
+        const res = makeRes();
+        await updateProfileOfUser({ user: ADMIN, body: { email: "expert@example.com", ...body } }, res);
+        assert.equal(res.statusCode, 200);
+        assert.equal(res.body.alreadyBlocked, undefined);
+    });
+}
+
+for (const body of [{ status: "active" }, { status: "review" }, { city: "Dallas" }]) {
+    test(`${JSON.stringify(body)} on a blocked user is not reported as already blocked`, async t => {
+        stubEmail(t);
+        captureAudits(t);
+        installUserStore(t, { ...profileUser(), status: "blocked" });
+        const res = makeRes();
+        await updateProfileOfUser({ user: ADMIN, body: { email: "expert@example.com", ...body } }, res);
+        assert.equal(res.statusCode, 200);
+        assert.equal(res.body.alreadyBlocked, undefined);
+    });
+}
 
 test("a reason sent with any other status is ignored", async t => {
     const audits = captureAudits(t);

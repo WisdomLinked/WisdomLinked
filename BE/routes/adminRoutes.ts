@@ -44,6 +44,7 @@ const {
     getUserFeedbacks,
     getAllFeedbacks,
     getAuditLogs,
+    getUserBlockReason,
     impersonateUser,
     stopImpersonation,
 } = require("../controllers/admin.controller");
@@ -118,6 +119,7 @@ router.get("/getEventFeedback", adminAuth, getFeedback)
 router.post("/getUserFeedbacks", adminAuth, getUserFeedbacks);
 router.get("/allFeedbacks", adminAuth, getAllFeedbacks);
 router.get("/auditLogs", adminAuth, getAuditLogs);
+router.get("/users/:userId/blockReason", adminAuth, getUserBlockReason);
 router.post("/impersonate", adminAuth, impersonateUser);
 router.post("/stopImpersonation", stopImpersonation);
 router.post("/getContactedUs", adminAuth, getContactedUs);

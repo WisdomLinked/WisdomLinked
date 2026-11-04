@@ -1931,6 +1931,15 @@ export const doUpdateProfileByAdmin = async (updates: any) => {
     }
 };
 
+export const doGetUserBlockReason = async (userId: string) => {
+    try {
+        const res = await api.get(`admin/users/${encodeURIComponent(userId)}/blockReason`);
+        return res.data
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const doUnlockUserLogin = async (email: string) => {
     try {
         const res = await api.post("admin/unlockUserLogin", { email });
