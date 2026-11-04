@@ -17,6 +17,7 @@ const {
 } = require("../controllers/stripe.controller");
 const { 
     filterUsers, 
+    unlockUserLogin,
     getFullUserDataByEmail, 
     updateProfileOfUser, 
     filterPaymentHistories ,
@@ -106,6 +107,7 @@ router.post("/sendAdHocPaymentLink", adminAuth, sendAdHocPaymentLink)
 router.get("/dashboardStats", adminAuth, getDashboardStats)
 router.get("/platformEvents", adminAuth, getAdminPlatformEvents)
 router.post("/filterUsers", adminAuth, filterUsers)
+router.post("/unlockUserLogin", adminAuth, unlockUserLogin)
 router.post("/filterPaymentHistories", adminAuth, filterPaymentHistories)
 router.post("/getFullUserDataByEmail", adminAuth, getFullUserDataByEmail)
 router.post("/updateProfileOfUser", adminAuth, updateProfileOfUser)

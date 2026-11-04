@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { Mail, Lock, AlertCircle, Eye, EyeOff, ArrowLeft, RefreshCw, ShieldCheck } from 'lucide-react';
-import { login, confirmLoginByCode } from '../api/api';
+import { login, confirmLoginByCode, getLoginLockStatus } from '../api/api';
 import { refreshCsrfToken, bootstrapCsrfToken, isCsrfError, CsrfFetchError } from '../api/csrf';
 import { resetAuthSessionForLogin } from '../utils/resetAuthSession';
 import { clearClientAccessTokenCookie } from '../utils/authCookie';
@@ -16,7 +16,9 @@ import BrandWordmark from '../components/BrandWordmark';
 import {
     type LoginLock,
     type LoginStep,
+    LOCK_STATUS_POLL_MS,
     isAttemptLimitReply,
+    lockAfterStatusCheck,
     lockCountdownText,
     lockFromReply,
     lockRemainingMs,
@@ -147,6 +149,27 @@ export default function WLLogin() {
         }, 1000);
         return () => clearInterval(tick);
     }, [lock]);
+
+    // While locked, ask the server now and then, so an admin's Unlock clears the countdown without a refresh.
+    const lockEmail = lock?.email ?? null;
+    useEffect(() => {
+        if (!lockEmail) return;
+        let cancelled = false;
+        const check = setInterval(async () => {
+            const response = await getLoginLockStatus(lockEmail);
+            if (cancelled) return;
+            setLock(current => {
+                if (!current || current.email !== lockEmail) return current;
+                const next = lockAfterStatusCheck(current, response, Date.now());
+                if (!next) setAttemptNotice(null);
+                return next;
+            });
+        }, LOCK_STATUS_POLL_MS);
+        return () => {
+            cancelled = true;
+            clearInterval(check);
+        };
+    }, [lockEmail]);
 
     const bootstrapCsrf = async () => {
         setCsrfBootstrapping(true);

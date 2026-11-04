@@ -3,6 +3,7 @@ import {
   formatCountdown,
   isAttemptLimitReply,
   lockCountdownText,
+  lockAfterStatusCheck,
   lockFromReply,
   lockRemainingMs,
 } from './loginAttemptNotice';
@@ -70,5 +71,30 @@ describe('countdown text', () => {
   it('names the step that is locked', () => {
     expect(lockCountdownText('password', 900_000)).toBe('Too many failed sign-in attempts. Please try again in 15:00.');
     expect(lockCountdownText('otp', 61_000)).toBe('Too many incorrect codes. Please try again in 1:01.');
+  });
+});
+
+describe('lockAfterStatusCheck', () => {
+  const lock = { step: 'password' as const, untilMs: NOW + 600_000, email: 'ann@x.com' };
+
+  it('drops the lock once the server says it is gone (e.g. an admin unlocked it)', () => {
+    expect(lockAfterStatusCheck(lock, { status: 'SUCCESS', locked: false }, NOW)).toBeNull();
+  });
+
+  it('follows the server while the lock is still on', () => {
+    expect(lockAfterStatusCheck(lock, { status: 'SUCCESS', locked: true, lockedStep: 'otp', lockedForSeconds: 30 }, NOW)).toEqual({
+      step: 'otp',
+      untilMs: NOW + 30_000,
+      email: 'ann@x.com',
+    });
+  });
+
+  it.each([
+    ['a failed request', false],
+    ['a FAIL reply', { status: 'FAIL', error: 'x' }],
+    ['a locked reply with no time', { status: 'SUCCESS', locked: true }],
+    ['a reply with no locked flag', { status: 'SUCCESS' }],
+  ])('keeps the current lock on %s', (_label, response) => {
+    expect(lockAfterStatusCheck(lock, response, NOW)).toBe(lock);
   });
 });

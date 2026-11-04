@@ -37,3 +37,19 @@ export const lockCountdownText = (step: LoginStep, remainingMs: number): string 
   const lead = step === 'otp' ? 'Too many incorrect codes.' : 'Too many failed sign-in attempts.';
   return `${lead} Please try again in ${formatCountdown(remainingMs)}.`;
 };
+
+/** How often the login page asks whether a running lock is still on (an admin may have unlocked it). */
+export const LOCK_STATUS_POLL_MS = 10_000;
+
+/**
+ * The lock to keep after a lock-status answer: null once the server says it is gone, the server's
+ * remaining time while it is still on, or the current lock unchanged when the answer is unusable.
+ */
+export const lockAfterStatusCheck = (lock: LoginLock, response: any, nowMs: number): LoginLock | null => {
+  if (response?.status !== 'SUCCESS') return lock;
+  if (response.locked === false) return null;
+  const seconds = Number(response.lockedForSeconds);
+  if (response.locked !== true || !Number.isFinite(seconds) || seconds <= 0) return lock;
+  const step: LoginStep = response.lockedStep === 'otp' ? 'otp' : 'password';
+  return { step, untilMs: nowMs + seconds * 1000, email: lock.email };
+};

@@ -15,6 +15,16 @@ describe('QueueSwitcher', () => {
     expect(screen.getByRole('radio', { name: /all users/i })).toHaveAttribute('aria-checked', 'false');
   });
 
+  it('lists the queues in order: all users, needs review, pending email verify, pending login', () => {
+    render(<QueueSwitcher value="User" onChange={vi.fn()} />);
+    expect(screen.getAllByRole('radio').map(r => r.querySelector('span.block')?.textContent)).toEqual([
+      'All users',
+      'Needs review',
+      'Pending email verify',
+      'Pending login',
+    ]);
+  });
+
   it('switches queues with a single click', async () => {
     const onChange = vi.fn();
     const actor = userEvent.setup();

@@ -163,7 +163,7 @@ const AuditModal = ({
           selectedTab === 'chat' ? '' : 'sm:h-auto sm:max-h-full'
         }`}
       >
-        <AuditHeader userDetails={userDetails || selectedUser} titleId={titleId} onExport={onExport} onClose={closeModal} />
+        <AuditHeader userDetails={userDetails || selectedUser} loginLock={selectedUser?.loginLock} titleId={titleId} onExport={onExport} onClose={closeModal} />
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 sm:px-8">
           <SummaryStrip
             conversationCount={conversations.group.length + conversations.appointments.length}

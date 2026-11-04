@@ -7,8 +7,8 @@ export type QueueOption = {
 };
 
 export const USER_MGMT_QUEUES: QueueOption[] = [
-  { value: 'ReviewQueue', label: 'Needs review', hint: 'Approval queue' },
   { value: 'User', label: 'All users', hint: 'Full directory' },
+  { value: 'ReviewQueue', label: 'Needs review', hint: 'Approval queue' },
   { value: 'PendingUser', label: 'Pending email verify', hint: 'Unverified signups' },
   { value: 'PendingLogin', label: 'Pending login', hint: 'Unused login codes' },
 ];

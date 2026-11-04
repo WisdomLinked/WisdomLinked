@@ -7,6 +7,7 @@ import QueueSwitcher, { USER_MGMT_QUEUES } from "./QueueSwitcher";
 import {
     doFilterUsers,
     doUpdateProfileByAdmin,
+    doUnlockUserLogin,
     profileImageFetch,
     impersonateUser,
     doGetPendingUsers,
@@ -32,6 +33,7 @@ const UserMgmt = () => {
     const navigate = useNavigate();
 
     const dataTypeOptions = USER_MGMT_QUEUES;
+    const queueByValue = (value: string) => dataTypeOptions.find(q => q.value === value)!;
 
     const roles = [
         { value: "", label: "All" },
@@ -45,6 +47,7 @@ const UserMgmt = () => {
         { value: "review", label: "In review" },
         { value: "active", label: "Active" },
         { value: "blocked", label: "Blocked" },
+        { value: "locked", label: "Locked" },
     ];
 
     const sorts = [
@@ -52,7 +55,7 @@ const UserMgmt = () => {
         { value: "ASC", label: "Oldest first" },
     ];
 
-    const [dataType, set_dataType] = useState<any>(dataTypeOptions[0]);
+    const [dataType, set_dataType] = useState<any>(queueByValue("User"));
 
     const [users, set_users] = useState<any[]>([]);
     const [numPerPage, set_numPerPage] = useState<number>(5);
@@ -84,7 +87,7 @@ const UserMgmt = () => {
         if (emailFromUrl) {
             set_email(emailFromUrl);
             // Deep-links from events should land on the searchable user list
-            set_dataType(dataTypeOptions[1]);
+            set_dataType(queueByValue("User"));
         }
     }, [emailFromUrl]);
 
@@ -236,8 +239,28 @@ const UserMgmt = () => {
         const newArr = [...users];
         const idx = newArr.findIndex(u => u.email === updated.email);
         if (idx >= 0) {
-            newArr[idx] = updated;
+            // The saved profile comes back without the sign-in lock, which lives elsewhere; keep it.
+            newArr[idx] = { loginLock: newArr[idx].loginLock, ...updated };
             set_users(newArr);
+        }
+    };
+
+    const handleUnlock = async (u: any) => {
+        if (!u?.email) return;
+        try {
+            SetLoadingStatus(true);
+            const res = await doUnlockUserLogin(u.email);
+            if (res?.status !== "SUCCESS") return;
+            if (!isReviewQueue && statusFilter.value === "locked") {
+                set_users((prev) => prev.filter((row) => row.email !== u.email));
+                set_totalCount((c) => Math.max(0, c - 1));
+                return;
+            }
+            set_users((prev) => prev.map((row) => (row.email === u.email ? { ...row, loginLock: null } : row)));
+        } catch (err) {
+            console.error(err);
+        } finally {
+            SetLoadingStatus(false);
         }
     };
 
@@ -466,6 +489,7 @@ const UserMgmt = () => {
                                 onStatusChange={(u, status) =>
                                     updateProfile({ email: u.email, status })
                                 }
+                                onUnlock={handleUnlock}
                                 onManage={openManageModal}
                                 onImpersonate={handleImpersonate}
                                 onAudit={openAuditModal}

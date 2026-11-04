@@ -4,6 +4,7 @@ import {
     LOGIN_ATTEMPT_WINDOW_MS,
     LOGIN_LOCK_MS,
     MAX_LOGIN_ATTEMPTS,
+    activeLoginLock,
     attemptsLeft,
     attemptsLeftSentence,
     countedFailures,
@@ -91,4 +92,19 @@ test("the tries-left sentence uses the right plural", () => {
 test("the lock message names the step and the wait", () => {
     assert.equal(lockedMessage("password", LOGIN_LOCK_MS), "Too many failed sign-in attempts. Please try again in 15 minutes.");
     assert.equal(lockedMessage("otp", 30_000), "Too many incorrect codes. Please try again in 1 minute.");
+});
+
+test("an account's running lock names its step and end; run-out or missing locks give null", () => {
+    const until = new Date(NOW + 5 * 60_000);
+    assert.deepEqual(activeLoginLock({ password: { lockUntil: until }, otp: {} }, NOW), { step: "password", lockedUntil: until });
+    assert.equal(activeLoginLock({ password: { lockUntil: new Date(NOW - 1) }, otp: { lockUntil: null } }, NOW), null);
+    assert.equal(activeLoginLock(null, NOW), null);
+    assert.equal(activeLoginLock({}, NOW), null);
+});
+
+test("with both steps locked, the lock that ends last is reported", () => {
+    const soon = new Date(NOW + 60_000);
+    const later = new Date(NOW + 10 * 60_000);
+    assert.deepEqual(activeLoginLock({ password: { lockUntil: soon }, otp: { lockUntil: later } }, NOW), { step: "otp", lockedUntil: later });
+    assert.deepEqual(activeLoginLock({ password: { lockUntil: later }, otp: { lockUntil: soon } }, NOW), { step: "password", lockedUntil: later });
 });

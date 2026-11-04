@@ -2,13 +2,14 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { createPortal } from 'react-dom';
 import { Check, MoreVertical } from 'lucide-react';
 import { OVERLAY_Z_PANEL } from '../../../../utils/overlayLayers';
-import { USER_STATUS_OPTIONS, userStatusOption, type UserStatus } from './userStatus';
+import { USER_STATUS_OPTIONS, isLoginLocked, userStatusOption, type UserLoginLock, type UserStatus } from './userStatus';
 
 export type UserActionsUser = {
   _id?: string;
   email?: string;
   role?: string;
   status?: string;
+  loginLock?: UserLoginLock;
 };
 
 type Item = {
@@ -27,9 +28,11 @@ export default function UserActionsMenu({
   onManage,
   onImpersonate,
   onAudit,
+  onUnlock,
 }: {
   user: UserActionsUser;
   onStatusChange: (status: UserStatus) => void;
+  onUnlock: () => void;
   onManage: () => void;
   onImpersonate: () => void;
   onAudit: () => void;
@@ -42,6 +45,7 @@ export default function UserActionsMenu({
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const currentStatus = userStatusOption(user.status).value;
+  const locked = isLoginLocked(user.loginLock);
 
   const items = useMemo<Item[]>(() => {
     const next: Item[] = USER_STATUS_OPTIONS.map(option => ({
@@ -53,13 +57,16 @@ export default function UserActionsMenu({
         if (option.value !== currentStatus) onStatusChange(option.value);
       },
     }));
+    if (locked) {
+      next.push({ id: 'unlock', label: 'Unlock', className: 'font-medium text-rose-600', onSelect: onUnlock });
+    }
     next.push({ id: 'manage', label: 'Manage', onSelect: onManage });
     if (user.role !== 'admin') {
       next.push({ id: 'impersonate', label: 'Impersonate', onSelect: onImpersonate });
     }
     next.push({ id: 'audit', label: 'Audit', onSelect: onAudit });
     return next;
-  }, [currentStatus, user.role, onStatusChange, onManage, onImpersonate, onAudit]);
+  }, [currentStatus, locked, user.role, onStatusChange, onUnlock, onManage, onImpersonate, onAudit]);
 
   const updatePosition = () => {
     const trigger = triggerRef.current;

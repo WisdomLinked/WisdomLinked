@@ -3,7 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import Avatar from '../../../../components/Avatar';
 import { resolveResumePublicUrl } from '../../../../utils/resumeUrl';
 import UserActionsMenu from './UserActionsMenu';
-import { userStatusOption, type UserStatus } from './userStatus';
+import { isLoginLocked, userStatusOption, type UserLoginLock, type UserStatus } from './userStatus';
 
 export type AdminUserRow = {
   _id?: string;
@@ -18,6 +18,7 @@ export type AdminUserRow = {
   country?: { name?: string };
   state?: { name?: string };
   city?: { name?: string };
+  loginLock?: UserLoginLock;
 };
 
 function userKey(u: AdminUserRow, idx: number) {
@@ -44,7 +45,16 @@ function UserIdentity({ user }: { user: AdminUserRow }) {
 
 function UserStatusText({ user }: { user: AdminUserRow }) {
   const option = userStatusOption(user.status);
-  return <span className={`text-[13px] ${option.className}`}>{option.label}</span>;
+  return (
+    <span className={`text-[13px] ${option.className}`}>
+      {option.label}
+      {isLoginLocked(user.loginLock) ? (
+        <span data-testid="user-locked-tag" className="ml-1 text-[11px] font-normal text-rose-600">
+          (locked)
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 function UserDetailGrid({ user }: { user: AdminUserRow }) {
@@ -94,10 +104,12 @@ export default function UserListTable({
   onManage,
   onImpersonate,
   onAudit,
+  onUnlock,
 }: {
   users: AdminUserRow[];
   emptyMessage: string;
   onStatusChange: (user: AdminUserRow, status: UserStatus) => void;
+  onUnlock: (user: AdminUserRow) => void;
   onManage: (user: AdminUserRow) => void;
   onImpersonate: (user: AdminUserRow) => void;
   onAudit: (user: AdminUserRow) => void;
@@ -149,6 +161,7 @@ export default function UserListTable({
                   onManage={() => onManage(u)}
                   onImpersonate={() => onImpersonate(u)}
                   onAudit={() => onAudit(u)}
+                  onUnlock={() => onUnlock(u)}
                 />
               </div>
               <div className="mt-3 pl-11">
@@ -228,6 +241,7 @@ export default function UserListTable({
                       onManage={() => onManage(u)}
                       onImpersonate={() => onImpersonate(u)}
                       onAudit={() => onAudit(u)}
+                      onUnlock={() => onUnlock(u)}
                     />
                   </td>
                 </tr>

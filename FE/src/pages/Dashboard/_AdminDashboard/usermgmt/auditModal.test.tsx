@@ -88,6 +88,35 @@ describe('AuditModal', () => {
     expect(closeModal).toHaveBeenCalled();
   });
 
+  it('adds a small (locked) to the header status while the user is locked out of sign-in', async () => {
+    const lockedUntil = new Date(Date.now() + 10 * 60_000).toISOString();
+    render(
+      <AuditModal
+        selectedUser={{ email: 'ada@x.com', username: 'Ada Expert', loginLock: { step: 'otp', lockedUntil } }}
+        closeModal={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(mockedUser).toHaveBeenCalled());
+    const tag = await screen.findByTestId('audit-locked-tag');
+    expect(tag).toHaveTextContent('(locked)');
+    expect(tag.parentElement).toHaveTextContent('Active(locked)');
+  });
+
+  it('shows no (locked) once the lock has run out or there is none', async () => {
+    const { unmount } = render(
+      <AuditModal
+        selectedUser={{ email: 'ada@x.com', loginLock: { step: 'password', lockedUntil: new Date(Date.now() - 1000).toISOString() } }}
+        closeModal={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText('Active')).toBeTruthy();
+    expect(screen.queryByTestId('audit-locked-tag')).toBeNull();
+    unmount();
+    render(<AuditModal selectedUser={{ email: 'ada@x.com', loginLock: null }} closeModal={vi.fn()} />);
+    expect(await screen.findByText('Active')).toBeTruthy();
+    expect(screen.queryByTestId('audit-locked-tag')).toBeNull();
+  });
+
   it('closes on Escape', async () => {
     const closeModal = vi.fn();
     render(<AuditModal selectedUser={{ email: 'ada@x.com' }} closeModal={closeModal} />);
