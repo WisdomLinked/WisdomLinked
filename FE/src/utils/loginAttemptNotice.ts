@@ -13,6 +13,10 @@ const normalizeEmail = (email: unknown) => String(email ?? '').trim().toLowerCas
 export const isAttemptLimitReply = (response: any): boolean =>
   response?.status === 'FAIL' && typeof response?.attemptsLeft === 'number';
 
+/** True when sign-in was refused because the account is blocked (shown under the field, like a wrong try). */
+export const isBlockedAccountReply = (response: any): boolean =>
+  response?.status === 'FAIL' && response?.code === 'USER_BLOCKED';
+
 export const lockFromReply = (response: any, email: unknown, nowMs: number): LoginLock | null => {
   const seconds = Number(response?.lockedForSeconds);
   if (response?.status !== 'FAIL' || !Number.isFinite(seconds) || seconds <= 0) return null;

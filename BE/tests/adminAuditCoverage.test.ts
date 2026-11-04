@@ -339,11 +339,83 @@ test("re-saving a profile with no real change writes no profile audit entry", as
 test("a status-only change keeps its own audit entry and adds no profile read", async t => {
     const audits = captureAudits(t);
     const store = installUserStore(t, profileUser());
-    await updateProfileOfUser({ user: ADMIN, body: { email: "expert@example.com", status: "blocked" } }, makeRes());
+    await updateProfileOfUser({ user: ADMIN, body: { email: "expert@example.com", status: "review" } }, makeRes());
     assert.equal(audits.length, 1);
     assert.equal(audits[0].action, "user_status_change");
-    assert.deepEqual(audits[0].meta, { from: "active", to: "blocked", role: "expert" });
+    assert.deepEqual(audits[0].meta, { from: "active", to: "review", role: "expert" });
     assert.equal(store.reads(), 2);
+});
+
+const stubEmail = (t: any) => {
+    const sent: any[] = [];
+    const original = (globalThis as any).sendNotificationEmail;
+    (globalThis as any).sendNotificationEmail = async (...args: any[]) => { sent.push(args); };
+    t.after(() => { (globalThis as any).sendNotificationEmail = original; });
+    return sent;
+};
+
+for (const [from, to, statusReason] of [
+    ["active", "blocked", "Spamming students"],
+    ["review", "blocked", "Fake profile"],
+    ["blocked", "active", undefined],
+    ["review", "active", undefined],
+    ["active", "review", undefined],
+    ["blocked", "review", undefined],
+] as const) {
+    test(`moving a user from ${from} to ${to} is audited with who, whom and what`, async t => {
+        stubEmail(t);
+        const audits = captureAudits(t);
+        const user = { ...profileUser(), status: from };
+        installUserStore(t, user);
+        const res = makeRes();
+        await updateProfileOfUser({ user: ADMIN, body: { email: "expert@example.com", status: to, statusReason } }, res);
+        assert.equal(res.statusCode, 200);
+        assert.equal(user.status, to);
+        assert.equal(audits.length, 1);
+        assert.equal(audits[0].action, "user_status_change");
+        assert.equal(audits[0].actorEmail, ADMIN.email);
+        assert.equal(audits[0].targetEmail, "expert@example.com");
+        assert.deepEqual(audits[0].meta, {
+            from,
+            to,
+            role: "expert",
+            ...(statusReason ? { reason: statusReason } : {}),
+        });
+    });
+}
+
+for (const statusReason of [undefined, null, "", "    ", 42]) {
+    test(`blocking with the reason ${JSON.stringify(statusReason)} is refused, changing and recording nothing`, async t => {
+        const audits = captureAudits(t);
+        const user = profileUser();
+        installUserStore(t, user);
+        const res = makeRes();
+        await updateProfileOfUser({ user: ADMIN, body: { email: "expert@example.com", status: "blocked", statusReason } }, res);
+        assert.equal(res.statusCode, 400);
+        assert.equal(res.body.status, "FAIL");
+        assert.equal(user.status, "active");
+        assert.equal(audits.length, 0);
+    });
+}
+
+test("the block reason is stored trimmed, cut at 500 characters, and only in the audit log", async t => {
+    const audits = captureAudits(t);
+    const user: any = profileUser();
+    installUserStore(t, user);
+    const statusReason = `  ${"x".repeat(600)}  `;
+    await updateProfileOfUser({ user: ADMIN, body: { email: "expert@example.com", status: "blocked", statusReason } }, makeRes());
+    assert.equal(audits[0].meta.reason, "x".repeat(500));
+    assert.equal(user.statusReason, undefined);
+});
+
+test("a reason sent with any other status is ignored", async t => {
+    const audits = captureAudits(t);
+    installUserStore(t, profileUser());
+    await updateProfileOfUser({
+        user: ADMIN,
+        body: { email: "expert@example.com", status: "review", statusReason: "Not for this" },
+    }, makeRes());
+    assert.deepEqual(audits[0].meta, { from: "active", to: "review", role: "expert" });
 });
 
 test("a status change together with a profile edit writes both entries", async t => {
@@ -351,7 +423,7 @@ test("a status change together with a profile edit writes both entries", async t
     installUserStore(t, profileUser());
     await updateProfileOfUser({
         user: ADMIN,
-        body: { email: "expert@example.com", status: "blocked", specialNote: "Paid offline" },
+        body: { email: "expert@example.com", status: "blocked", statusReason: "Fake profile", specialNote: "Paid offline" },
     }, makeRes());
     assert.deepEqual(audits.map((row) => row.action), ["user_status_change", "update_user_profile"]);
     assert.deepEqual(audits[1].meta.changes, { specialNote: { from: null, to: "Paid offline" } });

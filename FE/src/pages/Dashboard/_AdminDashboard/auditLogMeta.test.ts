@@ -57,6 +57,12 @@ describe("metaSummary — new entries", () => {
         ).toBe("role=expert; city: Austin → Dallas; price: 25 → 40");
     });
 
+    it("shows why a user was blocked", () => {
+        expect(metaSummary({ from: "active", to: "blocked", role: "customer", reason: "Spamming students" })).toBe(
+            "from=active; to=blocked; role=customer; reason=Spamming students",
+        );
+    });
+
     it("shows pricing changes with their dotted names", () => {
         expect(metaSummary({ changes: { "seminar.expertCommissionPercent": { from: 20, to: 25 } } })).toBe(
             "seminar.expertCommissionPercent: 20 → 25",
