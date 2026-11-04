@@ -303,6 +303,24 @@ export function amountByCurrencyFromAgg(
     return out;
 }
 
+/** COLLECTED = successful charges − refunds, per currency (zeros dropped). */
+export function netAmountsByCurrency(
+    charges: AmountByCurrency,
+    refunds: AmountByCurrency,
+): AmountByCurrency {
+    const out: AmountByCurrency = { ...charges };
+    for (const [currency, cents] of Object.entries(refunds || {})) {
+        const key = String(currency || "usd").toLowerCase();
+        const next = (out[key] || 0) - (Number(cents) || 0);
+        if (next === 0) delete out[key];
+        else out[key] = next;
+    }
+    for (const [currency, cents] of Object.entries(out)) {
+        if (!cents) delete out[currency];
+    }
+    return out;
+}
+
 export function monthlyFromAgg(
     rows: { _id?: string | { month?: string; currency?: string }; count?: number; amount?: number }[],
     withAmounts: boolean,
@@ -339,24 +357,36 @@ export const MONTH_GROUP_START = {
     $dateToString: { format: "%Y-%m", date: "$start" },
 };
 
-export function paymentCompletedMatch(createdAt: { createdAt: Record<string, Date> }) {
+/** Successful charge rows that still count toward COLLECTED / COUNT (excludes refund ledger rows). */
+export const SUCCESSFUL_CHARGE_STATUSES = ["completed", "partially_refunded"] as const;
+
+export function paymentCompletedMatch(
+    createdAt: { createdAt?: Record<string, Date> } = {},
+    extra: Record<string, unknown> = {},
+) {
     return {
         paymentType: { $ne: "refund" },
-        status: "completed",
+        status: { $in: [...SUCCESSFUL_CHARGE_STATUSES] },
+        ...extra,
         ...createdAt,
     };
 }
 
-export function paymentCountMatch(createdAt: { createdAt: Record<string, Date> }) {
-    return {
-        paymentType: { $ne: "refund" },
-        ...createdAt,
-    };
+/** @deprecated Prefer paymentCompletedMatch — COUNT must match successful charges only. */
+export function paymentCountMatch(
+    createdAt: { createdAt?: Record<string, Date> } = {},
+    extra: Record<string, unknown> = {},
+) {
+    return paymentCompletedMatch(createdAt, extra);
 }
 
-export function refundMatch(createdAt: { createdAt: Record<string, Date> }) {
+export function refundMatch(
+    createdAt: { createdAt?: Record<string, Date> } = {},
+    extra: Record<string, unknown> = {},
+) {
     return {
         paymentType: "refund",
+        ...extra,
         ...createdAt,
     };
 }

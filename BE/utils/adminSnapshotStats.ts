@@ -12,8 +12,8 @@ import {
     monthsInRange,
     MONTH_GROUP_CREATED,
     MONTH_GROUP_START,
+    netAmountsByCurrency,
     paymentCompletedMatch,
-    paymentCountMatch,
     refundMatch,
     oneToOneGroupFilter,
     seminarBaseFilter,
@@ -22,6 +22,7 @@ import {
     upcomingStartFilter,
     currencyGroupId,
 } from "./adminSnapshot";
+import { stripeModeMatch } from "./paymentsVisibleMode";
 
 type CountModel = {
     countDocuments: (filter: unknown) => Promise<number>;
@@ -33,16 +34,6 @@ type SnapshotModels = {
     Event: CountModel;
     GroupChat: CountModel;
     PaymentHistory: CountModel;
-};
-
-const COMPLETED_AMOUNT = {
-    $sum: {
-        $cond: [
-            { $eq: ["$status", "completed"] },
-            { $ifNull: ["$amount", 0] },
-            0,
-        ],
-    },
 };
 
 function currencyAmountPipeline(match: Record<string, unknown>) {
@@ -65,19 +56,41 @@ function monthCountPipeline(match: Record<string, unknown>, dateGroup: unknown) 
     ];
 }
 
-function monthPaymentPipeline(match: Record<string, unknown>, completedOnlyAmount: boolean) {
+function monthPaymentPipeline(match: Record<string, unknown>) {
     return [
         { $match: match },
         {
             $group: {
                 _id: { month: MONTH_GROUP_CREATED, currency: currencyGroupId },
                 count: { $sum: 1 },
-                amount: completedOnlyAmount
-                    ? COMPLETED_AMOUNT
-                    : { $sum: { $ifNull: ["$amount", 0] } },
+                amount: { $sum: { $ifNull: ["$amount", 0] } },
             },
         },
     ];
+}
+
+function paymentModeExtra(requestedMode?: unknown): Record<string, unknown> {
+    return stripeModeMatch(requestedMode);
+}
+
+function netMonthlyPayments(
+    chargeRows: any[],
+    refundRows: any[],
+): ReturnType<typeof monthlyFromAgg> {
+    const charges = monthlyFromAgg(chargeRows, true);
+    const refunds = monthlyFromAgg(refundRows, true);
+    const refundByMonth = new Map(refunds.map((p) => [p.month, p]));
+    return charges.map((point) => {
+        const refund = refundByMonth.get(point.month);
+        if (!refund?.amountsByCurrency) return point;
+        return {
+            ...point,
+            amountsByCurrency: netAmountsByCurrency(
+                point.amountsByCurrency || {},
+                refund.amountsByCurrency,
+            ),
+        };
+    });
 }
 
 export async function computePeriodSnapshot(
@@ -85,13 +98,16 @@ export async function computePeriodSnapshot(
     from: Date | null,
     to: Date | null,
     now: Date,
+    requestedStripeMode?: unknown,
 ): Promise<SnapshotPeriodCounts> {
     const createdAt = createdAtFilter(from, to);
+    const mode = paymentModeExtra(requestedStripeMode);
     const held = heldStartFilter(from, to, now);
     const seminarHeld = { ...seminarBaseFilter(), ...held };
     const sessionHeld = heldSessionFilter(from, to, now);
     const cancelled = cancelledSessionFilter(from, to, now);
-    const refunds = refundMatch(createdAt);
+    const charges = paymentCompletedMatch(createdAt, mode);
+    const refunds = refundMatch(createdAt, mode);
 
     const [
         expertsJoined,
@@ -113,9 +129,9 @@ export async function computePeriodSnapshot(
         models.Event.countDocuments(sessionHeld),
         models.GroupChat.countDocuments({ ...oneToOneGroupFilter(), ...sessionHeld }),
         models.GroupChat.countDocuments(seminarHeld),
-        models.PaymentHistory.countDocuments(paymentCountMatch(createdAt)),
+        models.PaymentHistory.countDocuments(charges),
         models.PaymentHistory.countDocuments(refunds),
-        models.PaymentHistory.aggregate(currencyAmountPipeline(paymentCompletedMatch(createdAt))),
+        models.PaymentHistory.aggregate(currencyAmountPipeline(charges)),
         models.PaymentHistory.aggregate(currencyAmountPipeline(refunds)),
         models.Event.countDocuments(cancelled),
         models.GroupChat.countDocuments({ ...oneToOneGroupFilter(), ...cancelled }),
@@ -137,6 +153,9 @@ export async function computePeriodSnapshot(
         }),
     ]);
 
+    const gross = amountByCurrencyFromAgg(paymentAmounts);
+    const refunded = amountByCurrencyFromAgg(refundAmounts);
+
     return {
         expertsJoined,
         customersJoined,
@@ -144,8 +163,8 @@ export async function computePeriodSnapshot(
         seminarsHeld,
         paymentsCount,
         refundsCount,
-        paymentsAmountByCurrency: amountByCurrencyFromAgg(paymentAmounts),
-        refundsAmountByCurrency: amountByCurrencyFromAgg(refundAmounts),
+        paymentsAmountByCurrency: netAmountsByCurrency(gross, refunded),
+        refundsAmountByCurrency: refunded,
         sessionsCancelled: legacySessionsCancelled + groupSessionsCancelled,
         seminarsAttendees: Number(attendeeRows?.[0]?.attendees) || 0,
         refundsUnlinked,
@@ -157,35 +176,44 @@ export async function computeMonthlyBreakdown(
     from: Date | null,
     to: Date | null,
     now: Date,
+    requestedStripeMode?: unknown,
 ): Promise<SnapshotMonthly> {
     const createdAt = createdAtFilter(from, to);
+    const mode = paymentModeExtra(requestedStripeMode);
     const held = heldStartFilter(from, to, now);
     const seminarHeld = { ...seminarBaseFilter(), ...held };
     const sessionHeld = heldSessionFilter(from, to, now);
     const keys = from && to ? monthsInRange(from, to) : null;
+    const charges = paymentCompletedMatch(createdAt, mode);
+    const refunds = refundMatch(createdAt, mode);
 
-    const [experts, customers, legacySessions, groupSessions, seminars, payments, refunds] = await Promise.all([
-        models.User.aggregate(monthCountPipeline({ role: "expert", ...createdAt }, MONTH_GROUP_CREATED)),
-        models.User.aggregate(monthCountPipeline({ role: "customer", ...createdAt }, MONTH_GROUP_CREATED)),
-        models.Event.aggregate(monthCountPipeline(sessionHeld, MONTH_GROUP_START)),
-        models.GroupChat.aggregate(monthCountPipeline({ ...oneToOneGroupFilter(), ...sessionHeld }, MONTH_GROUP_START)),
-        models.GroupChat.aggregate(monthCountPipeline(seminarHeld, MONTH_GROUP_START)),
-        models.PaymentHistory.aggregate(monthPaymentPipeline(paymentCountMatch(createdAt), true)),
-        models.PaymentHistory.aggregate(monthPaymentPipeline(refundMatch(createdAt), false)),
-    ]);
+    const [experts, customers, legacySessions, groupSessions, seminars, paymentRows, refundRows] =
+        await Promise.all([
+            models.User.aggregate(monthCountPipeline({ role: "expert", ...createdAt }, MONTH_GROUP_CREATED)),
+            models.User.aggregate(monthCountPipeline({ role: "customer", ...createdAt }, MONTH_GROUP_CREATED)),
+            models.Event.aggregate(monthCountPipeline(sessionHeld, MONTH_GROUP_START)),
+            models.GroupChat.aggregate(
+                monthCountPipeline({ ...oneToOneGroupFilter(), ...sessionHeld }, MONTH_GROUP_START),
+            ),
+            models.GroupChat.aggregate(monthCountPipeline(seminarHeld, MONTH_GROUP_START)),
+            models.PaymentHistory.aggregate(monthPaymentPipeline(charges)),
+            models.PaymentHistory.aggregate(monthPaymentPipeline(refunds)),
+        ]);
 
     const mapCounts = (rows: any[], withAmounts: boolean): SnapshotMonthly["experts"] => {
         const points = monthlyFromAgg(rows, withAmounts);
         return keys ? fillMonthlySeries(keys, points) : points;
     };
 
+    const paymentPoints = netMonthlyPayments(paymentRows, refundRows);
+
     return {
         experts: mapCounts(experts, false),
         customers: mapCounts(customers, false),
         sessions: mapCounts(sumMonthCountRows(legacySessions, groupSessions), false),
         seminars: mapCounts(seminars, false),
-        payments: mapCounts(payments, true),
-        refunds: mapCounts(refunds, true),
+        payments: keys ? fillMonthlySeries(keys, paymentPoints) : paymentPoints,
+        refunds: mapCounts(refundRows, true),
     };
 }
 
@@ -215,3 +243,5 @@ export async function computeSnapshotExtras(
         upcomingSeminars,
     };
 }
+
+export type { AmountByCurrency, SnapshotModels };

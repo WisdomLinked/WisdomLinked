@@ -103,7 +103,7 @@ const META: Record<
   payments: {
     title: 'Payments',
     description: 'Every charge collected through Stripe.',
-    empty: 'No payments match. Try a longer date range or clear the filters.',
+    empty: 'No payments in this range',
     search: 'Search description or email',
     chart: 'Payments collected per month',
     chartEmpty: 'No payments in this range',
@@ -218,11 +218,16 @@ function personName(user: { username?: string; email?: string } | null | undefin
   return user?.username || user?.email || '';
 }
 
-function paymentUser(row: PaymentHistoryRow): { label: string; missing: boolean } {
-  const customer = row.customer?.username || row.customer?.email;
-  const expert = row.expert?.username || row.expert?.email;
-  if (customer && expert) return { label: `${customer} → ${expert}`, missing: false };
-  if (customer || expert) return { label: customer || expert || '', missing: false };
+function paymentUser(row: PaymentHistoryRow): { label: string; missing: boolean; email?: string } {
+  const customerName = row.customer?.username || row.customer?.email;
+  const expertName = row.expert?.username || row.expert?.email;
+  const email = row.customer?.email || row.expert?.email || undefined;
+  if (customerName && expertName) {
+    return { label: `${customerName} → ${expertName}`, missing: false, email };
+  }
+  if (customerName || expertName) {
+    return { label: customerName || expertName || '', missing: false, email };
+  }
   return { label: 'Unknown user', missing: true };
 }
 
@@ -486,17 +491,18 @@ function kpisFor(type: SnapshotListType, stats: AdminDashboardStatsData | null):
   }
   if (type === 'payments') {
     const currencies = Object.keys(range.paymentsAmountByCurrency || {});
+    // AVERAGE = COLLECTED / COUNT; safe when COUNT is 0 or multi-currency.
     const avg =
       currencies.length === 1 && range.paymentsCount > 0
         ? formatMoney(
             range.paymentsAmountByCurrency[currencies[0]] / range.paymentsCount,
             currencies[0],
           )
-        : '';
+        : '—';
     return [
       { label: 'Collected', value: formatMoneyByCurrency(range.paymentsAmountByCurrency, { fractionDigits: 0 }) || '—' },
       { label: 'Count', value: range.paymentsCount.toLocaleString() },
-      ...(avg ? [{ label: 'Average', value: avg }] : []),
+      { label: 'Average', value: avg },
     ];
   }
   const rate =
@@ -659,13 +665,17 @@ async function fetchPage(
     q: looksLikeEmail ? undefined : args.q || undefined,
     email: looksLikeEmail ? args.q : undefined,
     bookingScope: args.whenMode === 'all' ? undefined : args.whenMode,
+    // Stripe mode is enforced server-side via PAYMENTS_VISIBLE_MODE.
     ...(args.whenMode === 'upcoming' || args.rangeKey === 'all' ? {} : bounds),
   });
+  if (res === false) {
+    throw new Error('Could not load payments');
+  }
   const all = Array.isArray(res?.result) ? (res.result as PaymentHistoryRow[]) : [];
   const filtered =
     type === 'refunds'
       ? all.filter(row => row.paymentType === 'refund')
-      : all.filter(row => row.paymentType !== 'refund');
+      : all.filter(row => row.paymentType !== 'refund' && row.status !== 'refunded');
   return {
     rows: filtered.map(row => {
       const user = paymentUser(row);
@@ -858,6 +868,8 @@ function DetailFields({ row, listType }: { row: ListRow; listType: SnapshotListT
     listType !== 'refunds' && Boolean(row.groupName || row.eventTitle || row.bookingStart);
   const intent = String(row.raw.paymentIntent || '').trim();
   const receiptUrl = String(row.raw.receiptUrl || '').trim();
+  const partyEmail = row.raw.customer?.email || row.raw.expert?.email || '';
+  const stripeMode = String(row.raw.stripeMode || '').toLowerCase();
   return (
     <div className="space-y-5">
       {listType === 'refunds' && row.userMissing ? (
@@ -872,9 +884,25 @@ function DetailFields({ row, listType }: { row: ListRow; listType: SnapshotListT
         <p className="text-xs text-amber-800">No account is linked to this record.</p>
       ) : null}
       <Section title={listType === 'refunds' ? 'Refund' : 'Charge'}>
-        {row.paymentType && listType !== 'refunds' ? (
-          <Field label="Type" value={statusLabel(row.paymentType)} />
+        {!row.userMissing ? <Field label="User" value={row.userLabel} /> : null}
+        {partyEmail ? <Field label="Email" value={partyEmail} /> : null}
+        {row.paymentType ? (
+          <Field
+            label="Type"
+            value={
+              <span className="inline-flex items-center gap-2">
+                {statusLabel(row.paymentType)}
+                {stripeMode === 'test' ? (
+                  <span className="rounded-full bg-wl-brandSoft px-2 py-0.5 text-[11px] font-medium text-wl-brand">
+                    test · {row.paymentType || 'charge'}
+                  </span>
+                ) : null}
+              </span>
+            }
+          />
         ) : null}
+        {row.status ? <Field label="Status" value={<StatusPill status={row.status} />} /> : null}
+        <Field label="Amount" value={formatMoney(row.amount, row.currency) || '—'} />
         {reason ? (
           <Field label={listType === 'refunds' ? 'Reason' : 'Description'} value={reason} wide />
         ) : null}
@@ -1055,6 +1083,7 @@ export default function AdminSnapshotMetricView() {
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
   const [selected, setSelected] = useState<ListRow | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -1104,15 +1133,25 @@ export default function AdminSnapshotMetricView() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setListError(null);
     setPage(0);
     (async () => {
-      const result = await fetchPage(listType, loadArgs);
-      if (cancelled) return;
-      setRows(result.rows);
-      setTotal(result.total);
-      setLoading(false);
-      const desktop = Boolean(window.matchMedia?.('(min-width: 1024px)')?.matches);
-      setSelected(desktop && result.rows.length ? result.rows[0] : null);
+      try {
+        const result = await fetchPage(listType, loadArgs);
+        if (cancelled) return;
+        setRows(result.rows);
+        setTotal(result.total);
+        setLoading(false);
+        const desktop = Boolean(window.matchMedia?.('(min-width: 1024px)')?.matches);
+        setSelected(desktop && result.rows.length ? result.rows[0] : null);
+      } catch {
+        if (cancelled) return;
+        setRows([]);
+        setTotal(0);
+        setSelected(null);
+        setListError('Could not load this list. Try again.');
+        setLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -1122,11 +1161,16 @@ export default function AdminSnapshotMetricView() {
   const loadMore = useCallback(async () => {
     const nextPage = page + 1;
     setLoadingMore(true);
-    const result = await fetchPage(listType, { ...loadArgs, page: nextPage });
-    setRows(prev => [...prev, ...result.rows]);
-    setTotal(result.total);
-    setPage(nextPage);
-    setLoadingMore(false);
+    try {
+      const result = await fetchPage(listType, { ...loadArgs, page: nextPage });
+      setRows(prev => [...prev, ...result.rows]);
+      setTotal(result.total);
+      setPage(nextPage);
+    } catch {
+      setListError('Could not load more rows. Try again.');
+    } finally {
+      setLoadingMore(false);
+    }
   }, [listType, loadArgs, page]);
 
   useEffect(() => {
@@ -1285,6 +1329,8 @@ export default function AdminSnapshotMetricView() {
             <div ref={listScrollRef} className="min-h-0 min-w-0 flex-1 overflow-auto">
               {loading ? (
                 <p className="p-4 text-sm text-muted">Loading…</p>
+              ) : listError ? (
+                <p className="p-4 text-sm text-warn">{listError}</p>
               ) : rows.length === 0 ? (
                 <p className="p-4 text-sm text-muted">{meta.empty}</p>
               ) : (
@@ -1403,7 +1449,14 @@ export default function AdminSnapshotMetricView() {
                               ) : (
                                 <>
                                   <td className="min-w-0 px-4 py-2.5">
-                                    <UserCell label={row.userLabel} missing={row.userMissing} />
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                      <UserCell label={row.userLabel} missing={row.userMissing} />
+                                      {String(row.raw.stripeMode || '').toLowerCase() === 'test' ? (
+                                        <span className="shrink-0 rounded-full bg-wl-brandSoft px-2 py-0.5 text-[11px] font-medium text-wl-brand">
+                                          test · {row.paymentType || 'charge'}
+                                        </span>
+                                      ) : null}
+                                    </div>
                                   </td>
                                   <td className="px-4 py-2.5 text-right tabular-nums">
                                     {formatMoney(row.amount, row.currency) || '—'}
@@ -1467,6 +1520,13 @@ export default function AdminSnapshotMetricView() {
                                 <div className="truncate text-sm font-medium text-ink">{title}</div>
                                 {secondary ? (
                                   <div className="truncate text-xs text-muted">{secondary}</div>
+                                ) : null}
+                                {row.kind === 'payment' &&
+                                listType === 'payments' &&
+                                String(row.raw.stripeMode || '').toLowerCase() === 'test' ? (
+                                  <span className="mt-1 inline-block rounded-full bg-wl-brandSoft px-2 py-0.5 text-[11px] font-medium text-wl-brand">
+                                    test · {row.paymentType || 'charge'}
+                                  </span>
                                 ) : null}
                               </div>
                             </div>

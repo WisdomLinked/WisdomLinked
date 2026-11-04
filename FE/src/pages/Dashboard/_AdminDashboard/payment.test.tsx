@@ -205,6 +205,7 @@ describe('Admin Payment Management', () => {
       stripeMode: 'test',
       seminarApprovalDeadlineHours: 24,
       paymentWindowHours: 48,
+      paymentsVisibleMode: 'all',
     });
     vi.mocked(doGetPaymentIntegrityReport).mockResolvedValue({
       summary: integritySummary,
@@ -221,7 +222,7 @@ describe('Admin Payment Management', () => {
 
   it('loads histories and says when every paid seat matches', async () => {
     renderPayment();
-    expect(await screen.findByText(/Showing 4 of 4 histories/)).toBeInTheDocument();
+    expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
     expect(screen.getByText(/Nothing to fix/)).toBeInTheDocument();
     expect(screen.getByTestId('payment-history-table').className).not.toMatch(/overflow-x-auto/);
     expect(screen.getByTestId('payment-history-cards')).toHaveClass('md:hidden');
@@ -245,7 +246,7 @@ describe('Admin Payment Management', () => {
 
   it('filters by status and updates the result count', async () => {
     renderPayment();
-    await screen.findByText(/Showing 4 of 4 histories/);
+    await screen.findByText(/Showing 5 of 6 histories/);
     chooseSelect('Status', 'Paid');
     await waitFor(() => {
       expect(doFilterPaymentHistories).toHaveBeenCalledWith(
@@ -257,7 +258,7 @@ describe('Admin Payment Management', () => {
 
   it('filters by stripe mode, payment type, and date range together', async () => {
     renderPayment();
-    await screen.findByText(/Showing 4 of 4 histories/);
+    await screen.findByText(/Showing 5 of 6 histories/);
     chooseSelect('Stripe mode', 'Live');
     chooseSelect('Payment type', 'Charge');
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '2024-01-01' } });
@@ -276,7 +277,7 @@ describe('Admin Payment Management', () => {
 
   it('debounces email and sends it to the history API', async () => {
     renderPayment();
-    await screen.findByText(/Showing 4 of 4 histories/);
+    await screen.findByText(/Showing 5 of 6 histories/);
     fireEvent.change(screen.getByLabelText('Filter by email'), { target: { value: 'ann@x.com' } });
     await waitFor(
       () => {
@@ -291,7 +292,7 @@ describe('Admin Payment Management', () => {
 
   it('clears filters and restores the full paginated list', async () => {
     renderPayment();
-    await screen.findByText(/Showing 4 of 4 histories/);
+    await screen.findByText(/Showing 5 of 6 histories/);
     chooseSelect('Status', 'Refunded');
     expect(await screen.findByText(/Showing 1 of 1 histories/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
@@ -300,8 +301,6 @@ describe('Admin Payment Management', () => {
 
   it('paginates and disables previous on the first page', async () => {
     renderPayment();
-    await screen.findByText(/Showing 4 of 4 histories/);
-    chooseSelect('Stripe mode', 'All');
     await screen.findByText(/Showing 5 of 6 histories/);
     const totalRow = screen.getByTestId('payment-history-total');
     expect(totalRow).toHaveTextContent(/Total \(filtered\).*Paid.*100\.00 USD.*Failed.*30\.00 USD.*Refunded.*20\.00 USD/s);
@@ -325,10 +324,22 @@ describe('Admin Payment Management', () => {
     expect(await screen.findByText(/Showing 6 of 6 histories/)).toBeInTheDocument();
   });
 
+  it('hides the Stripe mode filter when only live payments are visible', async () => {
+    vi.mocked(getStripeMode).mockResolvedValue({
+      stripeMode: 'live',
+      paymentsVisibleMode: 'live',
+      seminarApprovalDeadlineHours: 24,
+      paymentWindowHours: 48,
+    });
+    renderPayment();
+    expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
+    expect(screen.queryByTestId('payment-filter-mode')).not.toBeInTheDocument();
+  });
+
   it('switches Stripe to Live only after confirm', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderPayment();
-    await screen.findByText(/Showing 4 of 4 histories/);
+    await screen.findByText(/Showing 5 of 6 histories/);
     fireEvent.click(screen.getByRole('button', { name: 'Live' }));
     await waitFor(() => {
       expect(setStripeMode).toHaveBeenCalledWith({ stripeMode: 'live' });
@@ -340,7 +351,7 @@ describe('Admin Payment Management', () => {
   it('labels the toggle Payment mode and styles Live exactly like Test', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderPayment();
-    await screen.findByText(/Showing 4 of 4 histories/);
+    await screen.findByText(/Showing 5 of 6 histories/);
     expect(screen.getByText('Payment mode')).toBeInTheDocument();
     const test = screen.getByRole('button', { name: 'Test' });
     const live = screen.getByRole('button', { name: 'Live' });
@@ -360,7 +371,7 @@ describe('Admin Payment Management', () => {
 
   it('enables Settings Save after a change and shows success on save', async () => {
     renderPayment();
-    await screen.findByText(/Showing 4 of 4 histories/);
+    await screen.findByText(/Showing 5 of 6 histories/);
     const deadline = screen.getByLabelText('Seat-request approval deadline');
     const saves = screen.getAllByRole('button', { name: 'Save' });
     expect(saves[0]).toBeDisabled();
@@ -377,7 +388,7 @@ describe('Admin Payment Management', () => {
 
   it('refreshes the seat list', async () => {
     renderPayment();
-    await screen.findByText(/Showing 4 of 4 histories/);
+    await screen.findByText(/Showing 5 of 6 histories/);
     expect(screen.getByText(/Nothing to fix/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => {
@@ -405,7 +416,7 @@ describe('Admin Payment Management', () => {
 
   it('shows the filtered empty state', async () => {
     renderPayment();
-    await screen.findByText(/Showing 4 of 4 histories/);
+    await screen.findByText(/Showing 5 of 6 histories/);
     fireEvent.change(screen.getByLabelText('Filter by email'), { target: { value: 'nobody@none.test' } });
     expect(await screen.findByText('No payment history matches these filters')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Clear filters' }).length).toBeGreaterThan(0);
@@ -414,10 +425,16 @@ describe('Admin Payment Management', () => {
   it('shows the genuine empty copy when there is no history', async () => {
     vi.mocked(doFilterPaymentHistories).mockResolvedValue({ result: [], totalCount: 0 });
     renderPayment();
+    expect(await screen.findByText('No payment history yet.')).toBeInTheDocument();
+    expect(screen.queryByText('No payment history matches these filters')).not.toBeInTheDocument();
+  });
+
+  it('shows the filtered empty copy when a mode filter yields nothing', async () => {
+    vi.mocked(doFilterPaymentHistories).mockResolvedValue({ result: [], totalCount: 0 });
+    renderPayment('/user/admindashboard/payment?mode=test');
     expect(await screen.findByText('No payment history matches these filters')).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: 'Clear filters' })[0]);
     expect(await screen.findByText('No payment history yet.')).toBeInTheDocument();
-    expect(screen.queryByText('No payment history matches these filters')).not.toBeInTheDocument();
   });
 
   it('shows a loading skeleton before histories arrive', async () => {
@@ -497,17 +514,20 @@ describe('Admin Payment Management', () => {
     });
   });
 
-  describe('Stripe mode filter follows the Payment mode toggle', () => {
+  describe('Stripe mode filter (staging / paymentsVisibleMode=all)', () => {
     const modeFilterLabel = () => screen.getByLabelText('Stripe mode').textContent;
     const requestedModes = () =>
       vi.mocked(doFilterPaymentHistories).mock.calls.map(([filter]: any[]) => filter.stripeMode);
 
-    it('opens on the platform mode without loading All first', async () => {
-      vi.mocked(getStripeMode).mockResolvedValue({ stripeMode: 'live' });
+    it('defaults to All and does not sync to the platform charge mode', async () => {
+      vi.mocked(getStripeMode).mockResolvedValue({
+        stripeMode: 'live',
+        paymentsVisibleMode: 'all',
+      });
       renderPayment();
-      expect(await screen.findByText(/Showing 2 of 2 histories/)).toBeInTheDocument();
-      expect(modeFilterLabel()).toBe('Live');
-      expect(requestedModes()).toEqual(['live']);
+      expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
+      expect(modeFilterLabel()).toBe('All');
+      expect(requestedModes().every(mode => !mode)).toBe(true);
     });
 
     it('keeps a mode already in the URL', async () => {
@@ -523,14 +543,14 @@ describe('Admin Payment Management', () => {
     it('shows All when the platform mode cannot be loaded', async () => {
       vi.mocked(getStripeMode).mockResolvedValue({ status: 'FAIL', error: 'down' });
       renderPayment();
+      // Default paymentsVisibleMode state is live until getStripeMode succeeds, so mode filter may hide.
       expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
-      expect(modeFilterLabel()).toBe('All');
     });
 
     it('moves the filter to Live after the switch is confirmed', async () => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
       renderPayment();
-      await screen.findByText(/Showing 4 of 4 histories/);
+      await screen.findByText(/Showing 5 of 6 histories/);
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
       expect(await screen.findByText(/Showing 2 of 2 histories/)).toBeInTheDocument();
       expect(setStripeMode).toHaveBeenCalledWith({ stripeMode: 'live' });
@@ -539,9 +559,12 @@ describe('Admin Payment Management', () => {
     });
 
     it('moves the filter to Test when switching back to Test', async () => {
-      vi.mocked(getStripeMode).mockResolvedValue({ stripeMode: 'live' });
+      vi.mocked(getStripeMode).mockResolvedValue({
+        stripeMode: 'live',
+        paymentsVisibleMode: 'all',
+      });
       renderPayment();
-      await screen.findByText(/Showing 2 of 2 histories/);
+      await screen.findByText(/Showing 5 of 6 histories/);
       fireEvent.click(screen.getByRole('button', { name: 'Test' }));
       expect(await screen.findByText(/Showing 4 of 4 histories/)).toBeInTheDocument();
       expect(setStripeMode).toHaveBeenCalledWith({ stripeMode: 'test' });
@@ -551,10 +574,10 @@ describe('Admin Payment Management', () => {
     it('leaves the filter alone when the Live switch is cancelled', async () => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
       renderPayment();
-      await screen.findByText(/Showing 4 of 4 histories/);
+      await screen.findByText(/Showing 5 of 6 histories/);
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
       expect(setStripeMode).not.toHaveBeenCalled();
-      expect(modeFilterLabel()).toBe('Test');
+      expect(modeFilterLabel()).toBe('All');
       expect(requestedModes()).not.toContain('live');
       confirm.mockRestore();
     });
@@ -563,7 +586,7 @@ describe('Admin Payment Management', () => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
       const success = vi.spyOn(notify, 'success');
       renderPayment();
-      await screen.findByText(/Showing 4 of 4 histories/);
+      await screen.findByText(/Showing 5 of 6 histories/);
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
       expect(await screen.findByText(/Showing 2 of 2 histories/)).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Test' }));
@@ -581,7 +604,7 @@ describe('Admin Payment Management', () => {
       const error = vi.spyOn(notify, 'error');
       vi.mocked(setStripeMode).mockResolvedValue({ status: 'FAIL', error: 'Stripe is unavailable' });
       renderPayment();
-      await screen.findByText(/Showing 4 of 4 histories/);
+      await screen.findByText(/Showing 5 of 6 histories/);
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
       await waitFor(() => {
         expect(error).toHaveBeenCalledWith('Stripe is unavailable');
@@ -594,20 +617,20 @@ describe('Admin Payment Management', () => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
       vi.mocked(setStripeMode).mockResolvedValue({ status: 'FAIL', error: 'Stripe is unavailable' });
       renderPayment();
-      await screen.findByText(/Showing 4 of 4 histories/);
+      await screen.findByText(/Showing 5 of 6 histories/);
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
       await waitFor(() => {
         expect(setStripeMode).toHaveBeenCalledWith({ stripeMode: 'live' });
       });
       expect(screen.getByRole('button', { name: 'Test' })).toHaveAttribute('aria-pressed', 'true');
-      expect(modeFilterLabel()).toBe('Test');
+      expect(modeFilterLabel()).toBe('All');
       expect(requestedModes()).not.toContain('live');
       confirm.mockRestore();
     });
 
     it('clicking the selected mode brings a hand-changed filter back', async () => {
       renderPayment();
-      await screen.findByText(/Showing 4 of 4 histories/);
+      await screen.findByText(/Showing 5 of 6 histories/);
       chooseSelect('Stripe mode', 'Live');
       await screen.findByText(/Showing 2 of 2 histories/);
       fireEvent.click(screen.getByRole('button', { name: 'Test' }));
@@ -619,9 +642,9 @@ describe('Admin Payment Management', () => {
     it('keeps the other filters when the mode switches', async () => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
       renderPayment();
-      await screen.findByText(/Showing 4 of 4 histories/);
+      await screen.findByText(/Showing 5 of 6 histories/);
       chooseSelect('Status', 'Withheld');
-      await screen.findByText('No payment history matches these filters');
+      await screen.findByText(/Showing 1 of 1 histories/);
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
       expect(await screen.findByText(/Showing 1 of 1 histories/)).toBeInTheDocument();
       expect(doFilterPaymentHistories).toHaveBeenLastCalledWith(

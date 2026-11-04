@@ -307,10 +307,12 @@ const getStripeMode = async (req, res) => {
                 stripeMode: "test"
             })
         }
+        const { paymentsVisibleMode } = require('../utils/paymentsVisibleMode');
         res.send({
             stripeMode: appState.stripeMode,
             seminarApprovalDeadlineHours: appState.seminarApprovalDeadlineHours ?? 24,
             paymentWindowHours: paymentWindowHours(appState),
+            paymentsVisibleMode: paymentsVisibleMode(),
         });
     } catch (err) {
         console.log(err);

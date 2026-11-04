@@ -277,7 +277,9 @@ function stubModels(opts: {
     return { User: model, Event: model, GroupChat: model, PaymentHistory: model };
 }
 
-test("computePeriodSnapshot maps counts and per-currency amounts", async () => {
+test("computePeriodSnapshot maps counts and nets refunds from COLLECTED", async () => {
+    const prevMode = process.env.PAYMENTS_VISIBLE_MODE;
+    process.env.PAYMENTS_VISIBLE_MODE = "all";
     const from = new Date("2026-04-01T00:00:00.000Z");
     const to = new Date("2026-10-01T00:00:00.000Z");
     const now = new Date("2026-10-01T00:00:00.000Z");
@@ -285,6 +287,12 @@ test("computePeriodSnapshot maps counts and per-currency amounts", async () => {
     const held = heldStartFilter(from, to, now);
     const sessionHeld = heldSessionFilter(from, to, now);
     const cancelled = cancelledSessionFilter(from, to, now);
+    const chargeMatch = {
+        paymentType: { $ne: "refund" },
+        status: { $in: ["completed", "partially_refunded"] },
+        ...createdAt,
+    };
+    const refundFilter = { paymentType: "refund", ...createdAt };
     const models = stubModels({
         counts: {
             [JSON.stringify({ role: "expert", ...createdAt })]: 4,
@@ -292,13 +300,12 @@ test("computePeriodSnapshot maps counts and per-currency amounts", async () => {
             [JSON.stringify(sessionHeld)]: 3,
             [JSON.stringify({ ...oneToOneGroupFilter(), ...sessionHeld })]: 2,
             [JSON.stringify({ ...seminarBaseFilter(), ...held })]: 2,
-            [JSON.stringify({ paymentType: { $ne: "refund" }, ...createdAt })]: 7,
-            [JSON.stringify({ paymentType: "refund", ...createdAt })]: 1,
+            [JSON.stringify(chargeMatch)]: 7,
+            [JSON.stringify(refundFilter)]: 1,
             [JSON.stringify(cancelled)]: 1,
             [JSON.stringify({ ...oneToOneGroupFilter(), ...cancelled })]: 2,
             [JSON.stringify({
-                paymentType: "refund",
-                ...createdAt,
+                ...refundFilter,
                 $and: [
                     { $or: [{ customer: { $exists: false } }, { customer: null }] },
                     { $or: [{ expert: { $exists: false } }, { expert: null }] },
@@ -306,29 +313,36 @@ test("computePeriodSnapshot maps counts and per-currency amounts", async () => {
             })]: 1,
         },
         aggregates: {
-            [JSON.stringify({ paymentType: { $ne: "refund" }, status: "completed", ...createdAt })]: [
+            [JSON.stringify(chargeMatch)]: [
                 { _id: "usd", amount: 12000 },
                 { _id: "eur", amount: 4000 },
             ],
-            [JSON.stringify({ paymentType: "refund", ...createdAt })]: [{ _id: "usd", amount: 2000 }],
+            [JSON.stringify(refundFilter)]: [{ _id: "usd", amount: 2000 }],
             [JSON.stringify({ ...seminarBaseFilter(), ...held })]: [{ _id: null, attendees: 11 }],
         },
     });
-    const period = await computePeriodSnapshot(models, from, to, now);
-    assert.equal(period.expertsJoined, 4);
-    assert.equal(period.customersJoined, 9);
-    assert.equal(period.sessionsHeld, 5);
-    assert.equal(period.seminarsHeld, 2);
-    assert.equal(period.paymentsCount, 7);
-    assert.equal(period.refundsCount, 1);
-    assert.deepEqual(period.paymentsAmountByCurrency, { usd: 12000, eur: 4000 });
-    assert.deepEqual(period.refundsAmountByCurrency, { usd: 2000 });
-    assert.equal(period.sessionsCancelled, 3);
-    assert.equal(period.seminarsAttendees, 11);
-    assert.equal(period.refundsUnlinked, 1);
+    try {
+        const period = await computePeriodSnapshot(models, from, to, now);
+        assert.equal(period.expertsJoined, 4);
+        assert.equal(period.customersJoined, 9);
+        assert.equal(period.sessionsHeld, 5);
+        assert.equal(period.seminarsHeld, 2);
+        assert.equal(period.paymentsCount, 7);
+        assert.equal(period.refundsCount, 1);
+        assert.deepEqual(period.paymentsAmountByCurrency, { usd: 10000, eur: 4000 });
+        assert.deepEqual(period.refundsAmountByCurrency, { usd: 2000 });
+        assert.equal(period.sessionsCancelled, 3);
+        assert.equal(period.seminarsAttendees, 11);
+        assert.equal(period.refundsUnlinked, 1);
+    } finally {
+        if (prevMode === undefined) delete process.env.PAYMENTS_VISIBLE_MODE;
+        else process.env.PAYMENTS_VISIBLE_MODE = prevMode;
+    }
 });
 
 test("computeMonthlyBreakdown fills every month in the range", async () => {
+    const prevMode = process.env.PAYMENTS_VISIBLE_MODE;
+    process.env.PAYMENTS_VISIBLE_MODE = "all";
     const from = new Date("2026-04-01T00:00:00.000Z");
     const to = new Date("2026-06-01T00:00:00.000Z");
     const now = to;
@@ -341,15 +355,22 @@ test("computeMonthlyBreakdown fills every month in the range", async () => {
         GroupChat: { countDocuments: async () => 0, aggregate: async () => [] },
         PaymentHistory: {
             countDocuments: async () => 0,
-            aggregate: async () => [
-                { _id: { month: "2026-04", currency: "usd" }, count: 1, amount: 500 },
-            ],
+            aggregate: async (pipeline: any[]) => {
+                const match = pipeline?.[0]?.$match || {};
+                if (match.paymentType === "refund") return [];
+                return [{ _id: { month: "2026-04", currency: "usd" }, count: 1, amount: 500 }];
+            },
         },
     };
-    const monthly = await computeMonthlyBreakdown(models, from, to, now);
-    assert.deepEqual(monthly.experts.map((p) => p.month), ["2026-04", "2026-05", "2026-06"]);
-    assert.deepEqual(monthly.experts.map((p) => p.count), [0, 3, 0]);
-    assert.equal(monthly.payments[0].amountsByCurrency?.usd, 500);
+    try {
+        const monthly = await computeMonthlyBreakdown(models, from, to, now);
+        assert.deepEqual(monthly.experts.map((p) => p.month), ["2026-04", "2026-05", "2026-06"]);
+        assert.deepEqual(monthly.experts.map((p) => p.count), [0, 3, 0]);
+        assert.equal(monthly.payments[0].amountsByCurrency?.usd, 500);
+    } finally {
+        if (prevMode === undefined) delete process.env.PAYMENTS_VISIBLE_MODE;
+        else process.env.PAYMENTS_VISIBLE_MODE = prevMode;
+    }
 });
 
 test("computeMonthlyBreakdown counts older and today's 1:1s together, not seminars", async () => {
