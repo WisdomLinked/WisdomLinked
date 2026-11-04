@@ -16,6 +16,8 @@ export default function PaymentFilterBar({
   onEmailDraft,
   onChange,
   onClear,
+  /** When false (production live-only), hide the Stripe mode filter. */
+  showStripeModeFilter = true,
 }: {
   filters: HistoryFilters;
   emailDraft: string;
@@ -24,6 +26,7 @@ export default function PaymentFilterBar({
   onEmailDraft: (value: string) => void;
   onChange: (patch: Partial<HistoryFilters>) => void;
   onClear: () => void;
+  showStripeModeFilter?: boolean;
 }) {
   const field = FILTER_CONTROL_CLASS;
 
@@ -57,6 +60,7 @@ export default function PaymentFilterBar({
             placeholder="Exact user email"
           />
         </div>
+        {showStripeModeFilter ? (
         <div className="min-w-0 flex-[1_1_120px]" data-testid="payment-filter-mode">
           <label htmlFor="payment-filter-mode" className="mb-1 block text-[12px] text-wl-muted">
             Stripe mode
@@ -70,6 +74,7 @@ export default function PaymentFilterBar({
             size="filter"
           />
         </div>
+        ) : null}
         <div className="min-w-0 flex-[1_1_120px]" data-testid="payment-filter-status">
           <label htmlFor="payment-filter-status" className="mb-1 block text-[12px] text-wl-muted">
             Status

@@ -1837,10 +1837,67 @@ export const doFilterUsers = async (filter: any) => {
     }
 }
 
-export const doFilterPaymentHistories = async (filter: any) => {
+export type FilterPaymentHistoriesParams = {
+    currentPage?: number;
+    numPerPage?: number;
+    email?: string;
+    stripeMode?: string;
+    paymentType?: string;
+    status?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    sortBy?: string;
+    q?: string;
+    bookingScope?: 'past' | 'upcoming' | 'all' | string;
+    excludeRefunds?: boolean;
+};
+
+export type FilterPaymentHistoriesParty = {
+    username?: string;
+    email?: string;
+    role?: string;
+} | null;
+
+export type FilterPaymentHistoriesRow = {
+    _id?: string;
+    amount?: number;
+    currency?: string;
+    description?: string;
+    paymentIntent?: string | null;
+    receiptUrl?: string | null;
+    status?: string;
+    paymentType?: string;
+    stripeMode?: string;
+    createdAt?: string;
+    expert?: FilterPaymentHistoriesParty;
+    customer?: FilterPaymentHistoriesParty;
+    groupChat?: {
+        type?: string;
+        name?: string;
+        status?: string;
+        start?: string;
+        end?: string;
+    } | null;
+    event?: { start?: string; end?: string; title?: string; status?: string } | string | null;
+};
+
+export type FilterPaymentHistoriesResponse = {
+    result: FilterPaymentHistoriesRow[];
+    totalCount: number;
+    totals?: {
+        paid: { currency: string; cents: number }[];
+        failed: { currency: string; cents: number }[];
+        refunded: { currency: string; cents: number }[];
+    };
+    paymentsVisibleMode?: 'live' | 'all';
+};
+
+export const doFilterPaymentHistories = async (
+    filter: FilterPaymentHistoriesParams,
+): Promise<FilterPaymentHistoriesResponse | false> => {
     try {
         const res = await api.post("admin/filterPaymentHistories", filter);
-        return res.data;
+        return res.data as FilterPaymentHistoriesResponse;
     } catch (err: any) {
         return checkForAuthorization(err);
     }

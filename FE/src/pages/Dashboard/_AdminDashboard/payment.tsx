@@ -88,6 +88,8 @@ const Payment = () => {
 
   const [emailDraft, setEmailDraft] = useState(filters.email);
   const [stripeMode, setPlatformStripeMode] = useState('test');
+  /** Server gate: live = prod (hide mode filter); all = staging (All/Live/Test). null until known. */
+  const [paymentsVisibleMode, setPaymentsVisibleMode] = useState<'live' | 'all' | null>(null);
   const [historiesReady, setHistoriesReady] = useState(() => Boolean(filters.mode));
   const [approvalDeadlineHours, setApprovalDeadlineHours] = useState(24);
   const [deadlineInput, setDeadlineInput] = useState('24');
@@ -177,6 +179,9 @@ const Payment = () => {
       setHistories(Array.isArray(response.result) ? response.result : []);
       setTotalCount(Number(response.totalCount) || 0);
       setStatusTotals(response.totals || EMPTY_PAYMENT_STATUS_TOTALS);
+      if (response.paymentsVisibleMode === 'all' || response.paymentsVisibleMode === 'live') {
+        setPaymentsVisibleMode(response.paymentsVisibleMode);
+      }
     } else {
       setHistories([]);
       setTotalCount(0);
@@ -234,11 +239,18 @@ const Payment = () => {
   useEffect(() => {
     (async () => {
       const response = await getStripeMode();
-      if (response) {
+      if (response && response.stripeMode) {
         setPlatformStripeMode(response.stripeMode || 'test');
+        const visible =
+          response.paymentsVisibleMode === 'all' || response.paymentsVisibleMode === 'live'
+            ? response.paymentsVisibleMode
+            : 'live';
+        setPaymentsVisibleMode(visible);
         const current = parsedRef.current;
-        if (response.stripeMode && !current.filters.mode) {
-          const next = { ...current.filters, mode: response.stripeMode };
+        // Production: only live data exists — clear a stale test/live URL filter.
+        // Staging: default All (do not sync filter to the platform charge mode).
+        if (visible === 'live' && current.filters.mode) {
+          const next = { ...current.filters, mode: '' };
           parsedRef.current = { ...current, filters: next };
           writeParamsRef.current(next, current.page, current.pageSize);
         }
@@ -252,15 +264,24 @@ const Payment = () => {
           typeof response.paymentWindowHours === 'number' ? response.paymentWindowHours : 48;
         setPaymentWindowHours(windowHours);
         setPaymentWindowInput(String(windowHours));
+      } else {
+        // Fail-safe: treat as live-only when the server does not answer.
+        setPaymentsVisibleMode('live');
       }
       setHistoriesReady(true);
     })();
     void loadIntegrityReport();
   }, [loadIntegrityReport]);
 
+  // Keep filter in sync when admin toggles platform charge mode (staging only).
+  const syncHistoryModeOnPlatformSwitch = paymentsVisibleMode === 'all';
+  const showStripeModeFilter = paymentsVisibleMode === 'all';
+
   const updateStripeMode = async (next: string) => {
     if (next === stripeMode) {
-      if (parsedRef.current.filters.mode !== next) patchFilters({ mode: next });
+      if (syncHistoryModeOnPlatformSwitch && parsedRef.current.filters.mode !== next) {
+        patchFilters({ mode: next });
+      }
       return;
     }
     if (next === 'live' && !window.confirm('Switch Stripe to Live mode? Charges will use real money.')) {
@@ -274,7 +295,7 @@ const Payment = () => {
       return;
     }
     setPlatformStripeMode(next);
-    patchFilters({ mode: next });
+    if (syncHistoryModeOnPlatformSwitch) patchFilters({ mode: next });
   };
 
   const saveApprovalDeadline = async () => {
@@ -474,6 +495,7 @@ const Payment = () => {
             onEmailDraft={setEmailDraft}
             onChange={patchFilters}
             onClear={clearFilters}
+            showStripeModeFilter={showStripeModeFilter}
           />
           {visibleCheques.length > 0 ? (
             <div className="border-b border-wl-line px-4 py-4" data-testid="paid-out-cheques">

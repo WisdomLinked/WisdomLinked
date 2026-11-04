@@ -270,11 +270,46 @@ async function paymentStatusTotals(match: Record<string, unknown>) {
     return totals;
 }
 
+const { resolveStripeModeFilter, paymentsVisibleMode } = require('../utils/paymentsVisibleMode');
+
+/** Populate customer/expert when refs were stored as bare ids and auto-populate missed them. */
+async function hydratePaymentParties(rows: any[]) {
+    const need = new Set<string>();
+    const asId = (value: any): string | null => {
+        if (!value) return null;
+        if (typeof value === 'object' && (value.username || value.email || value._id)) {
+            return null; // already populated
+        }
+        const id = String(value?._id || value || '').trim();
+        return id && id.length >= 12 ? id : null;
+    };
+    for (const row of rows) {
+        const c = asId(row.customer);
+        const e = asId(row.expert);
+        if (c) need.add(c);
+        if (e) need.add(e);
+    }
+    if (!need.size) return rows;
+    const users = await User.find({ _id: { $in: [...need] } })
+        .select('username email role')
+        .lean();
+    const byId = new Map(users.map((u: any) => [String(u._id), u]));
+    for (const row of rows) {
+        const c = asId(row.customer);
+        const e = asId(row.expert);
+        if (c && byId.has(c)) row.customer = byId.get(c);
+        if (e && byId.has(e)) row.expert = byId.get(e);
+    }
+    return rows;
+}
+
 const filterPaymentHistories = async (req, res) => {
     try {
         const { email, stripeMode, paymentType, status, dateFrom, dateTo, numPerPage, currentPage, q, bookingScope, excludeRefunds } = req.body
         const query = PaymentHistory.find()
         const countQuery = PaymentHistory.countDocuments()
+        const visibleMode = paymentsVisibleMode();
+        const effectiveMode = resolveStripeModeFilter(stripeMode);
 
         if (email) {
             const user = await User.findOne({ email: String(email) })
@@ -283,6 +318,7 @@ const filterPaymentHistories = async (req, res) => {
                     result: [],
                     totalCount: 0,
                     totals: EMPTY_PAYMENT_STATUS_TOTALS,
+                    paymentsVisibleMode: visibleMode,
                 })
             }
             query.where({ [user.role]: user._id.toString() })
@@ -296,17 +332,18 @@ const filterPaymentHistories = async (req, res) => {
             { path: 'event', select: 'start end title status' },
         ])
 
-        if (stripeMode) {
-            query.where({ stripeMode: String(stripeMode) })
-            countQuery.where({ stripeMode: String(stripeMode) })
+        if (effectiveMode) {
+            query.where({ stripeMode: effectiveMode })
+            countQuery.where({ stripeMode: effectiveMode })
         }
 
         if (paymentType) {
             query.where({ paymentType: String(paymentType) })
             countQuery.where({ paymentType: String(paymentType) })
         } else if (excludeRefunds) {
-            query.where({ paymentType: { $ne: 'refund' } })
-            countQuery.where({ paymentType: { $ne: 'refund' } })
+            // Overview "Payments" tab: charge rows only (no refund ledger), hide fully refunded charges.
+            query.where({ paymentType: { $ne: 'refund' }, status: { $ne: 'refunded' } })
+            countQuery.where({ paymentType: { $ne: 'refund' }, status: { $ne: 'refunded' } })
         }
 
         if (status) {
@@ -370,10 +407,13 @@ const filterPaymentHistories = async (req, res) => {
             const totals = leanRows.length
                 ? await paymentStatusTotals({ _id: { $in: leanRows.map((row: any) => row._id) } })
                 : EMPTY_PAYMENT_STATUS_TOTALS;
+            const pageRows = pageIds.map((id: any) => byId.get(String(id))).filter(Boolean);
+            await hydratePaymentParties(pageRows);
             return res.status(200).json({
-                result: pageIds.map((id: any) => byId.get(String(id))).filter(Boolean),
+                result: pageRows,
                 totalCount,
                 totals,
+                paymentsVisibleMode: visibleMode,
             });
         }
 
@@ -395,10 +435,13 @@ const filterPaymentHistories = async (req, res) => {
             query.exec(),
             paymentStatusTotals(match),
         ]);
+        const rows = Array.isArray(histories) ? histories : [];
+        await hydratePaymentParties(rows);
         return res.status(200).json({
-            result: histories,
+            result: rows,
             totalCount: totalCount,
             totals,
+            paymentsVisibleMode: visibleMode,
         })
     } catch (err) {
         console.log(err)
@@ -1098,8 +1141,14 @@ const getDashboardStats = async (req: Request, res: Response) => {
             Promise.all([Event.countDocuments(), GroupChat.countDocuments(oneToOneGroupFilter())])
                 .then(([legacy, current]) => legacy + current),
             GroupChat.countDocuments(seminarBaseFilter()),
-            PaymentHistory.countDocuments({ paymentType: { $ne: "refund" } }),
-            PaymentHistory.countDocuments({ paymentType: "refund" }),
+            PaymentHistory.countDocuments({
+                paymentType: { $ne: "refund" },
+                ...require('../utils/paymentsVisibleMode').stripeModeMatch(),
+            }),
+            PaymentHistory.countDocuments({
+                paymentType: "refund",
+                ...require('../utils/paymentsVisibleMode').stripeModeMatch(),
+            }),
             countTodayUpcomingEvents(),
             computePeriodSnapshot(models, snapshotRange.from, snapshotRange.to, now),
             snapshotRange.isAllTime

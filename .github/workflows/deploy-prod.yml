@@ -224,6 +224,7 @@ jobs:
               -e STRIPE_SECRET_KEY_LIVE="${{ secrets.STRIPE_SECRET_KEY_LIVE }}" \
               -e STRIPE_SECRET_KEY_TEST="${{ secrets.STRIPE_SECRET_KEY_TEST }}" \
               -e STRIPE_WEBHOOK_SECRET="${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
+              -e PAYMENTS_VISIBLE_MODE="live" \
               -e COOKIE_EXPIRED_TIME="86400000" \
               -e SENDGRID_API_KEY="${{ secrets.SENDGRID_API_KEY }}" \
               -e GRADIENT_API_TOKEN="${{ secrets.GRADIENT_API_TOKEN }}" \
