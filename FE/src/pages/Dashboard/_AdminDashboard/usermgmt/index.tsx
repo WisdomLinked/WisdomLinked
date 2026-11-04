@@ -19,7 +19,8 @@ import {
 
 import ManageModal from "./manageModal";
 import AuditModal from "./auditModal";
-import BlockUserDialog from "./BlockUserDialog";
+import BlockReasonDialog from "./BlockReasonDialog";
+import BlockUserDialog, { type BlockResult } from "./BlockUserDialog";
 import UserListTable from "./UserListTable";
 import Pagination from "../../../../components/Pagination";
 import { SetLoadingStatus } from "../../../../actions/appActions";
@@ -77,6 +78,7 @@ const UserMgmt = () => {
     const [manageModalShow, set_manageModalShow] = useState<boolean>(false);
     const [auditModalShow, set_auditModalShow] = useState<boolean>(false);
     const [userToBlock, set_userToBlock] = useState<any>(null);
+    const [blockReasonUser, set_blockReasonUser] = useState<any>(null);
     const [isFirstLoad, set_isFirstLoad] = useState<boolean>(true);
 
     // Identifies the newest filter request, so a slower earlier one cannot overwrite it.
@@ -225,20 +227,22 @@ const UserMgmt = () => {
             const res = await doUpdateProfileByAdmin(updates);
             if (res && res.result) {
                 updateOneUser(res.result);
-                return true;
+                return res;
             }
         } catch (err) {
             console.error(err);
         } finally {
             SetLoadingStatus(false);
         }
-        return false;
+        return null;
     };
 
-    const confirmBlock = async (reason: string) => {
-        const blocked = await updateProfile({ email: userToBlock?.email, status: "blocked", statusReason: reason });
-        if (blocked) set_userToBlock(null);
-        return blocked;
+    const confirmBlock = async (reason: string): Promise<BlockResult> => {
+        const res = await updateProfile({ email: userToBlock?.email, status: "blocked", statusReason: reason });
+        if (!res) return "failed";
+        if (res.alreadyBlocked) return "alreadyBlocked";
+        set_userToBlock(null);
+        return "blocked";
     };
 
     const updateOneUser = (updated: any) => {
@@ -503,6 +507,7 @@ const UserMgmt = () => {
                                         : updateProfile({ email: u.email, status })
                                 }
                                 onUnlock={handleUnlock}
+                                onViewBlockReason={set_blockReasonUser}
                                 onManage={openManageModal}
                                 onImpersonate={handleImpersonate}
                                 onAudit={openAuditModal}
@@ -627,6 +632,12 @@ const UserMgmt = () => {
                     user={userToBlock}
                     onCancel={() => set_userToBlock(null)}
                     onConfirm={confirmBlock}
+                />
+            )}
+            {blockReasonUser && (
+                <BlockReasonDialog
+                    user={blockReasonUser}
+                    onClose={() => set_blockReasonUser(null)}
                 />
             )}
         </div>

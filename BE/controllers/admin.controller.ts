@@ -478,7 +478,7 @@ const updateProfileOfUser = async (req, res) => {
         const blockReason = status === 'blocked' && typeof statusReason === 'string'
             ? statusReason.trim().slice(0, BLOCK_REASON_MAX_LENGTH)
             : '';
-        if (status === 'blocked' && !blockReason) {
+        if (status === 'blocked' && !blockReason.replace(/\p{Cf}/gu, '').trim()) {
             return res.status(400).json({ status: 'FAIL', error: 'Please state the reason for blocking this user.' });
         }
         const updates: Record<string, any> = {}
@@ -579,6 +579,7 @@ const updateProfileOfUser = async (req, res) => {
         result.token = null
         return res.status(200).json({
             result: result,
+            ...(status === 'blocked' && existing?.status === 'blocked' ? { alreadyBlocked: true } : {}),
         });
     } catch (err) {
         console.log(err)
@@ -2024,6 +2025,23 @@ const getAuditLogs = async (req: Request, res: Response) => {
     }
 };
 
+/** The reason lives on the block's audit entry, so it never travels with the user's own data. */
+const getUserBlockReason = async (req: Request, res: Response) => {
+    try {
+        const entry = await AdminAuditLog.findOne({
+            action: "user_status_change",
+            targetId: String(req.params.userId),
+            "meta.to": "blocked",
+        })
+            .sort({ createdAt: -1 })
+            .lean();
+        return res.status(200).json({ status: "SUCCESS", reason: entry?.meta?.reason ?? null });
+    } catch (err) {
+        console.log(err);
+        return res.status(500).send(safeErrorMessage(err));
+    }
+};
+
 const getAllFeedbacks = async (req: Request, res: Response) => {
     try {
         const numPerPage = Math.min(Math.max(Number(req.query.numPerPage) || 20, 1), 100);
@@ -2345,6 +2363,7 @@ module.exports = {
     registerUserByAdmin,
     inviteAdmin,
     getAuditLogs,
+    getUserBlockReason,
     impersonateUser,
     stopImpersonation,
 };
