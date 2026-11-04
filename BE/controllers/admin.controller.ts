@@ -67,6 +67,7 @@ const PendingUser = require("../models/PendingUser");
 const PendingLogin = require("../models/PendingLogin");
 const chatBotQA = require("../models/chatBotQA");
 const { logAdminAction } = require("../utils/adminAudit");
+const { clearLoginFailures, currentLoginLock, currentLoginLocks, lockedLoginEmails } = require("../services/loginThrottle");
 const { auditChanges, profileAuditSnapshot, PROFILE_AUDIT_FIELDS } = require("../utils/adminAuditChanges");
 const {
     assertPendingSignupCanCreateAccount,
@@ -158,7 +159,13 @@ const filterUsers = async (req, res) => {
             query.where({ role: roleFilter })
             countQuery.where({ role: roleFilter })
         }
-        if (status) {
+        if (status === "locked") {
+            // "Locked" is the sign-in lock, not a stored status, so it is matched by email whatever the status is.
+            const lockedEmails = await lockedLoginEmails();
+            const lockedFilter = { email: { $in: lockedEmails.map((e: string) => new RegExp(`^${escapeRegExp(e)}$`, "i")) } };
+            query.where(lockedFilter)
+            countQuery.where(lockedFilter)
+        } else if (status) {
             query.where({ status: String(status) })
             countQuery.where({ status: String(status) })
         }
@@ -187,8 +194,13 @@ const filterUsers = async (req, res) => {
         query.skip(pageSize * page).limit(pageSize)
         const totalCount = await countQuery.exec()
         const users = await query.exec();
+        const locks = await currentLoginLocks(users.map((u: any) => u.email));
+        const result = users.map((u: any) => ({
+            ...(typeof u.toJSON === "function" ? u.toJSON() : u),
+            loginLock: locks.get(String(u.email || "").trim().toLowerCase()) ?? null,
+        }));
         return res.status(200).json({
-            result: users,
+            result,
             totalCount: totalCount
         })
     } catch (err) {
@@ -388,6 +400,34 @@ const filterPaymentHistories = async (req, res) => {
             totalCount: totalCount,
             totals,
         })
+    } catch (err) {
+        console.log(err)
+        return res.status(500).send(safeErrorMessage(err));
+    }
+}
+
+/** Ends a user's sign-in lock (wrong password or code) so they can try again straight away. */
+const unlockUserLogin = async (req, res) => {
+    try {
+        const email = String(req.body?.email || "").trim();
+        if (!email) return res.status(400).json({ status: "FAIL", error: "Email is required." });
+        const user = await User.findOne({ email: { $regex: `^${escapeRegExp(email)}$`, $options: "i" } })
+            .select("_id email role")
+            .lean();
+        if (!user) return res.status(404).json({ status: "FAIL", error: "User not found." });
+        const lock = await currentLoginLock(user.email);
+        await clearLoginFailures(user.email);
+        if (lock) {
+            logAdminAction({
+                actor: req.user,
+                action: "user_login_unlock",
+                targetType: "user",
+                targetId: user._id,
+                targetEmail: user.email,
+                meta: { role: user.role, step: lock.step },
+            });
+        }
+        return res.status(200).json({ status: "SUCCESS", email: user.email, loginLock: null });
     } catch (err) {
         console.log(err)
         return res.status(500).send(safeErrorMessage(err));
@@ -2266,6 +2306,7 @@ const stopImpersonation = async (req: Request, res: Response) => {
 module.exports = {
     getPaymentIntegrityReport,
     filterUsers,
+    unlockUserLogin,
     getCustomMajors,
     consolidateMajors,
     getMajorConsolidations,

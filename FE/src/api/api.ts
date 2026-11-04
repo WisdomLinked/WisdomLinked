@@ -132,6 +132,16 @@ export const confirmLoginByCode = async ({ email, password, code }: any) => {
     }
 };
 
+/** Whether sign-in is still locked for this email: `{ locked, lockedStep?, lockedForSeconds? }`. */
+export const getLoginLockStatus = async (email: string) => {
+    try {
+        const res = await api.post<any>("auth/loginLockStatus", { email });
+        return res.data;
+    } catch (err: any) {
+        return handleAuthApiFailure(err);
+    }
+};
+
 export const confirmPasswordResetByCode = async ({ email, password, code }: any) => {
     try {
         const res = await api.post<any>("auth/confirmPasswordResetByCode", { email, password, code });
@@ -1848,6 +1858,15 @@ export const doGetFullUserDataByEmail = async (email: any) => {
 export const doUpdateProfileByAdmin = async (updates: any) => {
     try {
         const res = await api.post("admin/updateProfileOfUser", updates);
+        return res.data
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
+export const doUnlockUserLogin = async (email: string) => {
+    try {
+        const res = await api.post("admin/unlockUserLogin", { email });
         return res.data
     } catch (err: any) {
         return checkForAuthorization(err);

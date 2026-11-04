@@ -8,6 +8,7 @@ const handlers = () => ({
   onManage: vi.fn(),
   onImpersonate: vi.fn(),
   onAudit: vi.fn(),
+  onUnlock: vi.fn(),
 });
 
 const openMenu = async (status: string | undefined, role = 'customer') => {
@@ -68,5 +69,30 @@ describe('UserActionsMenu', () => {
     expect(within(menu).queryByRole('menuitem', { name: 'Impersonate' })).toBeNull();
     expect(within(menu).getAllByRole('menuitemradio')).toHaveLength(3);
     expect(within(menu).getByRole('menuitem', { name: 'Audit' })).toBeInTheDocument();
+  });
+
+  it('offers Unlock only to a locked user, and it calls onUnlock', async () => {
+    const actor = userEvent.setup();
+    const fns = handlers();
+    const lockedUntil = new Date(Date.now() + 10 * 60_000).toISOString();
+    render(<UserActionsMenu user={{ email: 'ann@x.com', role: 'customer', status: 'review', loginLock: { step: 'password', lockedUntil } }} {...fns} />);
+    await actor.click(screen.getByRole('button', { name: 'User actions' }));
+    const menu = screen.getByRole('menu', { name: 'User actions' });
+    expect(within(menu).getByRole('menuitemradio', { name: 'In review' })).toHaveAttribute('aria-checked', 'true');
+    const unlock = within(menu).getByRole('menuitem', { name: 'Unlock' });
+    expect(unlock).toHaveClass('text-rose-600');
+    await actor.click(unlock);
+    expect(fns.onUnlock).toHaveBeenCalledTimes(1);
+    expect(fns.onStatusChange).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['no lock', undefined],
+    ['a lock that has run out', { step: 'password' as const, lockedUntil: new Date(Date.now() - 1000).toISOString() }],
+  ])('has no Unlock for a user with %s', async (_label, loginLock) => {
+    const actor = userEvent.setup();
+    render(<UserActionsMenu user={{ email: 'ann@x.com', role: 'customer', status: 'active', loginLock }} {...handlers()} />);
+    await actor.click(screen.getByRole('button', { name: 'User actions' }));
+    expect(within(screen.getByRole('menu', { name: 'User actions' })).queryByRole('menuitem', { name: 'Unlock' })).toBeNull();
   });
 });

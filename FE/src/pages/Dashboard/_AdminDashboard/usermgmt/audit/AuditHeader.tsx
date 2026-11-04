@@ -3,14 +3,18 @@ import { Download, Shield, X } from 'lucide-react';
 import Avatar from '../../../../../components/Avatar';
 import { AUDIT_FOCUS, AUDIT_PILL } from './auditUi';
 import { formatJoined, roleLabel, statusLabel } from './auditModel';
+import { isLoginLocked, type UserLoginLock } from '../userStatus';
 
 export default function AuditHeader({
   userDetails,
+  loginLock,
   titleId,
   onExport,
   onClose,
 }: {
   userDetails: any;
+  /** From the user list row: the full-profile fetch does not carry the sign-in lock. */
+  loginLock?: UserLoginLock;
   titleId: string;
   onExport: () => void;
   onClose: () => void;
@@ -19,6 +23,7 @@ export default function AuditHeader({
   const joined = formatJoined(userDetails?.createdAt);
   const role = roleLabel(userDetails?.role);
   const status = statusLabel(userDetails?.status);
+  const locked = isLoginLocked(loginLock);
 
   return (
     <header className="flex flex-col gap-4 border-b border-audit-line px-5 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-8">
@@ -30,7 +35,14 @@ export default function AuditHeader({
               {name}
             </h2>
             <span className={`${AUDIT_PILL} bg-audit-brand-soft text-audit-brand`}>{role}</span>
-            <span className={`${AUDIT_PILL} bg-audit-sunken text-audit-ink`}>{status}</span>
+            <span className={`${AUDIT_PILL} bg-audit-sunken text-audit-ink`}>
+              {status}
+              {locked ? (
+                <span data-testid="audit-locked-tag" className="ml-1 text-[10px] font-normal text-rose-600">
+                  (locked)
+                </span>
+              ) : null}
+            </span>
           </div>
           <p className="truncate text-sm text-audit-muted">
             {userDetails?.email || '—'}

@@ -37,6 +37,23 @@ export const countedFailures = (state: LoginAttemptState | null | undefined, now
     return Number.isFinite(failures) && failures > 0 ? Math.floor(failures) : 0;
 };
 
+export type ActiveLoginLock = { step: LoginAttemptKind; lockedUntil: Date };
+
+/** The lock still running on an account's record, or null. When both steps are locked, the one that ends last. */
+export const activeLoginLock = (
+    record: { password?: LoginAttemptState | null; otp?: LoginAttemptState | null } | null | undefined,
+    nowMs: number
+): ActiveLoginLock | null => {
+    let best: ActiveLoginLock | null = null;
+    for (const step of ["password", "otp"] as const) {
+        const remaining = lockRemainingMs(record?.[step], nowMs);
+        if (remaining > 0 && (!best || nowMs + remaining > best.lockedUntil.getTime())) {
+            best = { step, lockedUntil: new Date(nowMs + remaining) };
+        }
+    }
+    return best;
+};
+
 export const attemptsLeft = (failures: number): number =>
     Math.max(0, MAX_LOGIN_ATTEMPTS - Math.max(0, Math.floor(Number(failures) || 0)));
 

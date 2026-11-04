@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
@@ -156,6 +156,56 @@ describe('AdminSnapshotMetricView', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByText('No new experts in this range')).toBeInTheDocument();
+  });
+
+  it.each(['experts', 'students'])('marks locked %s with a small (locked) tag and can filter to them', async listType => {
+    mockedUsers.mockResolvedValue({
+      result: [
+        {
+          _id: 'u1',
+          username: 'Locked Person',
+          email: 'locked@example.com',
+          status: 'active',
+          createdAt: '2026-09-01T00:00:00.000Z',
+          loginLock: { step: 'password', lockedUntil: new Date(Date.now() + 10 * 60_000).toISOString() },
+        },
+        {
+          _id: 'u2',
+          username: 'Ran Out',
+          email: 'ranout@example.com',
+          status: 'review',
+          createdAt: '2026-09-01T00:00:00.000Z',
+          loginLock: { step: 'otp', lockedUntil: new Date(Date.now() - 1000).toISOString() },
+        },
+      ],
+      totalCount: 2,
+    });
+    const actor = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={[`/user/admindashboard/snapshot/${listType}?range=6m`]}>
+        <Routes>
+          <Route path="/user/admindashboard/snapshot/:listType" element={<AdminSnapshotMetricView />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getAllByText('Locked Person').length).toBeGreaterThan(0));
+    const tags = screen.getAllByTestId('snapshot-locked-tag');
+    expect(tags.length).toBeGreaterThan(0);
+    for (const tag of tags) {
+      expect(tag).toHaveTextContent('(locked)');
+      expect(tag.parentElement).toHaveTextContent('Active(locked)');
+    }
+    expect(screen.getAllByText('In review').every(el => !el.textContent?.includes('locked'))).toBe(true);
+
+    await actor.click(screen.getAllByText('Locked Person')[0]);
+    const details = await screen.findByRole('dialog');
+    expect(within(details).getByTestId('snapshot-locked-tag')).toHaveTextContent('(locked)');
+    await actor.click(within(details).getAllByRole('button', { name: 'Close details' })[0]);
+
+    await actor.selectOptions(screen.getByLabelText('Status'), 'Locked');
+    await waitFor(() =>
+      expect(mockedUsers).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'locked' })),
+    );
   });
 
   it('auto-selects the first row on desktop', async () => {

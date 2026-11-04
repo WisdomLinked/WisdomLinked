@@ -27,6 +27,7 @@ describe('UserListTable', () => {
         onManage={vi.fn()}
         onImpersonate={vi.fn()}
         onAudit={vi.fn()}
+        onUnlock={vi.fn()}
       />,
     );
 
@@ -54,6 +55,7 @@ describe('UserListTable', () => {
         onManage={vi.fn()}
         onImpersonate={vi.fn()}
         onAudit={vi.fn()}
+        onUnlock={vi.fn()}
       />,
     );
 
@@ -72,6 +74,7 @@ describe('UserListTable', () => {
         onManage={vi.fn()}
         onImpersonate={vi.fn()}
         onAudit={vi.fn()}
+        onUnlock={vi.fn()}
       />,
     );
 
@@ -103,6 +106,7 @@ describe('UserListTable', () => {
         onManage={vi.fn()}
         onImpersonate={vi.fn()}
         onAudit={vi.fn()}
+        onUnlock={vi.fn()}
       />,
     );
 
@@ -111,5 +115,44 @@ describe('UserListTable', () => {
     await actor.click(triggers[menuIndex]);
     await actor.click(screen.getByRole('menuitemradio', { name: 'Blocked' }));
     expect(onStatusChange).toHaveBeenCalledWith(expect.objectContaining({ email: 'ann@x.com' }), 'blocked');
+  });
+
+  it.each(['active', 'review', 'blocked'])('a locked %s user keeps their status with a small "(locked)" beside it', status => {
+    const lockedUntil = new Date(Date.now() + 10 * 60_000).toISOString();
+    render(
+      <UserListTable
+        users={[{ ...user, status, loginLock: { step: 'otp', lockedUntil } }]}
+        emptyMessage="None"
+        onStatusChange={vi.fn()}
+        onManage={vi.fn()}
+        onImpersonate={vi.fn()}
+        onAudit={vi.fn()}
+        onUnlock={vi.fn()}
+      />,
+    );
+    const label = { active: 'Active', review: 'In review', blocked: 'Blocked' }[status];
+    const tags = screen.getAllByTestId('user-locked-tag');
+    expect(tags).toHaveLength(2);
+    for (const tag of tags) {
+      expect(tag).toHaveTextContent('(locked)');
+      expect(tag).toHaveClass('text-[11px]', 'text-rose-600');
+      expect(tag.className).not.toMatch(/text-red-\d/);
+      expect(tag.parentElement?.textContent).toBe(`${label}(locked)`);
+    }
+  });
+
+  it('shows no "(locked)" when the lock has run out or there is none', () => {
+    render(
+      <UserListTable
+        users={[user, { ...user, _id: 'u2', email: 'bo@x.com', loginLock: { step: 'password', lockedUntil: new Date(Date.now() - 1000).toISOString() } }]}
+        emptyMessage="None"
+        onStatusChange={vi.fn()}
+        onManage={vi.fn()}
+        onImpersonate={vi.fn()}
+        onAudit={vi.fn()}
+        onUnlock={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('user-locked-tag')).toBeNull();
   });
 });

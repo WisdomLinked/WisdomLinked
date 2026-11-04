@@ -55,6 +55,7 @@ import {
   stripRefundPrefix,
 } from '../../utils/adminSnapshotDisplay';
 import { formatProfileLocation } from '../../utils/profileLocation';
+import { isLoginLocked } from '../../pages/Dashboard/_AdminDashboard/usermgmt/userStatus';
 import { OVERLAY_Z_DIALOG } from '../../utils/overlayLayers';
 import MetricValue, { METRIC_VALUE_CLASS } from './MetricValue';
 
@@ -123,12 +124,14 @@ const STATUS_OPTIONS: Record<SnapshotListType, { value: string; label: string }[
     { value: 'review', label: 'In review' },
     { value: 'active', label: 'Active' },
     { value: 'blocked', label: 'Blocked' },
+    { value: 'locked', label: 'Locked' },
   ],
   students: [
     { value: '', label: 'All statuses' },
     { value: 'review', label: 'In review' },
     { value: 'active', label: 'Active' },
     { value: 'blocked', label: 'Blocked' },
+    { value: 'locked', label: 'Locked' },
   ],
   sessions: [
     { value: '', label: 'All statuses' },
@@ -166,6 +169,8 @@ type PersonRow = {
   image?: string;
   title?: string;
   status?: string;
+  /** Sign-in lock running after 5 wrong passwords or codes; shown next to the status. */
+  locked?: boolean;
   createdAt?: string;
   description?: string;
   price?: number[];
@@ -221,12 +226,17 @@ function paymentUser(row: PaymentHistoryRow): { label: string; missing: boolean 
   return { label: 'Unknown user', missing: true };
 }
 
-function StatusPill({ status }: { status?: string }) {
+function StatusPill({ status, locked = false }: { status?: string; locked?: boolean }) {
   if (!status) return null;
   const tone = statusTone(status);
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusPillClass(tone)}`}>
+    <span className={`inline-flex items-baseline rounded-full px-2.5 py-0.5 text-xs font-medium ${statusPillClass(tone)}`}>
       {statusLabel(status)}
+      {locked ? (
+        <span data-testid="snapshot-locked-tag" className="ml-1 text-[10px] font-normal text-rose-600">
+          (locked)
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -575,7 +585,7 @@ async function fetchPage(
       q: args.q || undefined,
       ...(sendRange ? bounds : {}),
     });
-    type ApiUser = PersonRow & { _id?: string };
+    type ApiUser = PersonRow & { _id?: string; loginLock?: { lockedUntil?: string | null } | null };
     const users = Array.isArray(res?.result) ? (res.result as ApiUser[]) : [];
     const withImages = await Promise.all(
       users.map(async u => {
@@ -597,6 +607,7 @@ async function fetchPage(
         image: u.image,
         title: u.title,
         status: u.status,
+        locked: isLoginLocked(u.loginLock),
         createdAt: u.createdAt,
         description: u.description,
         price: u.price,
@@ -947,7 +958,7 @@ function DetailPanel({
                 ) : null}
                 {listType !== 'refunds' && !header.unknownUser ? (
                   <div className="mt-1.5">
-                    <StatusPill status={row.status} />
+                    <StatusPill status={row.status} locked={row.kind === 'person' && row.locked} />
                   </div>
                 ) : null}
               </div>
@@ -1354,7 +1365,7 @@ export default function AdminSnapshotMetricView() {
                                     </div>
                                   </td>
                                   <td className="px-4 py-2.5">
-                                    <StatusPill status={row.status} />
+                                    <StatusPill status={row.status} locked={row.locked} />
                                   </td>
                                   <td className="px-4 py-2.5">
                                     <DateCell value={row.createdAt} />
@@ -1465,7 +1476,7 @@ export default function AdminSnapshotMetricView() {
                                   {row.kind === 'payment' ? formatMoney(row.amount, row.currency) : ''}
                                 </span>
                               ) : (
-                                <StatusPill status={row.status} />
+                                <StatusPill status={row.status} locked={row.kind === 'person' && row.locked} />
                               )}
                               <ChevronRight size={16} className="text-muted" aria-hidden />
                             </div>

@@ -2,7 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../api/api', () => ({ login: vi.fn(), confirmLoginByCode: vi.fn() }));
+vi.mock('../api/api', () => ({ login: vi.fn(), confirmLoginByCode: vi.fn(), getLoginLockStatus: vi.fn() }));
 vi.mock('../api/csrf', () => ({
   refreshCsrfToken: vi.fn(async () => 'token'),
   bootstrapCsrfToken: vi.fn(async () => 'token'),
@@ -20,11 +20,13 @@ vi.mock('../components/SocialAuthBlock', () => ({ default: () => null }));
 vi.mock('../components/SignupModal', () => ({ default: () => null }));
 vi.mock('../components/BrandWordmark', () => ({ default: () => null }));
 
-import { confirmLoginByCode, login } from '../api/api';
+import { confirmLoginByCode, getLoginLockStatus, login } from '../api/api';
+import { LOCK_STATUS_POLL_MS } from '../utils/loginAttemptNotice';
 import WLLogin from './WLLogin';
 
 const mockedLogin = vi.mocked(login);
 const mockedConfirm = vi.mocked(confirmLoginByCode);
+const mockedLockStatus = vi.mocked(getLoginLockStatus);
 
 const signInButton = () => screen.getByRole('button', { name: 'Sign in' });
 
@@ -50,6 +52,7 @@ describe('sign-in attempt limits', () => {
   beforeEach(() => {
     mockedLogin.mockReset();
     mockedConfirm.mockReset();
+    mockedLockStatus.mockReset();
     render(<WLLogin />);
   });
 
@@ -122,5 +125,77 @@ describe('sign-in attempt limits', () => {
     );
     document.querySelectorAll<HTMLInputElement>('input.otp-box').forEach(box => expect(box).toBeDisabled());
     expect(screen.getByRole('button', { name: /Resend code/ })).toBeDisabled();
+  });
+
+  it('an admin Unlock clears the countdown and re-enables Sign in without a refresh', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mockedLogin.mockResolvedValue({
+        status: 'FAIL',
+        error: 'Too many failed sign-in attempts. Please try again in 15 minutes.',
+        attemptsLeft: 0,
+        lockedStep: 'password',
+        lockedForSeconds: 900,
+      });
+      mockedLockStatus.mockResolvedValue({ status: 'SUCCESS', locked: true, lockedStep: 'password', lockedForSeconds: 890 });
+      await submit();
+      await screen.findByTestId('login-attempts-password');
+      expect(signInButton()).toBeDisabled();
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(LOCK_STATUS_POLL_MS); });
+      expect(mockedLockStatus).toHaveBeenCalledWith('student@example.com');
+      expect(screen.getByTestId('login-attempts-password')).toBeInTheDocument();
+      expect(signInButton()).toBeDisabled();
+
+      mockedLockStatus.mockResolvedValue({ status: 'SUCCESS', locked: false });
+      await act(async () => { await vi.advanceTimersByTimeAsync(LOCK_STATUS_POLL_MS); });
+      expect(screen.queryByTestId('login-attempts-password')).toBeNull();
+      expect(signInButton()).not.toBeDisabled();
+
+      const calls = mockedLockStatus.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(LOCK_STATUS_POLL_MS * 2); });
+      expect(mockedLockStatus.mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not ask the server about locks when nothing is locked', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mockedLogin.mockResolvedValue({ status: 'FAIL', error: 'Incorrect email or password. You have 4 attempts left.', attemptsLeft: 4 });
+      await submit();
+      await screen.findByTestId('login-attempts-password');
+      await act(async () => { await vi.advanceTimersByTimeAsync(LOCK_STATUS_POLL_MS * 2); });
+      expect(mockedLockStatus).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('an Unlock on the code step re-enables the code boxes and Resend', { timeout: 30000 }, async () => {
+    await reachCodeStep();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Resend code/ })).not.toBeDisabled(), { timeout: 20000 });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mockedConfirm.mockResolvedValue({
+        status: 'FAIL',
+        error: 'Too many incorrect codes. Please try again in 15 minutes.',
+        attemptsLeft: 0,
+        lockedStep: 'otp',
+        lockedForSeconds: 900,
+      });
+      await act(async () => typeCode('000000'));
+      await screen.findByTestId('login-attempts-otp');
+      expect(screen.getByRole('button', { name: /Resend code/ })).toBeDisabled();
+
+      mockedLockStatus.mockResolvedValue({ status: 'SUCCESS', locked: false });
+      await act(async () => { await vi.advanceTimersByTimeAsync(LOCK_STATUS_POLL_MS); });
+      expect(screen.queryByTestId('login-attempts-otp')).toBeNull();
+      document.querySelectorAll<HTMLInputElement>('input.otp-box').forEach(box => expect(box).not.toBeDisabled());
+      expect(screen.getByRole('button', { name: /Resend code/ })).not.toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

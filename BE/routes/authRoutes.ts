@@ -4,6 +4,7 @@ const router = express.Router();
 
 const {
     login,
+    loginLockStatus,
     logout,
     register,
     updateMissedChats,
@@ -78,6 +79,7 @@ router.post("/verifyRegistration", verifyRegistration);
 router.get("/checkVerification", checkVerificationStatus);
 router.post("/login", authLoginLimiter, validateLoginSchema, login);
 router.post("/confirmLoginByCode", authLoginLimiter, confirmLoginByCode);
+router.post("/loginLockStatus", loginLockStatus);
 router.post("/passwordResetRequest", sensitiveLimiter, passwordResetRequest);
 router.post("/verifyPasswordResetOTP", sensitiveLimiter, verifyPasswordResetOTP);
 router.post("/confirmPasswordResetByCode", sensitiveLimiter, confirmPasswordResetByCode);

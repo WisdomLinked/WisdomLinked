@@ -2,6 +2,7 @@ const LoginAttempt = require('../models/LoginAttempt');
 const {
     LOGIN_LOCK_MS,
     MAX_LOGIN_ATTEMPTS,
+    activeLoginLock,
     countedFailures,
     lockRemainingMs,
 } = require('../utils/loginAttempts');
@@ -88,9 +89,43 @@ const clearLoginFailures = async (email: unknown, kinds: Kind[] = ['password', '
     await LoginAttempt.updateOne({ email: key }, { $set: reset });
 };
 
+/** The lock running on this email right now (either step), or null. */
+const currentLoginLock = async (email: unknown, now: Date = new Date()) => {
+    const key = emailKey(email);
+    if (limitsDisabled() || !key) return null;
+    const record = await LoginAttempt.findOne({ email: key }).lean();
+    return activeLoginLock(record, now.getTime());
+};
+
+/** Running locks for the given emails, keyed by lower-cased email; emails with no lock are absent. */
+const currentLoginLocks = async (emails: unknown[], now: Date = new Date()) => {
+    const locks = new Map<string, any>();
+    const keys = [...new Set(emails.map(emailKey).filter(Boolean))];
+    if (limitsDisabled() || !keys.length) return locks;
+    const records = await LoginAttempt.find({ email: { $in: keys } }).lean();
+    for (const record of records) {
+        const lock = activeLoginLock(record, now.getTime());
+        if (lock) locks.set(record.email, lock);
+    }
+    return locks;
+};
+
+/** Lower-cased emails with a lock running on either step. */
+const lockedLoginEmails = async (now: Date = new Date()): Promise<string[]> => {
+    if (limitsDisabled()) return [];
+    const records = await LoginAttempt.find(
+        { $or: [{ 'password.lockUntil': { $gt: now } }, { 'otp.lockUntil': { $gt: now } }] },
+        { email: 1 }
+    ).lean();
+    return records.map((record: any) => record.email);
+};
+
 module.exports = {
     claimLoginAttempt,
     clearLoginFailures,
+    currentLoginLock,
+    currentLoginLocks,
     lockLoginStep,
+    lockedLoginEmails,
     loginLockRemainingMs,
 };

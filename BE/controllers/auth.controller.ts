@@ -65,7 +65,7 @@ import {
 } from '../utils/authUserFacingCopy';
 import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { attemptsLeft as attemptsLeftAfter, attemptsLeftSentence, lockedMessage, shouldLock } from '../utils/loginAttempts';
-const { claimLoginAttempt, clearLoginFailures, lockLoginStep, loginLockRemainingMs } = require('../services/loginThrottle');
+const { claimLoginAttempt, clearLoginFailures, currentLoginLock, lockLoginStep, loginLockRemainingMs } = require('../services/loginThrottle');
 const {
     gateSignupAgreement,
     assertPendingSignupCanCreateAccount,
@@ -593,6 +593,27 @@ const loginFailureReply = async (res: Response, email: unknown, kind: 'password'
     const left = attemptsLeftAfter(attemptNo);
     const lead = kind === 'password' ? AUTH_WRONG_PASSWORD_LEAD : AUTH_WRONG_CODE_LEAD;
     return res.status(200).json({ status: 'FAIL', error: `${lead} ${attemptsLeftSentence(left)}`, attemptsLeft: left });
+};
+
+/**
+ * Whether sign-in is still locked for this email. The login page asks while its countdown runs, so an
+ * admin's Unlock clears the countdown without a refresh. Same answer for emails with no account.
+ */
+const loginLockStatus = async (req: Request, res: Response) => {
+    try {
+        const lock = await currentLoginLock(req.body?.email);
+        if (!lock) return res.status(200).json({ status: 'SUCCESS', locked: false });
+        const remainingMs = Math.max(0, lock.lockedUntil.getTime() - Date.now());
+        return res.status(200).json({
+            status: 'SUCCESS',
+            locked: true,
+            lockedStep: lock.step,
+            lockedForSeconds: Math.ceil(remainingMs / 1000),
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ status: 'FAIL', error: HTTP_GENERIC_ERROR });
+    }
 };
 
 const login = async (req: Request, res: Response) => {
@@ -1611,6 +1632,7 @@ const uploadProfilePhoto = async (req: any, res: Response) => {
 
 module.exports = {
     login,
+    loginLockStatus,
     logout,
     register,
     getMe,
