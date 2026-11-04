@@ -28,6 +28,8 @@ const mockedLogin = vi.mocked(login);
 const mockedConfirm = vi.mocked(confirmLoginByCode);
 const mockedLockStatus = vi.mocked(getLoginLockStatus);
 
+const BLOCKED_TEXT = 'Your profile is blocked. Contact admin for more details.';
+
 const signInButton = () => screen.getByRole('button', { name: 'Sign in' });
 
 const submit = async (email = 'student@example.com', password = 'wrong') => {
@@ -93,10 +95,45 @@ describe('sign-in attempt limits', () => {
   });
 
   it('other failures still use the banner', async () => {
-    mockedLogin.mockResolvedValue({ status: 'FAIL', error: 'Your account is blocked. Contact support for help.' });
+    mockedLogin.mockResolvedValue({ status: 'FAIL', error: 'Please sign in with Google.' });
     await submit();
-    expect(await screen.findByText('Your account is blocked. Contact support for help.')).toBeInTheDocument();
+    expect(await screen.findByText('Please sign in with Google.')).toBeInTheDocument();
     expect(screen.queryByTestId('login-attempts-password')).toBeNull();
+  });
+
+  it('shows a blocked account in the same red line under the password, not in the banner', async () => {
+    mockedLogin.mockResolvedValue({ status: 'FAIL', error: BLOCKED_TEXT, code: 'USER_BLOCKED' });
+    await submit();
+    const note = await screen.findByTestId('login-attempts-password');
+    expect(note).toHaveTextContent(BLOCKED_TEXT);
+    expect(note).toHaveClass('text-rose-600');
+    expect(screen.getAllByText(BLOCKED_TEXT)).toHaveLength(1);
+    expect(signInButton()).not.toBeDisabled();
+  });
+
+  it('does not show the blocked text for a wrong password', async () => {
+    mockedLogin.mockResolvedValue({ status: 'FAIL', error: 'Incorrect email or password. You have 4 attempts left.', attemptsLeft: 4 });
+    await submit();
+    await screen.findByTestId('login-attempts-password');
+    expect(screen.queryByText(BLOCKED_TEXT)).toBeNull();
+  });
+
+  it('clears the blocked text when a different email is typed', async () => {
+    mockedLogin.mockResolvedValue({ status: 'FAIL', error: BLOCKED_TEXT, code: 'USER_BLOCKED' });
+    await submit();
+    await screen.findByTestId('login-attempts-password');
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'other@example.com' } });
+    expect(screen.queryByText(BLOCKED_TEXT)).toBeNull();
+  });
+
+  it('shows the blocked text under the code boxes when the account is blocked after the password step', async () => {
+    await reachCodeStep();
+    mockedConfirm.mockResolvedValue({ status: 'FAIL', error: BLOCKED_TEXT, code: 'USER_BLOCKED' });
+    await act(async () => typeCode('123456'));
+    const note = await screen.findByTestId('login-attempts-otp');
+    expect(note).toHaveTextContent(BLOCKED_TEXT);
+    expect(note).toHaveClass('text-rose-600');
+    expect(screen.getAllByText(BLOCKED_TEXT)).toHaveLength(1);
   });
 
   it('shows the tries left in red under the code boxes', async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatCountdown,
   isAttemptLimitReply,
+  isBlockedAccountReply,
   lockCountdownText,
   lockAfterStatusCheck,
   lockFromReply,
@@ -21,6 +22,14 @@ describe('isAttemptLimitReply', () => {
     expect(isAttemptLimitReply({ status: 'FAIL', attemptsLeft: null })).toBe(false);
     expect(isAttemptLimitReply({ status: 'SUCCESS', attemptsLeft: 4 })).toBe(false);
     expect(isAttemptLimitReply(false)).toBe(false);
+  });
+
+  it('isBlockedAccountReply is true only for a refused sign-in with the blocked code', () => {
+    expect(isBlockedAccountReply({ status: 'FAIL', error: 'x', code: 'USER_BLOCKED' })).toBe(true);
+    expect(isBlockedAccountReply({ status: 'FAIL', error: 'x', code: 'UNDER_REVIEW' })).toBe(false);
+    expect(isBlockedAccountReply({ status: 'FAIL', error: 'x', attemptsLeft: 4 })).toBe(false);
+    expect(isBlockedAccountReply({ status: 'SUCCESS', code: 'USER_BLOCKED' })).toBe(false);
+    expect(isBlockedAccountReply(false)).toBe(false);
   });
 });
 

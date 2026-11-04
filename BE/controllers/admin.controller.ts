@@ -470,9 +470,17 @@ const serviceIdsForProfile = async (services: any[]): Promise<any[]> => {
     return ids;
 };
 
+const BLOCK_REASON_MAX_LENGTH = 500;
+
 const updateProfileOfUser = async (req, res) => {
     try {
-        const { email, username, title, description, image, keywords, services, country, state, city, phoneNumber, price, joinPopupBlocked, status, specialNote } = req.body;
+        const { email, username, title, description, image, keywords, services, country, state, city, phoneNumber, price, joinPopupBlocked, status, statusReason, specialNote } = req.body;
+        const blockReason = status === 'blocked' && typeof statusReason === 'string'
+            ? statusReason.trim().slice(0, BLOCK_REASON_MAX_LENGTH)
+            : '';
+        if (status === 'blocked' && !blockReason) {
+            return res.status(400).json({ status: 'FAIL', error: 'Please state the reason for blocking this user.' });
+        }
         const updates: Record<string, any> = {}
         if (username) {
             updates.username = username
@@ -539,7 +547,12 @@ const updateProfileOfUser = async (req, res) => {
                 targetType: "user",
                 targetId: existing._id,
                 targetEmail: existing.email,
-                meta: { from: existing.status, to: status, role: existing.role },
+                meta: {
+                    from: existing.status,
+                    to: status,
+                    role: existing.role,
+                    ...(blockReason ? { reason: blockReason } : {}),
+                },
             });
         }
         if (existing && Object.keys(updates).some((key) => key !== "status")) {

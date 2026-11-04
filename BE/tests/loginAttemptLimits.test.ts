@@ -335,6 +335,46 @@ test("a right code typed too late still clears the wrong-code count", async t =>
     assert.equal(attempts.get(EMAIL).otp.failures, 0);
 });
 
+const BLOCKED_REPLY = {
+    status: "FAIL",
+    error: "Your profile is blocked. Contact admin for more details.",
+    code: "USER_BLOCKED",
+};
+
+test("a blocked user with the right password is told so, and no code is emailed", async t => {
+    const { sent } = installFakes(t);
+    users.get(EMAIL).status = "blocked";
+    assert.deepEqual(await signIn(EMAIL, PASSWORD), BLOCKED_REPLY);
+    assert.equal(sent.length, 0);
+});
+
+test("a blocked user with a wrong password gets the normal reply, so blocked accounts cannot be discovered", async t => {
+    installFakes(t);
+    users.get(EMAIL).status = "blocked";
+    const reply = await signIn(EMAIL, "wrong");
+    assert.equal(reply.error, "Incorrect email or password. You have 4 attempts left.");
+    assert.equal(reply.code, undefined);
+});
+
+test("a user blocked after the password step is refused at the code step", async t => {
+    const { pending } = installFakes(t);
+    assert.equal((await signIn(EMAIL, PASSWORD)).status, "SUCCESS");
+    users.get(EMAIL).status = "blocked";
+    assert.deepEqual(await enterCode("123456"), BLOCKED_REPLY);
+    assert.equal(pending.has(EMAIL), true);
+});
+
+for (const status of ["active", "review"]) {
+    test(`a user with status ${status} is not given the blocked reply`, async t => {
+        installFakes(t);
+        users.get(EMAIL).status = status;
+        assert.equal((await signIn(EMAIL, PASSWORD)).status, "SUCCESS");
+        const reply = await enterCode("123456");
+        assert.equal(reply.status, "SUCCESS");
+        assert.equal(reply.code, undefined);
+    });
+}
+
 test("signing in clears wrong passwords typed elsewhere after the code was sent", async t => {
     installFakes(t);
     await signIn(EMAIL, PASSWORD);

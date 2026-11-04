@@ -18,6 +18,7 @@ import {
     type LoginStep,
     LOCK_STATUS_POLL_MS,
     isAttemptLimitReply,
+    isBlockedAccountReply,
     lockAfterStatusCheck,
     lockCountdownText,
     lockFromReply,
@@ -120,7 +121,7 @@ export default function WLLogin() {
         return response?.error || 'Invalid credentials. Please try again.';
     };
 
-    /** Shows a wrong-try or locked reply under the field; false when the reply is something else. */
+    /** Shows a wrong-try, locked or blocked reply under the field; false when the reply is something else. */
     const applyAttemptLimitReply = (response: any, step: LoginStep) => {
         const now = Date.now();
         const nextLock = lockFromReply(response, form.email, now);
@@ -130,7 +131,7 @@ export default function WLLogin() {
             setAttemptNotice(null);
             return true;
         }
-        if (isAttemptLimitReply(response)) {
+        if (isAttemptLimitReply(response) || isBlockedAccountReply(response)) {
             setAttemptNotice({ step, text: String(response.error || '') });
             return true;
         }

@@ -43,6 +43,7 @@ const {
 import {
     AUTH_INVALID_CREDENTIALS,
     AUTH_USER_BLOCKED,
+    AUTH_ACCOUNT_BLOCKED,
     AUTH_EMAIL_MISSING,
     AUTH_OAUTH_LOGIN_REQUIRED,
     AUTH_LOGIN_REQUEST_EXPIRED,
@@ -595,6 +596,10 @@ const loginFailureReply = async (res: Response, email: unknown, kind: 'password'
     return res.status(200).json({ status: 'FAIL', error: `${lead} ${attemptsLeftSentence(left)}`, attemptsLeft: left });
 };
 
+/** Sent only after the right password, so the reply never reveals which accounts are blocked. */
+const loginBlockedReply = (res: Response) =>
+    res.status(200).json({ status: 'FAIL', error: AUTH_ACCOUNT_BLOCKED, code: 'USER_BLOCKED' });
+
 /**
  * Whether sign-in is still locked for this email. The login page asks while its countdown runs, so an
  * admin's Unlock clears the countdown without a refresh. Same answer for emails with no account.
@@ -641,9 +646,7 @@ const login = async (req: Request, res: Response) => {
 
         await clearLoginFailures(email, ['password']);
 
-        if (user.status === 'blocked') {
-            return res.status(200).json({ status: 'FAIL', error: AUTH_USER_BLOCKED });
-        }
+        if (user.status === 'blocked') return loginBlockedReply(res);
 
         const code = issueAuthOtpCode();
 
@@ -724,9 +727,7 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: AUTH_INVALID_CREDENTIALS });
         }
 
-        if (user.status === 'blocked') {
-            return res.status(200).json({ status: 'FAIL', error: AUTH_USER_BLOCKED });
-        }
+        if (user.status === 'blocked') return loginBlockedReply(res);
 
         await loginRequest.deleteOne()
         await clearLoginFailures(email);
