@@ -153,8 +153,66 @@ describe('AuditModal date range', () => {
     await screen.findByRole('listbox', { name: 'Conversations' });
     setDates('2026-10-01', '2026-10-10');
     fireEvent.change(screen.getByLabelText('From date'), { target: { value: '2026-10-20' } });
+    fireEvent.blur(screen.getByLabelText('From date'));
+    await waitFor(() => expect(screen.getByLabelText('To date')).toHaveValue(''));
     expect(screen.getByLabelText('From date')).toHaveValue('2026-10-20');
-    expect(screen.getByLabelText('To date')).toHaveValue('');
+  });
+
+  it('keeps the other date while a date is typed by keyboard, and only filters once it is finished', async () => {
+    render(<AuditModal selectedUser={{ email: 'ada@x.com' }} closeModal={vi.fn()} />);
+    await userEvent.click(await screen.findByRole('tab', { name: /Payment history/ }));
+    const fromInput = screen.getByLabelText('From date');
+    const toInput = screen.getByLabelText('To date');
+    fireEvent.change(fromInput, { target: { value: '2026-10-01' } });
+    mockedPayments.mockClear();
+
+    for (const value of ['0002-10-31', '0020-10-31', '0202-10-31', '2026-10-31']) {
+      fireEvent.change(toInput, { target: { value } });
+    }
+
+    expect(fromInput).toHaveValue('2026-10-01');
+    expect(toInput).toHaveValue('2026-10-31');
+    await waitFor(() => expect(mockedPayments).toHaveBeenCalled());
+    for (const [body] of mockedPayments.mock.calls as any[]) {
+      expect(body.dateTo).toBe(new Date(2026, 10, 1).toISOString());
+    }
+  });
+
+  it('keeps the other date when changing a month passes through an earlier one', async () => {
+    render(<AuditModal selectedUser={{ email: 'ada@x.com' }} closeModal={vi.fn()} />);
+    await screen.findByRole('listbox', { name: 'Conversations' });
+    setDates('2026-10-01', '2026-10-31');
+    const toInput = screen.getByLabelText('To date');
+    fireEvent.change(toInput, { target: { value: '2026-01-31' } });
+    fireEvent.change(toInput, { target: { value: '2026-11-30' } });
+    fireEvent.blur(toInput);
+    expect(screen.getByLabelText('From date')).toHaveValue('2026-10-01');
+    expect(toInput).toHaveValue('2026-11-30');
+  });
+
+  it('filters on what the boxes show when both dates are moved forward past the old range', async () => {
+    render(<AuditModal selectedUser={{ email: 'ada@x.com' }} closeModal={vi.fn()} />);
+    await userEvent.click(await screen.findByRole('tab', { name: /Payment history/ }));
+    setDates('2026-09-01', '2026-09-30');
+    mockedPayments.mockClear();
+    fireEvent.change(screen.getByLabelText('From date'), { target: { value: '2026-10-01' } });
+    fireEvent.change(screen.getByLabelText('To date'), { target: { value: '2026-10-31' } });
+    await waitFor(() => expect(mockedPayments).toHaveBeenCalled());
+    for (const [body] of mockedPayments.mock.calls as any[]) {
+      expect(body.dateFrom).toBe(new Date(new Date(2026, 9, 1).getTime() - 1).toISOString());
+      expect(body.dateTo).toBe(new Date(2026, 10, 1).toISOString());
+    }
+  });
+
+  it('puts an unfinished year back when the admin leaves the box', async () => {
+    render(<AuditModal selectedUser={{ email: 'ada@x.com' }} closeModal={vi.fn()} />);
+    await screen.findByRole('listbox', { name: 'Conversations' });
+    setDates('2026-10-01', '2026-10-31');
+    const toInput = screen.getByLabelText('To date');
+    fireEvent.change(toInput, { target: { value: '0026-10-31' } });
+    fireEvent.blur(toInput);
+    await waitFor(() => expect(toInput).toHaveValue('2026-10-31'));
+    expect(screen.getByLabelText('From date')).toHaveValue('2026-10-01');
   });
 });
 
