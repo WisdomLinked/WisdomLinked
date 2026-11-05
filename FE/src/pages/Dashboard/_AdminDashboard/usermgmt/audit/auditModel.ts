@@ -331,7 +331,12 @@ export function conversationKindLabel(kind: ConversationKind): string {
   return '1:1';
 }
 
-export function emptySectionCopy(kind: ConversationKind): string {
+export function emptySectionCopy(kind: ConversationKind, rangeActive = false): string {
+  if (rangeActive) {
+    if (kind === 'group') return 'No community chats in these dates.';
+    if (kind === 'seminar') return 'No seminars in these dates.';
+    return 'No 1:1 appointments in these dates.';
+  }
   if (kind === 'group') return 'No community chats on this account.';
   if (kind === 'seminar') return 'No seminars on this account.';
   return 'No 1:1 appointments on this account.';
@@ -604,6 +609,8 @@ export function paymentSummary(
   role: AuditMoneyRole = 'expert',
   rates: AuditCommissionRates = DEFAULT_AUDIT_RATES,
   cheques: AuditCheque[] = [],
+  /** The cheques that count towards "Paid out"; every cheque still decides which months are already paid. */
+  paidOutCheques: AuditCheque[] = cheques,
 ): PaymentSummary {
   let gross = 0;
   let fees = 0;
@@ -615,7 +622,7 @@ export function paymentSummary(
   const paidMonths = new Set(
     (cheques || []).map(cheque => payrollMonthKey(Number(cheque.year), Number(cheque.month))),
   );
-  const chequeTotal = (cheques || []).reduce(
+  const chequeTotal = (paidOutCheques || []).reduce(
     (sum, cheque) => sum + (typeof cheque.amountCents === 'number' && Number.isFinite(cheque.amountCents) ? cheque.amountCents : 0),
     0,
   );

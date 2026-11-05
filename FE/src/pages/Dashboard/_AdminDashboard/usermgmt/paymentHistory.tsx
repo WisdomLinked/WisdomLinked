@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { doFilterPaymentHistories, getPricingSettings, listExpertPayroll } from '../../../../api/api';
 import PaymentHistoryView from './audit/PaymentHistory';
 import {
@@ -8,9 +8,16 @@ import {
   type AuditCheque,
   type AuditCommissionRates,
 } from './audit/auditModel';
+import {
+  EMPTY_AUDIT_RANGE,
+  isChequeInRange,
+  isRangeActive,
+  paymentRangeParams,
+  type AuditDateRange,
+} from './audit/auditDateRange';
 import type { PaymentHistoryRow } from '../payment/paymentHistoryUtils';
 
-const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
+const PaymentHistory = ({ userDetails, range = EMPTY_AUDIT_RANGE }: { userDetails?: any; range?: AuditDateRange }) => {
   const [numPerPage, set_numPerPage] = useState(5);
   const [currentPage, set_currentPage] = useState(0);
   const [totalCount, set_totalCount] = useState(0);
@@ -19,6 +26,10 @@ const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
   const [loading, setLoading] = useState(false);
   const [rates, setRates] = useState<AuditCommissionRates>(DEFAULT_AUDIT_RATES);
   const [cheques, setCheques] = useState<AuditCheque[]>([]);
+  const pageSeq = useRef(0);
+  const summarySeq = useRef(0);
+  const { from, to } = range;
+  const rangeParams = useMemo(() => paymentRangeParams({ from, to }), [from, to]);
 
   useEffect(() => {
     if (typeof getPricingSettings !== 'function') return;
@@ -39,6 +50,7 @@ const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
   const filterHistories = useCallback(
     async (pageNum: number) => {
       if (!userDetails?.email) return;
+      const seq = ++pageSeq.current;
       set_currentPage(pageNum);
       setLoading(true);
       const response = await doFilterPaymentHistories({
@@ -47,18 +59,21 @@ const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
         numPerPage,
         sortBy: 'createdAt',
         sort: 'DESC',
+        ...rangeParams,
       });
+      if (seq !== pageSeq.current) return;
       if (response) {
         set_histories([...(response.result || [])]);
         set_totalCount(response.totalCount || 0);
       }
       setLoading(false);
     },
-    [userDetails?.email, numPerPage],
+    [userDetails?.email, numPerPage, rangeParams],
   );
 
   const loadSummary = useCallback(async () => {
     if (!userDetails?.email) return;
+    const seq = ++summarySeq.current;
     const pageSize = 100;
     const first = await doFilterPaymentHistories({
       email: userDetails.email,
@@ -66,7 +81,9 @@ const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
       numPerPage: pageSize,
       sortBy: 'createdAt',
       sort: 'DESC',
+      ...rangeParams,
     });
+    if (seq !== summarySeq.current) return;
     if (!first) {
       set_allRows([]);
       return;
@@ -81,11 +98,13 @@ const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
         numPerPage: pageSize,
         sortBy: 'createdAt',
         sort: 'DESC',
+        ...rangeParams,
       });
+      if (seq !== summarySeq.current) return;
       if (next?.result) rows = rows.concat(next.result);
     }
     set_allRows(rows);
-  }, [userDetails?.email]);
+  }, [userDetails?.email, rangeParams]);
 
   useEffect(() => {
     const expertId = userDetails?._id;
@@ -108,16 +127,22 @@ const PaymentHistory = ({ userDetails }: { userDetails?: any }) => {
     void loadSummary();
   }, [filterHistories, loadSummary]);
 
+  const chequesInRange = useMemo(
+    () => cheques.filter(cheque => isChequeInRange(cheque, { from, to })),
+    [cheques, from, to],
+  );
+
   const summary = useMemo(
-    () => paymentSummary(allRows.length ? allRows : histories, auditMoneyRole(userDetails?.role), rates, cheques),
-    [allRows, histories, userDetails?.role, rates, cheques],
+    () => paymentSummary(allRows.length ? allRows : histories, auditMoneyRole(userDetails?.role), rates, cheques, chequesInRange),
+    [allRows, histories, userDetails?.role, rates, cheques, chequesInRange],
   );
 
   return (
     <PaymentHistoryView
       rows={histories}
       summary={summary}
-      cheques={cheques}
+      cheques={chequesInRange}
+      rangeActive={isRangeActive(range)}
       rates={rates}
       totalCount={totalCount}
       currentPage={currentPage}

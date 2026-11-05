@@ -135,6 +135,7 @@ export default function PaymentHistory({
   onPage,
   onPageSize,
   loading,
+  rangeActive = false,
 }: {
   rows: PaymentHistoryRow[];
   summary: PaymentSummary;
@@ -146,6 +147,7 @@ export default function PaymentHistory({
   onPage: (page: number) => void;
   onPageSize: (size: number) => void;
   loading: boolean;
+  rangeActive?: boolean;
 }) {
   const expert = summary.role === 'expert';
   const paidCheques = expert ? [...cheques].sort(chequeSort) : [];
@@ -206,7 +208,11 @@ export default function PaymentHistory({
       {loading && rows.length === 0 ? (
         <EmptyState title="Loading payments" />
       ) : rows.length === 0 ? (
-        <EmptyState title="No payments yet" description="This account has no payment history to show." />
+        rangeActive ? (
+          <EmptyState title="No payments in these dates" description="Try a wider date range, or clear it to see every payment." />
+        ) : (
+          <EmptyState title="No payments yet" description="This account has no payment history to show." />
+        )
       ) : (
         <>
           <div className="hidden overflow-x-auto md:block">

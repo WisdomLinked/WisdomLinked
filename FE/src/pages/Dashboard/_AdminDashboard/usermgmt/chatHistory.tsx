@@ -9,6 +9,7 @@ import {
   type ChatMessage,
   type SegmentFilter,
 } from './audit/auditModel';
+import { EMPTY_AUDIT_RANGE, filterConversationBuckets, isRangeActive, type AuditDateRange } from './audit/auditDateRange';
 
 const LG_QUERY = '(min-width: 1024px)';
 
@@ -31,7 +32,7 @@ function useIsLg() {
   return isLg;
 }
 
-const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
+const ChatHistory = ({ userDetails, range = EMPTY_AUDIT_RANGE }: { userDetails?: any; range?: AuditDateRange }) => {
   const isLg = useIsLg();
   const [selectedChat, set_selectedChat] = useState<AuditConversation | undefined>();
   const [gotAllChats, set_gotAllChats] = useState(false);
@@ -46,7 +47,8 @@ const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
   const [segment, setSegment] = useState<SegmentFilter>('all');
   const [activityById, setActivityById] = useState<Record<string, GroupActivityState>>({});
 
-  const buckets = useMemo(() => buildConversations(userDetails), [userDetails]);
+  const allBuckets = useMemo(() => buildConversations(userDetails), [userDetails]);
+  const buckets = useMemo(() => filterConversationBuckets(allBuckets, range), [allBuckets, range]);
 
   const getChatHistory = useCallback(
     async (pageNum: number, conversation: AuditConversation, mode: 'load' | 'retry' = 'load') => {
@@ -136,6 +138,12 @@ const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
   }, [userDetails?._id]);
 
   useEffect(() => {
+    if (selectedChat && !buckets.all.some(item => item.id === selectedChat.id)) {
+      set_selectedChat(undefined);
+    }
+  }, [buckets.all, selectedChat]);
+
+  useEffect(() => {
     if (isLg && !selectedChat && buckets.all.length > 0) {
       set_selectedChat(buckets.all[0]);
     }
@@ -152,6 +160,7 @@ const ChatHistory = ({ userDetails }: { userDetails?: any }) => {
           group={buckets.group}
           appointments={buckets.appointments}
           seminars={buckets.seminars}
+          rangeActive={isRangeActive(range)}
           selectedId={selectedChat?.id}
           failedIds={failedIds}
           query={query}
