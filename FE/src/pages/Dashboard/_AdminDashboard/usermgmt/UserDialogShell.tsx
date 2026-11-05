@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { OVERLAY_Z_DIALOG } from '../../../../utils/overlayLayers';
 
@@ -20,24 +20,38 @@ export default function UserDialogShell({
   const pressedBackdrop = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const keepTabInside = (e: React.KeyboardEvent) => {
-    const panel = panelRef.current;
-    const items = Array.from(panel?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
-    if (items.length === 0) {
-      e.preventDefault();
-      return;
-    }
-    const first = items[0];
-    const last = items[items.length - 1];
-    const active = document.activeElement;
-    if (e.shiftKey && (active === first || active === panel)) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
+  // On the document, not the popup: when a focused button turns disabled the browser moves focus to the page.
+  useEffect(() => {
+    const keepTabInside = (e: KeyboardEvent) => {
+      const panel = panelRef.current;
+      const items = Array.from(panel?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
+      if (items.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (!panel?.contains(active)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && (active === first || active === panel)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      // While an input method (e.g. Chinese) is composing, these keys belong to it.
+      if (e.isComposing) return;
+      if (e.key === 'Escape') onDismiss();
+      if (e.key === 'Tab') keepTabInside(e);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onDismiss]);
 
   return createPortal(
     <div
@@ -55,10 +69,6 @@ export default function UserDialogShell({
         // A drag that starts inside and ends outside also clicks the backdrop; only a press on it counts.
         if (e.target !== e.currentTarget || !pressedBackdrop.current) return;
         if (Date.now() - openedAt.current >= IGNORE_BACKDROP_MS) onDismiss();
-      }}
-      onKeyDown={e => {
-        if (e.key === 'Escape') onDismiss();
-        if (e.key === 'Tab') keepTabInside(e);
       }}
     >
       <div

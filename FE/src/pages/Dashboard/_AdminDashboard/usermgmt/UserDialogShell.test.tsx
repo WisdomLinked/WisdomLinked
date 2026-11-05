@@ -87,6 +87,55 @@ describe('UserDialogShell', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
+  it('Escape closes it when focus has fallen to the page', () => {
+    const { onDismiss } = setup();
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('Tab comes back inside when focus has fallen to the page, both ways', () => {
+    setup();
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(fireEvent.keyDown(document.body, { key: 'Tab' })).toBe(false);
+    expect(screen.getByRole('textbox')).toHaveFocus();
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(fireEvent.keyDown(document.body, { key: 'Tab', shiftKey: true })).toBe(false);
+    expect(screen.getByRole('button', { name: 'Two' })).toHaveFocus();
+  });
+
+  it('leaves Escape and Tab to the input method while it is composing', () => {
+    const { onDismiss } = setup();
+    const box = screen.getByRole('textbox');
+    fireEvent.keyDown(box, { key: 'Escape', isComposing: true });
+    expect(onDismiss).not.toHaveBeenCalled();
+    screen.getByRole('button', { name: 'Two' }).focus();
+    expect(fireEvent.keyDown(document.activeElement as Element, { key: 'Tab', isComposing: true })).toBe(true);
+  });
+
+  it('stops listening once it is gone', () => {
+    const onDismiss = vi.fn();
+    const { unmount } = render(
+      <UserDialogShell labelledBy="title" onDismiss={onDismiss}>
+        <h2 id="title">Title</h2>
+      </UserDialogShell>,
+    );
+    unmount();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it('uses the newest dismiss action after a re-render', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(<UserDialogShell labelledBy="t" onDismiss={first}><h2 id="t">T</h2></UserDialogShell>);
+    rerender(<UserDialogShell labelledBy="t" onDismiss={second}><h2 id="t">T</h2></UserDialogShell>);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
   it('Tab goes round inside it, both ways', async () => {
     const { actor } = setup();
     const box = screen.getByRole('textbox');
