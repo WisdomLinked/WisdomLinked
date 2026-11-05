@@ -454,6 +454,19 @@ describe('Admin Payment Management', () => {
     expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
   });
 
+  it('marks a reference number in the paid-out table and leaves cheque numbers as they were', async () => {
+    vi.mocked(listPayrollCheques).mockResolvedValue({
+      cheques: [
+        { _id: 'r1', expertId: 'e1', expertName: 'Ada', expertEmail: 'ada@x.com', year: 2026, month: 10, amountCents: 800, numberType: 'reference', chequeNumber: 'TXN-9', chequeDate: '2026-11-02T00:00:00.000Z' },
+        { _id: 'c1', expertId: 'e2', expertName: 'Ben', expertEmail: 'ben@x.com', year: 2026, month: 9, amountCents: 800, chequeNumber: '88421', chequeDate: '2026-10-02T00:00:00.000Z' },
+      ],
+    });
+    renderPayment();
+    expect(await screen.findByText('Reference TXN-9')).toBeTruthy();
+    expect(screen.getByText('88421')).toBeTruthy();
+    expect(screen.getByText('Cheque / reference number')).toBeTruthy();
+  });
+
   it('shows paid-out cheques above payment history and hides a non-matching expert', async () => {
     vi.mocked(listPayrollCheques).mockResolvedValue({
       cheques: [

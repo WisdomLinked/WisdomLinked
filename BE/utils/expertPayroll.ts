@@ -26,6 +26,8 @@ export function parseChequeDate(value: unknown): Date | null {
     const year = Number(match[1]);
     const month = Number(match[2]);
     const day = Number(match[3]);
+    // A year being typed passes through 0002, 0020, 0202 before 2026.
+    if (year < 1900) return null;
     const date = new Date(Date.UTC(year, month - 1, day));
     if (
         date.getUTCFullYear() !== year
@@ -39,6 +41,13 @@ export function parseChequeDate(value: unknown): Date | null {
 
 export function normalizeChequeNumber(value: unknown): string {
     return String(value ?? '').trim();
+}
+
+export type PayoutNumberType = 'cheque' | 'reference';
+
+/** Records saved before reference numbers existed have no type and are cheques. */
+export function storedNumberType(value: unknown): PayoutNumberType {
+    return value === 'reference' ? 'reference' : 'cheque';
 }
 
 /** Expert net of one completed charge. A refund row is not income by itself. */

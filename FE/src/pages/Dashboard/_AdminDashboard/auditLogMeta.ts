@@ -8,6 +8,7 @@ const PREFERRED_KEYS = [
     "sources",
     "targetRole",
     "month",
+    "numberType",
     "chequeNumber",
     "chequeDate",
     "description",

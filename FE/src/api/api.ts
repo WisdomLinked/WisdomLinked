@@ -928,6 +928,7 @@ export const recordPayrollCheque = async (body: {
     expertId: string;
     year: number;
     month: number;
+    numberType: 'cheque' | 'reference';
     chequeNumber: string;
     chequeDate: string;
 }) => {
@@ -939,7 +940,10 @@ export const recordPayrollCheque = async (body: {
     }
 }
 
-export const updatePayrollCheque = async (id: string, body: { chequeNumber: string; chequeDate: string }) => {
+export const updatePayrollCheque = async (
+    id: string,
+    body: { numberType: 'cheque' | 'reference'; chequeNumber: string; chequeDate: string },
+) => {
     try {
         const res = await api.patch(`admin/payroll/${id}`, body);
         return res.data;

@@ -386,3 +386,65 @@ describe('1:1 appointment call time', () => {
   });
 });
 
+describe('buildConversations order', () => {
+  const chat = (id: string, type: string, day?: string) => ({
+    _id: id,
+    name: id,
+    type,
+    ...(day ? { updatedAt: day } : {}),
+  });
+  const ids = (items: Array<{ id: string }>) => items.map(item => item.id);
+
+  it('puts the newest conversation first in every section', () => {
+    const buckets = buildConversations({
+      _id: 'u1',
+      generalChats: [chat('c-old', 'community', '2026-08-01T00:00:00.000Z'), chat('c-new', 'community', '2026-10-01T00:00:00.000Z')],
+      groupChats: [
+        chat('a-sep', 'individual', '2026-09-28T00:00:00.000Z'),
+        chat('a-oct12', 'individual', '2026-10-12T00:00:00.000Z'),
+        chat('a-oct14', 'individual', '2026-10-14T00:00:00.000Z'),
+        chat('s-sep', 'seminar', '2026-09-15T00:00:00.000Z'),
+        chat('s-nov', 'seminar', '2026-11-01T00:00:00.000Z'),
+      ],
+    });
+    expect(ids(buckets.appointments)).toEqual(['a-oct14', 'a-oct12', 'a-sep']);
+    expect(ids(buckets.seminars)).toEqual(['s-nov', 's-sep']);
+    expect(ids(buckets.group)).toEqual(['c-new', 'c-old']);
+    expect(ids(buckets.all)).toEqual(['a-oct14', 'a-oct12', 'a-sep', 's-nov', 's-sep', 'c-new', 'c-old']);
+  });
+
+  it('orders by the date shown on the row, including a session still to come', () => {
+    const buckets = buildConversations({
+      _id: 'u1',
+      groupChats: [
+        { _id: 'edited', name: 'edited', type: 'individual', updatedAt: '2026-10-20T00:00:00.000Z' },
+        { _id: 'upcoming', name: 'upcoming', type: 'individual', updatedAt: '2026-10-01T00:00:00.000Z', start: '2026-12-01T00:00:00.000Z' },
+      ],
+    });
+    expect(ids(buckets.appointments)).toEqual(['upcoming', 'edited']);
+  });
+
+  it('keeps conversations with no usable date, after the dated ones and in their original order', () => {
+    const buckets = buildConversations({
+      _id: 'u1',
+      groupChats: [
+        chat('none-1', 'individual'),
+        { _id: 'bad', name: 'bad', type: 'individual', updatedAt: 'not a date' },
+        chat('dated', 'individual', '2026-10-01T00:00:00.000Z'),
+        chat('none-2', 'individual'),
+      ],
+    });
+    expect(ids(buckets.appointments)).toEqual(['dated', 'none-1', 'bad', 'none-2']);
+  });
+
+  it('keeps the original order for the same date and leaves the account data untouched', () => {
+    const groupChats = [
+      chat('same-1', 'individual', '2026-10-01T00:00:00.000Z'),
+      chat('same-2', 'individual', '2026-10-01T00:00:00.000Z'),
+      chat('later', 'individual', '2026-10-02T00:00:00.000Z'),
+    ];
+    const buckets = buildConversations({ _id: 'u1', groupChats });
+    expect(ids(buckets.appointments)).toEqual(['later', 'same-1', 'same-2']);
+    expect(groupChats.map(item => item._id)).toEqual(['same-1', 'same-2', 'later']);
+  });
+});
