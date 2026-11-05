@@ -79,12 +79,14 @@ function Section({
   items,
   selectedId,
   failedIds,
+  rangeActive,
   onSelect,
 }: {
   kind: ConversationKind;
   items: AuditConversation[];
   selectedId?: string;
   failedIds: Record<string, boolean>;
+  rangeActive: boolean;
   onSelect: (item: AuditConversation) => void;
 }) {
   return (
@@ -96,7 +98,7 @@ function Section({
         <span className="tabular-nums">{items.length}</span>
       </h3>
       {items.length === 0 ? (
-        <p className="px-2 py-2 text-sm text-audit-muted">{emptySectionCopy(kind)}</p>
+        <p className="px-2 py-2 text-sm text-audit-muted">{emptySectionCopy(kind, rangeActive)}</p>
       ) : (
         items.map(item => (
           <ConversationRow
@@ -116,6 +118,7 @@ export default function ConversationList({
   group,
   appointments,
   seminars,
+  rangeActive = false,
   selectedId,
   failedIds,
   query,
@@ -127,6 +130,7 @@ export default function ConversationList({
   group: AuditConversation[];
   appointments: AuditConversation[];
   seminars: AuditConversation[];
+  rangeActive?: boolean;
   selectedId?: string;
   failedIds: Record<string, boolean>;
   query: string;
@@ -194,6 +198,7 @@ export default function ConversationList({
                 items={segment === 'all' ? visiblePrivate : filterConversations(appointments, query, 'private')}
                 selectedId={selectedId}
                 failedIds={failedIds}
+                rangeActive={rangeActive}
                 onSelect={onSelect}
               />
             ) : null}
@@ -203,6 +208,7 @@ export default function ConversationList({
                 items={segment === 'all' ? visibleSeminars : filterConversations(seminars, query, 'seminar')}
                 selectedId={selectedId}
                 failedIds={failedIds}
+                rangeActive={rangeActive}
                 onSelect={onSelect}
               />
             ) : null}
@@ -212,6 +218,7 @@ export default function ConversationList({
                 items={segment === 'all' ? visibleGroup : filterConversations(group, query, 'group')}
                 selectedId={selectedId}
                 failedIds={failedIds}
+                rangeActive={rangeActive}
                 onSelect={onSelect}
               />
             ) : null}

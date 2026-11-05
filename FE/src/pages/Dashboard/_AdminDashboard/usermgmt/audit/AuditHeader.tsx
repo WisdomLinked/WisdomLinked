@@ -1,6 +1,8 @@
 import React from 'react';
 import { Download, Shield, X } from 'lucide-react';
 import Avatar from '../../../../../components/Avatar';
+import { useResolvedProfileImages } from '../../../../../hooks/useResolvedProfileImages';
+import { safeImageSrc } from '../../../../../utils/profileImage';
 import { AUDIT_FOCUS, AUDIT_PILL } from './auditUi';
 import { formatJoined, roleLabel, statusLabel } from './auditModel';
 import { isLoginLocked, type UserLoginLock } from '../userStatus';
@@ -24,11 +26,14 @@ export default function AuditHeader({
   const role = roleLabel(userDetails?.role);
   const status = statusLabel(userDetails?.status);
   const locked = isLoginLocked(loginLock);
+  const resolvedImages = useResolvedProfileImages(userDetails ? [userDetails] : []);
+  const storedImage = typeof userDetails?.image === 'string' ? userDetails.image.trim() : '';
+  const image = resolvedImages.get(storedImage) || safeImageSrc(storedImage);
 
   return (
     <header className="flex flex-col gap-4 border-b border-audit-line px-5 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-8">
       <div className="flex min-w-0 items-start gap-3">
-        <Avatar username={name} image={userDetails?.image} size="large" />
+        <Avatar username={name} image={image} size="large" />
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 id={titleId} className="truncate text-xl font-semibold text-audit-ink sm:text-2xl">

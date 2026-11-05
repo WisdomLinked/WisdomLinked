@@ -5,6 +5,14 @@ import PaymentHistory from './paymentHistory';
 import AuditHeader from './audit/AuditHeader';
 import SummaryStrip from './audit/SummaryStrip';
 import AuditTabs from './audit/AuditTabs';
+import DateRangeFilter from './audit/DateRangeFilter';
+import {
+  EMPTY_AUDIT_RANGE,
+  filterConversationBuckets,
+  filterPaymentRows,
+  isRangeActive,
+  type AuditDateRange,
+} from './audit/auditDateRange';
 import {
   buildConversations,
   buildExportPayload,
@@ -33,6 +41,7 @@ const AuditModal = ({
   const [paymentCount, setPaymentCount] = useState(0);
   const [rates, setRates] = useState<AuditCommissionRates>(DEFAULT_AUDIT_RATES);
   const [cheques, setCheques] = useState<AuditCheque[]>([]);
+  const [range, setRange] = useState<AuditDateRange>(EMPTY_AUDIT_RANGE);
 
   useEffect(() => {
     if (typeof getPricingSettings !== 'function') return;
@@ -134,6 +143,11 @@ const AuditModal = ({
     [paymentRows, userDetails?.role, selectedUser?.role, rates, cheques],
   );
   const lastActive = lastActiveFromAccount(userDetails, conversations.all);
+  const chatCountInRange = useMemo(
+    () => filterConversationBuckets(conversations, range).all.length,
+    [conversations, range],
+  );
+  const paymentCountInRange = isRangeActive(range) ? filterPaymentRows(paymentRows, range).length : paymentCount;
 
   const onExport = () => {
     const payload = buildExportPayload({
@@ -175,8 +189,9 @@ const AuditModal = ({
           <AuditTabs
             selected={selectedTab}
             onSelect={set_selectedTab}
-            chatCount={conversations.all.length}
-            paymentCount={paymentCount}
+            chatCount={chatCountInRange}
+            paymentCount={paymentCountInRange}
+            actions={<DateRangeFilter range={range} onChange={setRange} />}
           />
           <div
             role="tabpanel"
@@ -186,9 +201,9 @@ const AuditModal = ({
             className={selectedTab === 'chat' ? 'flex min-h-0 flex-1 flex-col' : 'min-h-0 flex-1'}
           >
             {selectedTab === 'chat' ? (
-              <ChatHistory userDetails={userDetails} />
+              <ChatHistory userDetails={userDetails} range={range} />
             ) : (
-              <PaymentHistory userDetails={userDetails} />
+              <PaymentHistory userDetails={userDetails} range={range} />
             )}
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('../../../../api/api', () => ({
   doFilterPaymentHistories: vi.fn(),
@@ -20,6 +20,88 @@ const recordedCheque = {
   chequeNumber: '1001',
   chequeDate: '2026-11-02T00:00:00.000Z',
 };
+
+describe('PaymentHistory audit tab with dates', () => {
+  beforeEach(() => {
+    mockedFilter.mockReset();
+    mockedPayroll.mockReset();
+  });
+
+  it('keeps a cheque to its own payroll month, whatever time zone the admin is in', async () => {
+    mockedPayroll.mockResolvedValue({
+      cheques: [
+        { year: 2026, month: 9, amountCents: 4000, chequeNumber: 'C-SEP', chequeDate: '2026-10-03T00:00:00.000Z' },
+        { year: 2026, month: 10, amountCents: 3000, chequeNumber: 'C-OCT', chequeDate: '2026-11-02T00:00:00.000Z' },
+      ],
+    });
+    // Falls in UTC October, so the October cheque has paid it even though October is not in view.
+    mockedFilter.mockResolvedValue({
+      result: [
+        {
+          _id: '1',
+          amount: 7000,
+          status: 'completed',
+          paymentType: 'charge',
+          description: 'Late September seat',
+          createdAt: '2026-10-01T00:00:00.000Z',
+          customer: { username: 'Sam' },
+        },
+      ],
+      totalCount: 1,
+    });
+    render(
+      <PaymentHistory
+        userDetails={{ _id: 'e1', role: 'expert', email: 'ada@x.com' }}
+        range={{ from: '2026-09-01', to: '2026-09-30' }}
+      />,
+    );
+    expect(await screen.findByText('September 2026')).toBeTruthy();
+    expect(screen.queryByText('October 2026')).toBeNull();
+    const tile = (label: string) =>
+      screen.getAllByText(label).find(el => el.nextElementSibling?.textContent?.startsWith('$'))?.nextElementSibling?.textContent;
+    await waitFor(() => expect(tile('Paid out')).toBe('$40.00'));
+    expect(tile('Ready to pay')).toBe('$0.00');
+  });
+});
+
+describe('PaymentHistory audit tab with changing dates', () => {
+  beforeEach(() => {
+    mockedFilter.mockReset();
+    mockedPayroll.mockReset();
+    mockedPayroll.mockResolvedValue({ cheques: [] });
+  });
+
+  it('ignores a slow answer for dates the admin has already moved on from', async () => {
+    const row = (description: string, amount: number) => ({
+      _id: description,
+      amount,
+      status: 'completed',
+      paymentType: 'charge',
+      description,
+      createdAt: '2026-10-05T12:00:00.000Z',
+      customer: { username: 'Sam' },
+    });
+    const slow: Array<() => void> = [];
+    mockedFilter.mockImplementation((body: any) =>
+      body.dateTo?.startsWith('2026-10-')
+        ? new Promise(resolve => slow.push(() => resolve({ result: [row('Stale September', 9900)], totalCount: 1 })))
+        : Promise.resolve({ result: [row('Fresh October', 1000)], totalCount: 1 }),
+    );
+    const user = { _id: 'e1', role: 'expert', email: 'ada@x.com' };
+    const { rerender } = render(<PaymentHistory userDetails={user} range={{ from: '2026-09-01', to: '2026-09-30' }} />);
+    rerender(<PaymentHistory userDetails={user} range={{ from: '2026-10-01', to: '2026-10-31' }} />);
+    expect((await screen.findAllByText('Fresh October')).length).toBeGreaterThan(0);
+
+    await act(async () => {
+      slow.forEach(answer => answer());
+      await new Promise(resolve => setTimeout(resolve, 20));
+    });
+
+    expect(screen.queryByText('Stale September')).toBeNull();
+    const gross = screen.getByText('Gross earnings').nextElementSibling?.textContent;
+    expect(gross).toBe('$10.00');
+  });
+});
 
 describe('PaymentHistory audit tab', () => {
   beforeEach(() => {
