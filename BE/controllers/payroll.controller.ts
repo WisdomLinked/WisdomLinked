@@ -4,8 +4,10 @@ import {
     parseChequeDate,
     parseYearMonth,
     payrollLiveNetCents,
+    storedNumberType,
     utcMonthRange,
 } from '../utils/expertPayroll';
+import type { PayoutNumberType } from '../utils/expertPayroll';
 import type { CommissionRates } from '../utils/paymentSummary';
 import { auditAmount, auditChanges, auditDate } from '../utils/adminAuditChanges';
 
@@ -106,6 +108,7 @@ const chequeFields = (cheque: any) => ({
     year: cheque.year,
     month: cheque.month,
     amountCents: cheque.amountCents,
+    numberType: storedNumberType(cheque.numberType),
     chequeNumber: cheque.chequeNumber,
     chequeDate: cheque.chequeDate,
     recordedBy: expertIdOf(cheque.recordedBy),
@@ -124,6 +127,7 @@ const payoutEmailResult = async (cheque: any, expertId: string) => {
             year: cheque.year,
             month: cheque.month,
             amountCents: cheque.amountCents,
+            numberType: storedNumberType(cheque.numberType),
             chequeNumber: cheque.chequeNumber,
             chequeDate: cheque.chequeDate,
         });
@@ -144,12 +148,18 @@ const expertEmailOf = async (expertId: string) => {
 };
 
 const readChequeDetails = (body: any) => {
+    const sentType = body?.numberType;
+    if (sentType !== undefined && sentType !== 'cheque' && sentType !== 'reference') {
+        return { error: 'Choose a cheque number or a reference number.' };
+    }
+    const isReference = sentType === 'reference';
+    const label = isReference ? 'Reference number' : 'Cheque number';
     const chequeNumber = normalizeChequeNumber(body?.chequeNumber);
-    if (!chequeNumber) return { error: 'Cheque number is required.' };
-    if (chequeNumber.length > 80) return { error: 'Cheque number is too long.' };
+    if (!chequeNumber) return { error: `${label} is required.` };
+    if (chequeNumber.length > 80) return { error: `${label} is too long.` };
     const chequeDate = parseChequeDate(body?.chequeDate);
-    if (!chequeDate) return { error: 'Cheque date is required.' };
-    return { chequeNumber, chequeDate };
+    if (!chequeDate) return { error: isReference ? 'Payment date is required.' : 'Cheque date is required.' };
+    return { numberType: sentType as PayoutNumberType | undefined, chequeNumber, chequeDate };
 };
 
 const listPayroll = async (req, res) => {
@@ -236,7 +246,7 @@ const recordPayrollCheque = async (req, res) => {
             month: period.month,
         });
         if (existing) {
-            return res.status(409).send({ error: 'A cheque is already recorded for this expert and month.' });
+            return res.status(409).send({ error: 'A payment is already recorded for this expert and month.' });
         }
 
         const recordedBy = expertIdOf(req.user?.userId);
@@ -247,13 +257,14 @@ const recordPayrollCheque = async (req, res) => {
                 year: period.year,
                 month: period.month,
                 amountCents: liveNetCents,
+                numberType: storedNumberType(details.numberType),
                 chequeNumber: details.chequeNumber,
                 chequeDate: details.chequeDate,
                 recordedBy,
             });
         } catch (err: any) {
             if (err?.code === 11000) {
-                return res.status(409).send({ error: 'A cheque is already recorded for this expert and month.' });
+                return res.status(409).send({ error: 'A payment is already recorded for this expert and month.' });
             }
             throw err;
         }
@@ -267,6 +278,7 @@ const recordPayrollCheque = async (req, res) => {
             meta: {
                 month: `${period.year}-${String(period.month).padStart(2, '0')}`,
                 amount: auditAmount(liveNetCents),
+                ...(details.numberType === 'reference' ? { numberType: 'reference' } : {}),
                 chequeNumber: details.chequeNumber,
                 chequeDate: auditDate(details.chequeDate),
             },
@@ -291,17 +303,18 @@ const updatePayrollCheque = async (req, res) => {
     try {
         const details = readChequeDetails(req.body);
         if ('error' in details) return res.status(400).send({ error: details.error });
-        const before = await PayrollCheque.findById(req.params?.id).select('chequeNumber chequeDate').lean();
+        const before = await PayrollCheque.findById(req.params?.id).select('numberType chequeNumber chequeDate').lean();
+        const numberType = details.numberType ?? storedNumberType(before?.numberType);
         const updated = await PayrollCheque.findByIdAndUpdate(
             req.params?.id,
-            { $set: { chequeNumber: details.chequeNumber, chequeDate: details.chequeDate } },
+            { $set: { numberType, chequeNumber: details.chequeNumber, chequeDate: details.chequeDate } },
             { new: true },
         );
-        if (!updated) return res.status(404).send({ error: 'Cheque not found.' });
+        if (!updated) return res.status(404).send({ error: 'Payment record not found.' });
 
         const changes = auditChanges(
-            { chequeNumber: before?.chequeNumber, chequeDate: auditDate(before?.chequeDate) },
-            { chequeNumber: updated.chequeNumber, chequeDate: auditDate(updated.chequeDate) },
+            { numberType: storedNumberType(before?.numberType), chequeNumber: before?.chequeNumber, chequeDate: auditDate(before?.chequeDate) },
+            { numberType: storedNumberType(updated.numberType), chequeNumber: updated.chequeNumber, chequeDate: auditDate(updated.chequeDate) },
         );
         if (Object.keys(changes).length) {
             logAdminAction({

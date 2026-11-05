@@ -401,8 +401,8 @@ const payrollChequeDateLabel = (value: any) => {
 };
 
 /**
- * Sent once, when an admin first records a payroll cheque.
- * Correcting the cheque number or date does not send this again.
+ * Sent once, when an admin first records a payroll cheque or reference number.
+ * Correcting the number or date does not send this again.
  */
 const sendPayrollChequeEmail = async ({
     targetEmail,
@@ -410,9 +410,11 @@ const sendPayrollChequeEmail = async ({
     year,
     month,
     amountCents,
+    numberType,
     chequeNumber,
     chequeDate,
 }: any) => {
+    const isReference = numberType === 'reference';
     const monthLabel = payrollMonthLabel(year, month);
     const subject = 'Your WisdomLinked payout has been processed';
     const html = renderEmail({
@@ -423,10 +425,10 @@ const sendPayrollChequeEmail = async ({
             emailParagraph(`WisdomLinked has processed your payout for ${emailEscape(monthLabel)}.`),
             emailFacts([
                 ['Amount', emailMoneyFromCents(amountCents)],
-                ['Cheque number', chequeNumber],
-                ['Cheque date', payrollChequeDateLabel(chequeDate)],
+                [isReference ? 'Reference number' : 'Cheque number', chequeNumber],
+                [isReference ? 'Payment date' : 'Cheque date', payrollChequeDateLabel(chequeDate)],
             ]),
-            emailCallout('Your cheque is on its way. No further action is needed.', 'good'),
+            emailCallout(`Your ${isReference ? 'payment' : 'cheque'} is on its way. No further action is needed.`, 'good'),
             emailButton('Open your dashboard', appDashboardUrl('expert')),
         ],
     });

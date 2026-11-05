@@ -17,6 +17,7 @@ import {
   type AuditCommissionRates,
   type PaymentSummary,
 } from './auditModel';
+import { payoutNumberText } from '../../../../../utils/payoutNumber';
 import type { PaymentHistoryRow } from '../../payment/paymentHistoryUtils';
 
 const UTC_MONTHS = [
@@ -180,8 +181,8 @@ export default function PaymentHistory({
                 <tr className="border-b border-audit-line text-xs uppercase tracking-wider text-audit-muted">
                   <th className="px-3 py-2 font-medium">Month</th>
                   <th className="px-3 py-2 font-medium">Amount</th>
-                  <th className="px-3 py-2 font-medium">Cheque number</th>
-                  <th className="px-3 py-2 font-medium">Cheque date</th>
+                  <th className="px-3 py-2 font-medium">Cheque / reference number</th>
+                  <th className="px-3 py-2 font-medium">Payment date</th>
                 </tr>
               </thead>
               <tbody>
@@ -193,7 +194,7 @@ export default function PaymentHistory({
                     <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-ink">
                       {formatUsdFromCents(cheque.amountCents)}
                     </td>
-                    <td className="px-3 py-3 text-audit-ink">{cheque.chequeNumber || '—'}</td>
+                    <td className="max-w-[220px] break-all px-3 py-3 text-audit-ink">{payoutNumberText(cheque)}</td>
                     <td className="whitespace-nowrap px-3 py-3 tabular-nums text-audit-ink">
                       {formatChequeDate(cheque.chequeDate)}
                     </td>

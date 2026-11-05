@@ -675,3 +675,163 @@ test("payroll routes require admin auth", async () => {
   assert.equal(nextCalled, false);
   assert.equal(res.statusCode, 401);
 });
+
+const setUpOctober = () => {
+  install();
+  sentMails.length = 0;
+  charges = [marchCharge({ createdAt: "2026-10-15T18:00:00.000Z" })];
+  cheques = [];
+  seq = 1;
+  sgMail.send = recordSend;
+};
+const octoberBody = (extra: Record<string, unknown>) => ({
+  expertId: EXPERT,
+  year: 2026,
+  month: 10,
+  chequeDate: "2026-10-31",
+  ...extra,
+});
+const admin = { userId: ADMIN, email: "admin@example.com" };
+
+test("a reference number is stored as one, and its email never mentions a cheque", async (t) => {
+  setUpOctober();
+  t.after(restore);
+
+  const recorded = createRes();
+  await payroll.recordPayrollCheque({
+    user: admin,
+    body: octoberBody({ numberType: "reference", chequeNumber: " TXN-77 " }),
+  }, recorded);
+  assert.equal(recorded.statusCode, 201);
+  assert.equal(recorded.body.numberType, "reference");
+  assert.equal(recorded.body.amountCents, 800);
+  assert.equal((cheques[0] as any).numberType, "reference");
+  assert.equal(cheques[0].chequeNumber, "TXN-77");
+
+  assert.equal(sentMails.length, 1);
+  const html = sentMails[0].html || "";
+  assert.match(html, /Reference number/);
+  assert.match(html, /TXN-77/);
+  assert.match(html, /Payment date/);
+  assert.match(html, /Your payment is on its way/);
+  assert.doesNotMatch(html, /cheque/i);
+
+  assert.deepEqual(auditLogs[0].meta, {
+    month: "2026-10",
+    amount: "8.00 USD",
+    numberType: "reference",
+    chequeNumber: "TXN-77",
+    chequeDate: "2026-10-31",
+  });
+
+  const listed = createRes();
+  await payroll.listPayroll({ query: { year: "2026", month: "10" } }, listed);
+  assert.equal(listed.body.rows[0].cheque.numberType, "reference");
+  assert.equal(listed.body.rows[0].status, "paid");
+});
+
+test("a cheque number keeps the cheque email, with or without a type sent", async (t) => {
+  for (const extra of [{ numberType: "cheque" }, {}]) {
+    setUpOctober();
+    t.after(restore);
+    const recorded = createRes();
+    await payroll.recordPayrollCheque({
+      user: admin,
+      body: octoberBody({ ...extra, chequeNumber: "1001" }),
+    }, recorded);
+    assert.equal(recorded.statusCode, 201);
+    assert.equal(recorded.body.numberType, "cheque");
+    assert.equal((cheques[0] as any).numberType, "cheque");
+    const html = sentMails[0].html || "";
+    assert.match(html, /Cheque number/);
+    assert.match(html, /Cheque date/);
+    assert.match(html, /Your cheque is on its way/);
+    assert.doesNotMatch(html, /Reference number/);
+    assert.equal("numberType" in auditLogs[0].meta, false);
+  }
+});
+
+test("a record saved before reference numbers existed reads as a cheque", async (t) => {
+  setUpOctober();
+  t.after(restore);
+  cheques = [{
+    _id: "old-1",
+    expert: EXPERT,
+    year: 2026,
+    month: 10,
+    amountCents: 800,
+    chequeNumber: "OLD-1",
+    chequeDate: new Date("2026-10-20T00:00:00.000Z"),
+    recordedBy: ADMIN,
+  }];
+  const listed = createRes();
+  await payroll.listPayroll({ query: { year: "2026", month: "10" } }, listed);
+  assert.equal(listed.body.rows[0].cheque.numberType, "cheque");
+
+  const expert = createRes();
+  await payroll.listExpertPayroll({ params: { expertId: EXPERT } }, expert);
+  assert.equal(expert.body.cheques[0].numberType, "cheque");
+
+  const updated = createRes();
+  await payroll.updatePayrollCheque({
+    user: admin,
+    params: { id: "old-1" },
+    body: { chequeNumber: "OLD-1", chequeDate: "2026-10-20" },
+  }, updated);
+  assert.equal(updated.statusCode, 200);
+  assert.equal(updated.body.numberType, "cheque");
+  assert.equal(auditLogs.length, 0);
+});
+
+test("changing a saved number's type is logged, sends no email and leaves the amount", async (t) => {
+  setUpOctober();
+  t.after(restore);
+  await payroll.recordPayrollCheque({ user: admin, body: octoberBody({ chequeNumber: "1001" }) }, createRes());
+  assert.equal(sentMails.length, 1);
+
+  const changed = createRes();
+  await payroll.updatePayrollCheque({
+    user: admin,
+    params: { id: cheques[0]._id },
+    body: { numberType: "reference", chequeNumber: "TXN-1", chequeDate: "2026-10-31" },
+  }, changed);
+  assert.equal(changed.statusCode, 200);
+  assert.equal(changed.body.numberType, "reference");
+  assert.equal(cheques[0].amountCents, 800);
+  assert.equal(sentMails.length, 1);
+  assert.deepEqual(auditLogs[1].meta.changes, {
+    numberType: { from: "cheque", to: "reference" },
+    chequeNumber: { from: "1001", to: "TXN-1" },
+  });
+
+  // A request that does not name a type leaves the saved one alone.
+  const keeps = createRes();
+  await payroll.updatePayrollCheque({
+    user: admin,
+    params: { id: cheques[0]._id },
+    body: { chequeNumber: "TXN-2", chequeDate: "2026-10-31" },
+  }, keeps);
+  assert.equal(keeps.statusCode, 200);
+  assert.equal(keeps.body.numberType, "reference");
+});
+
+test("payout number details are checked for the chosen type", async (t) => {
+  setUpOctober();
+  t.after(restore);
+  const refused = async (extra: Record<string, unknown>) => {
+    const res = createRes();
+    await payroll.recordPayrollCheque({ user: admin, body: octoberBody(extra) }, res);
+    assert.equal(res.statusCode, 400);
+    return res.body.error;
+  };
+  assert.equal(await refused({ numberType: "reference", chequeNumber: "  " }), "Reference number is required.");
+  assert.equal(await refused({ numberType: "reference", chequeNumber: "x".repeat(81) }), "Reference number is too long.");
+  assert.equal(await refused({ numberType: "reference", chequeNumber: "T1", chequeDate: "" }), "Payment date is required.");
+  assert.equal(await refused({ chequeNumber: "  " }), "Cheque number is required.");
+  assert.equal(await refused({ numberType: "wire", chequeNumber: "T1" }), "Choose a cheque number or a reference number.");
+  assert.equal(await refused({ numberType: "reference", chequeNumber: "T1", chequeDate: "0202-11-05" }), "Payment date is required.");
+  assert.equal(await refused({ chequeNumber: "T1", chequeDate: "0026-11-05" }), "Cheque date is required.");
+  assert.equal(await refused({ numberType: null, chequeNumber: "T1" }), "Choose a cheque number or a reference number.");
+  assert.equal(cheques.length, 0);
+  assert.equal(sentMails.length, 0);
+});

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { notify } from '../../../utils/notify';
 import { formatDollarsFromCents } from '../../../utils/bookingPrice';
+import { payoutNumberText } from '../../../utils/payoutNumber';
 import {
   doFilterPaymentHistories,
   doGetPaymentIntegrityReport,
@@ -62,6 +63,7 @@ type PayrollChequeRow = {
   year?: number;
   month?: number;
   amountCents?: number;
+  numberType?: string;
   chequeNumber?: string;
   chequeDate?: string | Date | null;
 };
@@ -507,8 +509,8 @@ const Payment = () => {
                       <th className="px-3 py-2 font-medium">Expert</th>
                       <th className="px-3 py-2 font-medium">Month</th>
                       <th className="px-3 py-2 font-medium">Amount</th>
-                      <th className="px-3 py-2 font-medium">Cheque number</th>
-                      <th className="px-3 py-2 font-medium">Cheque date</th>
+                      <th className="px-3 py-2 font-medium">Cheque / reference number</th>
+                      <th className="px-3 py-2 font-medium">Payment date</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -519,7 +521,7 @@ const Payment = () => {
                         <td className="whitespace-nowrap px-3 py-2 tabular-nums text-wl-ink">
                           {formatDollarsFromCents(Number(cheque.amountCents) || 0)}
                         </td>
-                        <td className="px-3 py-2 text-wl-ink">{cheque.chequeNumber || '—'}</td>
+                        <td className="max-w-[220px] break-all px-3 py-2 text-wl-ink">{payoutNumberText(cheque)}</td>
                         <td className="whitespace-nowrap px-3 py-2 tabular-nums text-wl-ink">
                           {formatChequeDate(cheque.chequeDate)}
                         </td>

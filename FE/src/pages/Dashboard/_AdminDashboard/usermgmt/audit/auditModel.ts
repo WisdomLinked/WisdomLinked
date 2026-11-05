@@ -495,15 +495,24 @@ export function buildSeminarConversations(userDetails: any): AuditConversation[]
     });
 }
 
+/** Newest first by the date shown on each row; conversations with no date go last. */
+function newestFirst(items: AuditConversation[]): AuditConversation[] {
+  const time = (item: AuditConversation) => parseDate(item.date)?.getTime() ?? Number.NEGATIVE_INFINITY;
+  return [...items].sort((a, b) => {
+    const [left, right] = [time(a), time(b)];
+    return left === right ? 0 : right > left ? 1 : -1;
+  });
+}
+
 export function buildConversations(userDetails: any): {
   group: AuditConversation[];
   appointments: AuditConversation[];
   seminars: AuditConversation[];
   all: AuditConversation[];
 } {
-  const group = buildGroupConversations(userDetails);
-  const appointments = buildAppointmentConversations(userDetails);
-  const seminars = buildSeminarConversations(userDetails);
+  const group = newestFirst(buildGroupConversations(userDetails));
+  const appointments = newestFirst(buildAppointmentConversations(userDetails));
+  const seminars = newestFirst(buildSeminarConversations(userDetails));
   return { group, appointments, seminars, all: [...appointments, ...seminars, ...group] };
 }
 

@@ -403,5 +403,38 @@ describe('ChatHistory audit pane', () => {
     await screen.findByText('Essay review with Priya', { selector: 'span' });
     expect(screen.queryByText('Cancelled')).toBeNull();
   });
-});
 
+  it('lists the newest conversation first in All, 1:1, Seminars and Communities', async () => {
+    mockedGroup.mockResolvedValue({ result: [], gotAllChats: true });
+    const dated = (name: string, type: string, updatedAt: string) => ({ _id: name, name, type, status: 'active', updatedAt, participants: [] });
+    render(
+      <ChatHistory
+        userDetails={{
+          _id: 'expert-1',
+          email: 'ada@x.com',
+          generalChats: [
+            dated('Community old', 'community', '2026-08-01T12:00:00.000Z'),
+            dated('Community new', 'community', '2026-10-01T12:00:00.000Z'),
+          ],
+          groupChats: [
+            dated('Oldest call', 'individual', '2026-09-28T12:00:00.000Z'),
+            dated('Newest call', 'individual', '2026-10-14T12:00:00.000Z'),
+            dated('Old seminar', 'seminar', '2026-09-15T12:00:00.000Z'),
+            dated('New seminar', 'seminar', '2026-11-01T12:00:00.000Z'),
+          ],
+        }}
+      />,
+    );
+    const titles = () =>
+      Array.from(screen.getByRole('listbox', { name: 'Conversations' }).querySelectorAll('[role="option"] p.font-medium')).map(
+        el => el.textContent,
+      );
+    expect(titles()).toEqual(['Newest call', 'Oldest call', 'New seminar', 'Old seminar', 'Community new', 'Community old']);
+    await userEvent.click(screen.getByRole('button', { name: '1:1' }));
+    expect(titles()).toEqual(['Newest call', 'Oldest call']);
+    await userEvent.click(screen.getByRole('button', { name: 'Seminars' }));
+    expect(titles()).toEqual(['New seminar', 'Old seminar']);
+    await userEvent.click(screen.getByRole('button', { name: 'Communities' }));
+    expect(titles()).toEqual(['Community new', 'Community old']);
+  });
+});

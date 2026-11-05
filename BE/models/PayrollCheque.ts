@@ -6,6 +6,8 @@ const PayrollChequeSchema = new mongoose.Schema(
         year: { type: Number, required: true },
         month: { type: Number, required: true, min: 1, max: 12 },
         amountCents: { type: Number, required: true },
+        // What `chequeNumber` holds: a cheque number, or a reference number for any other payment.
+        numberType: { type: String, enum: ["cheque", "reference"], default: "cheque" },
         chequeNumber: { type: String, required: true },
         chequeDate: { type: Date, required: true },
         recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
