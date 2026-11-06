@@ -30,8 +30,20 @@ import {
   getSeminarSeatRequests,
   approveSeminarSeatRequest,
   rejectSeminarSeatRequest,
+  admitWaitlistStudents,
   getMyFollowers,
 } from '../api/api';
+import SeminarWaitlistPanel, {
+  type WaitlistAdmitOutcome,
+  type WaitlistAdmitRequest,
+} from '../components/dashboard/SeminarWaitlistPanel';
+import {
+  admitResultMessage,
+  groupWaitlistBySeminar,
+  isLegacyHeldSeatRequest,
+  type WaitlistSeats,
+  type WaitlistSeminar,
+} from '../utils/seminarWaitlist';
 import { resolveProfileImageSrc } from '../utils/profileImage';
 import { displayRoomLabel } from '../utils/chatRoomLabel';
 import { chatTargetsByRid, type ChatNavTarget } from '../utils/chatNavTarget';
@@ -124,13 +136,9 @@ function pickStudent(g: any): any {
   return withBackground || (typeof g?.createdBy === 'object' ? g.createdBy : null);
 }
 
-function isLegacyHeldSeatRequest(r: any): boolean {
-  if (r?.paymentIntent) return true;
-  if (String(r?.paymentMode || '') === 'wallet' && Number(r?.amount) > 0) return true;
-  return false;
-}
-
-function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
+// Only older requests holding a payment come through here. Waiting students are in
+// SeminarWaitlistPanel.
+function mapHeldSeatRequestToModalSession(r: any): UpcomingModalSession {
   const seminar = r?.groupChat || {};
   const start = seminar?.start ? new Date(seminar.start).getTime() : Date.now();
   const when = seminar?.start
@@ -139,26 +147,18 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
         timeStyle: 'short',
       })
     : '—';
-  const legacy = isLegacyHeldSeatRequest(r);
   const metaLines: string[] = [];
-  if (legacy) {
-    if (typeof r?.amount === 'number' && r.amount > 0) {
-      metaLines.push(
-        r?.paymentMode === 'wallet'
-          ? `$${(r.amount / 100).toFixed(2)} — WeChat Pay / Alipay, paid after you approve`
-          : `$${(r.amount / 100).toFixed(2)} held (legacy)`,
-      );
-    } else {
-      metaLines.push('Legacy request');
-    }
-    if (r?.decisionDeadline) {
-      metaLines.push(`Decide by ${new Date(r.decisionDeadline).toLocaleString()}`);
-    }
+  if (typeof r?.amount === 'number' && r.amount > 0) {
+    metaLines.push(
+      r?.paymentMode === 'wallet'
+        ? `$${(r.amount / 100).toFixed(2)} — WeChat Pay / Alipay, paid after you approve`
+        : `$${(r.amount / 100).toFixed(2)} held (legacy)`,
+    );
   } else {
-    metaLines.push('On waitlist — offered automatically when a seat opens');
-    if (r?.createdAt) {
-      metaLines.push(`Joined ${new Date(r.createdAt).toLocaleString()}`);
-    }
+    metaLines.push('Legacy request');
+  }
+  if (r?.decisionDeadline) {
+    metaLines.push(`Decide by ${new Date(r.decisionDeadline).toLocaleString()}`);
   }
   return {
     id: String(r._id),
@@ -170,8 +170,7 @@ function mapSeatRequestToModalSession(r: any): UpcomingModalSession {
     location: 'Online · WisdomLinked',
     with: r?.customer?.username || r?.customer?.email || 'Student',
     peerUserId: r?.customer?._id ? String(r.customer._id) : undefined,
-    // Only legacy held rows expose Accept/Decline in the modal.
-    seatRequestId: legacy ? String(r._id) : undefined,
+    seatRequestId: String(r._id),
     detail: {
       title: seminar?.name || 'Seminar',
       description: seminar?.description,
@@ -485,10 +484,12 @@ export default function ExpertDashboard() {
   // Overflow seminar seat requests (students who registered past the cap) awaiting
   // the interest waitlist — surfaced as the "Seminar waitlist" card + modal.
   const [seatRequests, setSeatRequests] = useState<any[]>([]);
+  const [waitlistSeats, setWaitlistSeats] = useState<Record<string, WaitlistSeats>>({});
 
   const loadSeatRequests = useCallback(async () => {
     const res: any = await getSeminarSeatRequests({ quietAccountRestriction: true });
     setSeatRequests(Array.isArray(res?.result) ? res.result : []);
+    setWaitlistSeats(res?.seats || {});
   }, []);
 
   useEffect(() => {
@@ -1150,7 +1151,7 @@ export default function ExpertDashboard() {
       });
     }
     if (status === 'pending') {
-      return seatRequests.map(mapSeatRequestToModalSession);
+      return seatRequests.filter(isLegacyHeldSeatRequest).map(mapHeldSeatRequestToModalSession);
     }
     const waitingBySeminar: Record<string, number> = {};
     for (const r of seatRequests) {
@@ -1207,6 +1208,34 @@ export default function ExpertDashboard() {
       }
     },
     [dispatch, seatRequests],
+  );
+
+  const waitlistSeminars = useMemo(
+    () => groupWaitlistBySeminar(seatRequests, waitlistSeats),
+    [seatRequests, waitlistSeats],
+  );
+
+  const handleAdmitWaitlist = useCallback(
+    async (
+      seminar: WaitlistSeminar,
+      request: WaitlistAdmitRequest,
+    ): Promise<WaitlistAdmitOutcome> => {
+      const fallback = 'Could not admit students. Please try again.';
+      try {
+        const res: any = await admitWaitlistStudents(seminar.seminarId, request);
+        if (res === false || res?.status === 'FAIL' || res?.error) {
+          // Usually this tab is out of date, e.g. the students were admitted in another one.
+          void loadSeatRequests();
+          return { error: res?.error || fallback };
+        }
+        await loadSeatRequests();
+        dispatch(updateMe() as any);
+        return { message: admitResultMessage(seminar.title, res) };
+      } catch {
+        return { error: fallback };
+      }
+    },
+    [dispatch, loadSeatRequests],
   );
 
   const handleExpertJoinSession = (session: UpcomingModalSession) => {
@@ -1354,7 +1383,7 @@ export default function ExpertDashboard() {
               value={seatRequests.length}
               icon={AlertCircle}
               color="warning"
-              tooltip="Students waiting for a seat — offered automatically when one opens"
+              tooltip="Students waiting for a seat — admit them here, or they're offered one when it opens"
               onClick={() => {
                 void loadSeatRequests();
                 setExpertUpcomingModal({ kind: 'seminar', status: 'pending' });
@@ -1728,6 +1757,16 @@ export default function ExpertDashboard() {
             status={expertUpcomingModal.status}
             role="expert"
             sessions={expertModalSessions}
+            listHeader={
+              expertUpcomingModal.kind === 'seminar' && expertUpcomingModal.status === 'pending' ? (
+                <SeminarWaitlistPanel
+                  seminars={waitlistSeminars}
+                  showEmptyMessage={expertModalSessions.length === 0}
+                  onAdmit={handleAdmitWaitlist}
+                  onViewStudent={openPeerProfileById}
+                />
+              ) : undefined
+            }
             onClose={() => setExpertUpcomingModal(null)}
             onViewProfile={handleViewPeerProfile}
             onJoinSession={

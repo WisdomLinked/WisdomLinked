@@ -49,10 +49,14 @@ export const seminarIsFull = (groupChat: any, softHeldCount: number = 0): boolea
 // Given a list of seminar occurrences, returns the first that is both still in the
 // future and at capacity, or null when every future occurrence has room. Used to
 // stop a student joining a recurring series when a later session can't seat them.
-export const firstFullFutureOccurrence = (occurrences: any[], nowMs: number = Date.now()): any | null => {
+export const firstFullFutureOccurrence = (
+    occurrences: any[],
+    nowMs: number = Date.now(),
+    softHeldCount: number = 0,
+): any | null => {
     for (const occ of Array.isArray(occurrences) ? occurrences : []) {
         const startMs = occ?.start ? new Date(occ.start).getTime() : 0;
-        if (startMs >= nowMs && seminarIsFull(occ)) return occ;
+        if (startMs >= nowMs && seminarIsFull(occ, softHeldCount)) return occ;
     }
     return null;
 };
@@ -151,6 +155,27 @@ export const seatRequestUnavailableMessage = (
             // Undated but still listed as full — allow interest join.
             return null;
     }
+};
+
+/**
+ * The cap needed for `admitCount` more students to fit once `occupiedSeats` are taken.
+ * Never lowers an existing cap, and returns null for an unlimited seminar, which has
+ * nothing to raise.
+ */
+export const raisedSeatCap = (
+    maxAttendees: unknown,
+    occupiedSeats: number,
+    admitCount: number,
+): number | null => {
+    if (typeof maxAttendees !== 'number') return null;
+    return Math.max(maxAttendees, occupiedSeats + admitCount);
+};
+
+/** A waitlist can only be acted on while its seminar is active and has not started. */
+export const waitlistSeminarIsOpen = (groupChat: any, nowMs: number = Date.now()): boolean => {
+    if (!groupChat || groupChat.status !== 'active') return false;
+    const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
+    return !(startMs > 0 && startMs <= nowMs);
 };
 
 /** Legacy card/wallet holds that still need host approve+capture until drained. */

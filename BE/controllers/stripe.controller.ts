@@ -3,14 +3,14 @@ import { BOOKING_PAYMENT_AMOUNT_INVALID } from '../utils/bookingUserFacingCopy';
 import { HTTP_GENERIC_ERROR, safeErrorMessage } from '../utils/httpUserFacingCopy';
 import { expectedBookingIntentCents, extractHourlyRate, balanceTransactionId, dollarsToCents, pricingMetadata, type ChargeBreakdown } from '../utils/bookingPrice';
 import { chargeForAdvertised, loadPricingSettings, savePricingSettings } from '../utils/pricingSettings';
-import { seminarIsFull, firstFullFutureOccurrence, seatRequestUnavailableMessage } from '../utils/seminarCapacity';
+import { seminarIsFull, firstFullFutureOccurrence, seatRequestUnavailableMessage, waitlistSeminarIsOpen } from '../utils/seminarCapacity';
 const SeminarSeatRequest = require("../models/SeminarSeatRequest");
 import { checkoutPaymentMetadata, retryLinkExpiry } from '../utils/retryPaymentLink';
 import { auditAmount, auditChanges, flattenForAudit } from '../utils/adminAuditChanges';
 import {
     normalizePaymentMode,
     isWallet,
-    pinnedSettlementMode,
+    seatSettlementMode,
     walletChargeAllowed,
     paymentWindowLapsed,
     WALLET_PAYMENT_METHOD_TYPES,
@@ -60,7 +60,7 @@ const createStripePaymentIntent = async (req, res) => {
         const appState = await AppState.findOne();
         const stripeMode = appState?.stripeMode === 'live' ? 'live' : 'test';
         // The client's choice is only a request: for a booking already taken through the
-        // wallet path, the stored mode is pinned over it (see pinnedSettlementMode).
+        // wallet path, the stored mode is pinned over it (see seatSettlementMode).
         let paymentMode = normalizePaymentMode(req.body.paymentMethod);
         let wallet = paymentMode === 'wallet';
 
@@ -83,15 +83,16 @@ const createStripePaymentIntent = async (req, res) => {
             if (paymentWindowLapsed(request.paymentDeadline)) {
                 return res.status(410).send({ error: 'The payment window for this seat has closed.' });
             }
-            // This seat was requested without a hold, so it settles in the mode it was
-            // requested under — paying by card here would be an opt-out of the deposit
-            // every other student going through the card path has to make. A host's
-            // invitation carries no such commitment, so the student picks freely.
-            if (String(request.origin || 'student') !== 'host') {
-                paymentMode = pinnedSettlementMode(request.paymentMode);
-                wallet = paymentMode === 'wallet';
-            }
+            paymentMode = seatSettlementMode({
+                origin: request.origin,
+                requestedMode: request.paymentMode,
+                chosenMode: paymentMode,
+            });
+            wallet = paymentMode === 'wallet';
             const seatSeminar = await GroupChat.findById(request.groupChat);
+            if (!waitlistSeminarIsOpen(seatSeminar)) {
+                return res.status(409).send({ error: 'This seminar is no longer open, so this seat cannot be paid for.' });
+            }
             const seatQuote = await chargeForAdvertised('seminar', dollarsToCents(seatSeminar?.price));
             expectedCents = seatQuote.chargeCents;
             pricingMeta = pricingMetadata(seatQuote);
@@ -183,10 +184,8 @@ const createStripePaymentIntent = async (req, res) => {
                     return res.status(409).send({ error: "You're already registered for this seminar." });
                 }
 
-                const softHeld = await SeminarSeatRequest.countDocuments({
-                    groupChat: groupChat._id,
-                    status: 'awaiting_payment',
-                });
+                const { countSoftHeldSeats } = require("./groupChat.controller");
+                const softHeld = await countSoftHeldSeats(groupChat._id);
                 if (seminarIsFull(groupChat, softHeld)) {
                     const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
                     const unavailable = seatRequestUnavailableMessage(startMs);
@@ -207,7 +206,7 @@ const createStripePaymentIntent = async (req, res) => {
                             type: 'seminar',
                             _id: { $ne: groupChat._id },
                         });
-                        if (firstFullFutureOccurrence(siblings)) {
+                        if (firstFullFutureOccurrence(siblings, Date.now(), softHeld)) {
                             return res.status(400).send({ error: 'A later session in this seminar series is full, so registration is closed.' });
                         }
                     }

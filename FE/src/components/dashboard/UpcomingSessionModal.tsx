@@ -165,6 +165,7 @@ export default function UpcomingSessionModal({
   onViewProfile,
   sessions,
   role = 'student',
+  listHeader,
 }: {
   kind: SessionKind;
   status: SessionStatus;
@@ -196,6 +197,8 @@ export default function UpcomingSessionModal({
   onCancelRequest?: (session: UpcomingModalSession) => void | Promise<void | boolean>;
   sessions: UpcomingModalSession[];
   role?: 'student' | 'expert';
+  /** Shown above the session rows. It replaces the empty message, so it must supply its own. */
+  listHeader?: React.ReactNode;
 }) {
   const [tick, setTick] = useState(() => Date.now());
   useEffect(() => {
@@ -372,7 +375,7 @@ export default function UpcomingSessionModal({
         typeLabel: 'Seminar',
         description: expert
           ? status === 'pending'
-            ? 'Students on the waitlist are offered a seat automatically when one opens (first come, first served). Legacy held requests still show Accept/Decline until drained.'
+            ? `Admit students in the order they joined, and max attendees rises to fit them. A seat that opens on its own still goes to the next student automatically.${sessions.length > 0 ? ' Older requests with a payment hold still need Accept or Decline.' : ''}`
             : 'Seminars you are hosting — join to open the meeting room in chat.'
           : status === 'pending'
             ? 'You’re on these seminar waitlists — you’ll be offered a seat if one opens.'
@@ -429,13 +432,13 @@ export default function UpcomingSessionModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      className="fixed inset-0 z-50 flex overflow-y-auto bg-slate-900/40 p-4"
       onClick={e => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden"
+        className="m-auto w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-6 py-4">
@@ -461,7 +464,8 @@ export default function UpcomingSessionModal({
           <p className="text-sm text-slate-600">{content.description}</p>
 
           <div className="max-h-[52vh] overflow-y-auto space-y-3 pr-1">
-            {displaySessions.length === 0 ? (
+            {listHeader}
+            {displaySessions.length === 0 && !listHeader ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 py-10 text-center text-sm text-slate-500">
                 No sessions in this view for the selected time range.
               </div>

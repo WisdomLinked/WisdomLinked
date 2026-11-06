@@ -123,7 +123,8 @@ async function mapSeminar(g: any): Promise<Seminar> {
     : await resolveProfileImageSrc(g?.admin?.image, 'small', profileImageFetch);
   // Enrolled students exclude the host (the admin is always a participant).
   const participantCount = Array.isArray(g?.participants) ? g.participants.length : 0;
-  const enrolled = Math.max(0, participantCount - 1);
+  // Seats held for a pay offer are taken too, or a full seminar reads as having room.
+  const enrolled = Math.max(0, participantCount - 1) + (Number(g?.heldSeats) || 0);
   const maxAttendees = typeof g?.maxAttendees === 'number' ? g.maxAttendees : null;
   return {
     id: String(g?._id),
@@ -1084,7 +1085,7 @@ export default function StudentSeminars({
                     price: openSeatRequest!.price,
                     name: s.title,
                   }}
-                  walletOption={seatWalletOption(openSeatRequest!.origin)}
+                  walletOption={seatWalletOption(openSeatRequest!.origin, openSeatRequest!.paymentMode)}
                   onPaymentSuccess={paySeat}
                   onCancel={() => setCheckout(null)}
                   cancelLabel="Back"
