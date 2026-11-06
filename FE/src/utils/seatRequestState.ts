@@ -16,6 +16,8 @@ export type SeatRequestEntry = {
   payBy: string | null;
   /** 'host' when the host invited this student, rather than the student asking. */
   origin: 'student' | 'host';
+  /** The method stored on the request; only 'wallet' pins how it must be paid. */
+  paymentMode: string;
 };
 
 export type SeatRequestIndex = {
@@ -65,6 +67,7 @@ export const indexSeatRequests = (
       price: typeof row?.amount === 'number' ? row.amount / 100 : 0,
       payBy: row?.paymentDeadline ?? null,
       origin: String(row?.origin || 'student') === 'host' ? 'host' : 'student',
+      paymentMode: String(row?.paymentMode || 'card'),
     };
 
     // An unpaid approval outranks a pending request for the same seminar: it is the one

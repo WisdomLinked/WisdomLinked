@@ -8,7 +8,7 @@ import {
   paymentWindowDeadline,
   paymentWindowLapsed,
   walletChargeAllowed,
-  pinnedSettlementMode,
+  seatSettlementMode,
   CARD_PAYMENT_METHOD_TYPES,
   WALLET_PAYMENT_METHOD_TYPES,
   DEFAULT_PAYMENT_WINDOW_HOURS,
@@ -105,23 +105,34 @@ test("an unknown flow is refused rather than defaulting to chargeable", () => {
   assert.equal(walletChargeAllowed({ flow: "somethingElse" } as any), false);
 });
 
-test("a wallet booking must be settled by wallet, closing the card opt-out", () => {
+test("a seat requested by wallet must be paid by wallet, closing the card opt-out", () => {
   // Requesting by wallet skips the card authorization that commits a student before an
   // expert decides. If it could then be paid by card, every student would route through
   // the wallet tab to avoid the hold, and the deposit would mean nothing.
-  assert.equal(pinnedSettlementMode("wallet"), "wallet");
+  assert.equal(
+    seatSettlementMode({ origin: "student", requestedMode: "wallet", chosenMode: "card" }),
+    "wallet",
+  );
+  assert.equal(
+    seatSettlementMode({ origin: undefined, requestedMode: "wallet", chosenMode: "card" }),
+    "wallet",
+  );
 });
 
-test("a card booking stays on the card path", () => {
-  assert.equal(pinnedSettlementMode("card"), "card");
+test("a waitlisted student pays by whichever method they choose", () => {
+  // Their row only carries the default 'card'. Pinning it while the checkout offers a
+  // wallet is what made the form and the payment disagree.
+  for (const chosenMode of ["card", "wallet"] as const) {
+    assert.equal(seatSettlementMode({ origin: "student", requestedMode: "card", chosenMode }), chosenMode);
+    assert.equal(seatSettlementMode({ origin: "student", requestedMode: undefined, chosenMode }), chosenMode);
+  }
 });
 
-test("a booking with no recorded mode settles as card, never as wallet", () => {
-  // Failing open to 'wallet' would let an unknown mode dodge the hold.
-  assert.equal(pinnedSettlementMode(undefined), "card");
-  assert.equal(pinnedSettlementMode(null), "card");
-  assert.equal(pinnedSettlementMode("WALLET"), "card");
-  assert.equal(pinnedSettlementMode({}), "card");
+test("an invited student pays by whichever method they choose", () => {
+  for (const chosenMode of ["card", "wallet"] as const) {
+    assert.equal(seatSettlementMode({ origin: "host", requestedMode: "wallet", chosenMode }), chosenMode);
+    assert.equal(seatSettlementMode({ origin: "host", requestedMode: "card", chosenMode }), chosenMode);
+  }
 });
 
 test("a card booking offers card alone, with no other method to pick from", () => {

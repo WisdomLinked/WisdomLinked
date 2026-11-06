@@ -578,6 +578,14 @@ const updateProfileOfUser = async (req, res) => {
             .lean();
         const existing = await loadAuditedProfile();
         await User.findOneAndUpdate({ email: String(email) }, updates, { new: true })
+        if (status === 'blocked' && existing && existing.status !== 'blocked') {
+            try {
+                const { releaseOffersOfBlockedUser } = require("./groupChat.controller");
+                await releaseOffersOfBlockedUser(existing._id);
+            } catch (releaseErr) {
+                console.error("[updateProfileOfUser] releasing seat offers failed:", releaseErr);
+            }
+        }
         const result = await getFullUserData(email)
         if (status && status === 'active') {
             // If the user is activated, send an email notification

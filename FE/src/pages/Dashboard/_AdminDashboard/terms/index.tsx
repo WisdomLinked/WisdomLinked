@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { FilePlus, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import AgreementTabs from './AgreementTabs';
 import CurrentVersionCard from './CurrentVersionCard';
 import PublishDrawer from './PublishDrawer';
@@ -38,8 +38,8 @@ export default function TermsAgreementPage() {
             onClick={() => setPublishOpen(true)}
             className={`${FOCUS} inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800`}
           >
-            <FilePlus className="h-4 w-4" aria-hidden />
-            Publish {contract.label} v{next}
+            <Plus className="h-4 w-4" aria-hidden />
+            New version
           </button>
         </header>
 

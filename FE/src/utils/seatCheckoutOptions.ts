@@ -3,15 +3,15 @@ import type { WalletOption } from '../components/dashboard/StudentBookingCheckou
 /**
  * How an approved seat may be paid for.
  *
- * A student who asked for the seat picked a method when they asked, and a wallet
- * request skipped the card hold every card booking makes — so it settles the same
- * way it was requested. A host's invitation carries no such choice: the student was
- * never asked, so nothing is pinned for them.
+ * A wallet request skipped the card hold every card booking makes, so it settles the
+ * same way it was requested. A student who joined the waitlist or was invited by the
+ * host never chose a method, so nothing is pinned for them. Mirrors seatSettlementMode
+ * on the server: if the two disagree, the payment form cannot confirm the payment.
  */
-export const seatWalletOption = (origin?: string): WalletOption =>
-  String(origin || 'student') === 'host'
-    ? { kind: 'charge' }
-    : { kind: 'charge', only: true };
+export const seatWalletOption = (origin?: string, requestedMode?: string): WalletOption =>
+  String(origin || 'student') !== 'host' && requestedMode === 'wallet'
+    ? { kind: 'charge', only: true }
+    : { kind: 'charge' };
 
 export const seatWasInvited = (origin?: string): boolean =>
   String(origin || 'student') === 'host';

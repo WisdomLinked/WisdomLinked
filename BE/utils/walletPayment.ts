@@ -70,13 +70,21 @@ export const walletChargeAllowed = (context: WalletChargeContext): boolean => {
     }
 };
 
-// A booking taken through the wallet path skipped the card authorization that normally
-// commits a student before an expert spends time deciding on it. Letting it settle by
-// card afterwards would turn the wallet tab into a way for anyone to opt out of that
-// commitment, so the mode a booking was requested under is the mode it must be paid in.
-// The server derives this from the stored booking; the client never chooses it.
-export const pinnedSettlementMode = (requestedMode: any): PaymentMode =>
-    isWallet(requestedMode) ? 'wallet' : 'card';
+// A seat requested through the wallet path skipped the card authorization that normally
+// commits a student, so letting it settle by card would make the wallet tab an opt-out
+// of that commitment: it must be paid by wallet, whatever the client sends. A student
+// who joined the waitlist or was invited was never asked for a method, and their row
+// merely carries the default mode, so they pay however they choose.
+export const seatSettlementMode = ({
+    origin,
+    requestedMode,
+    chosenMode,
+}: {
+    origin: any;
+    requestedMode: any;
+    chosenMode: PaymentMode;
+}): PaymentMode =>
+    String(origin || 'student') !== 'host' && isWallet(requestedMode) ? 'wallet' : chosenMode;
 
 export const WALLET_ONLY_SETTLEMENT_MESSAGE =
     'This booking was requested with WeChat Pay or Alipay, so it must be paid the same way.';

@@ -219,7 +219,7 @@ export default function ExpertProfile({
   >(null);
   /** Settling a seat the host approved or invited the student to. */
   const [seatPayTarget, setSeatPayTarget] = useState<
-    { requestId: string; groupChatId: string; price: number; name: string; invited?: boolean } | null
+    { requestId: string; groupChatId: string; price: number; name: string; invited?: boolean; paymentMode?: string } | null
   >(null);
   const [resumePreviewOpen, setResumePreviewOpen] = useState(false);
 
@@ -484,10 +484,11 @@ export default function ExpertProfile({
       const d = new Date(g?.start);
       const valid = !Number.isNaN(d.getTime());
       // Enrolled students exclude the host (the admin is always a participant).
+      // Seats held for a pay offer are taken too, or a full seminar reads as having room.
       const enrolled = Math.max(
         0,
         (Array.isArray(g?.participants) ? g.participants.length : 0) - 1,
-      );
+      ) + (Number(g?.heldSeats) || 0);
       const maxAttendees = typeof g?.maxAttendees === 'number' ? g.maxAttendees : null;
       return {
         id: String(g?._id ?? ''),
@@ -1017,6 +1018,7 @@ export default function ExpertProfile({
                             price: item.seatRequest!.price,
                             name: item.title,
                             invited: item.seatRequest!.origin === 'host',
+                            paymentMode: item.seatRequest!.paymentMode,
                           })}
                           className="inline-flex w-full items-center justify-center rounded-[4px] bg-[#1A3A4A] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#122635]"
                         >
@@ -1640,7 +1642,10 @@ export default function ExpertProfile({
               name: seatPayTarget.name,
             }}
             returnUrl={studentBookingReturnUrl}
-            walletOption={seatWalletOption(seatPayTarget.invited ? 'host' : 'student')}
+            walletOption={seatWalletOption(
+              seatPayTarget.invited ? 'host' : 'student',
+              seatPayTarget.paymentMode,
+            )}
             onPaymentSuccess={paySeatRequest}
             onCancel={() => setSeatPayTarget(null)}
             cancelLabel="Back"

@@ -40,7 +40,7 @@ describe('TermsAgreementPage', () => {
   it('publishes a new version from the slide-over', async () => {
     const user = userEvent.setup();
     render(<TermsAgreementPage />);
-    await user.click(screen.getByRole('button', { name: 'Publish Shared v5' }));
+    await user.click(screen.getByRole('button', { name: 'New version' }));
     expect(screen.getByRole('dialog', { name: 'Publish Shared v5' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Close publish panel' })).toHaveFocus());
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
@@ -57,6 +57,7 @@ describe('TermsAgreementPage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('Shared v5 is now the current agreement.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Shared agreement · v5' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Publish Shared v6' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'New version' }));
+    expect(screen.getByRole('dialog', { name: 'Publish Shared v6' })).toBeInTheDocument();
   });
 });

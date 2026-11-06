@@ -13,6 +13,7 @@ const {
     requestSeminarSeat,
     approveSeminarSeatRequest,
     rejectSeminarSeatRequest,
+    admitWaitlistStudents,
     inviteToSeminar,
     getGroupMemberCandidates,
     paySeminarSeatRequest,
@@ -163,6 +164,13 @@ router.post(
     "/reject-seat-request",
     expertAuth(true),
     rejectSeminarSeatRequest
+);
+
+// host admits waitlisted students in join order, raising max attendees to fit them
+router.post(
+    "/admit-waitlist",
+    expertAuth(true),
+    admitWaitlistStudents
 );
 
 // Host invites students or experts, selected from the picker or by email.

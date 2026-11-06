@@ -613,6 +613,20 @@ export const approveSeminarSeatRequest = async (requestId: string, note?: string
     }
 };
 
+export const admitWaitlistStudents = async (
+    groupChatId: string,
+    request: { count: number } | { all: true; expectedCount: number },
+) => {
+    try {
+        const res = await api.post("group-chat/admit-waitlist", { groupChatId, ...request });
+        return res.data;
+    } catch (err: any) {
+        // Still handles a forced logout, but the reason is shown on the seminar, not a toast.
+        handleApiFailure(err, { notify: false });
+        return { status: "FAIL", error: resolveUserFacingError(err) };
+    }
+};
+
 export const rejectSeminarSeatRequest = async (requestId: string, note?: string) => {
     try {
         const res = await api.post("group-chat/reject-seat-request", { requestId, note });

@@ -98,4 +98,18 @@ describe('indexSeatRequests', () => {
     );
     expect(seatRequestFor(asked, { _id: 'sem-1' })?.origin).toBe('student');
   });
+
+  it('carries the stored payment mode, defaulting to card', () => {
+    const wallet = indexSeatRequests(
+      [row({ _id: 'w', status: 'awaiting_payment', paymentDeadline: inHours(20), paymentMode: 'wallet' })],
+      NOW,
+    );
+    expect(seatRequestFor(wallet, { _id: 'sem-1' })?.paymentMode).toBe('wallet');
+
+    const unset = indexSeatRequests(
+      [row({ _id: 'u', status: 'awaiting_payment', paymentDeadline: inHours(20) })],
+      NOW,
+    );
+    expect(seatRequestFor(unset, { _id: 'sem-1' })?.paymentMode).toBe('card');
+  });
 });

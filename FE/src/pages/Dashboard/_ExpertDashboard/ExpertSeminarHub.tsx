@@ -375,9 +375,9 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
         Waitlist ({requests.length})
       </p>
       <p className="mt-1 text-xs text-[#7A7A72]">
-        Students on the waitlist are offered a seat automatically when one opens (first come, first served).
+        Admit students from the Seminar waitlist on your dashboard. A seat that opens on its own goes to the next student automatically.
         {legacyCount > 0
-          ? ' Legacy held requests below still need your approval until they expire.'
+          ? ' Older requests below hold a payment and still need your approval until they expire.'
           : ''}
       </p>
       {error ? (
@@ -478,8 +478,8 @@ function SeatRequestsPanel({ seminarId }: { seminarId: string }) {
                 </>
               ) : (
                 <p className="mt-0.5 text-[11px] text-[#7A7A72]">
-                  Offered automatically when a seat opens
-                  {interestCount > 1 ? ' · FIFO order' : ''}
+                  Waiting for a seat
+                  {interestCount > 1 ? ' · Admitted in the order they joined' : ''}
                 </p>
               )}
             </div>

@@ -110,6 +110,9 @@ import {
     seatRequestUnavailableMessage,
     resolveSeatApprovalBlock,
     isLegacyHeldSeatRequest,
+    raisedSeatCap,
+    waitlistSeminarIsOpen,
+    firstFullFutureOccurrence,
 } from '../utils/seminarCapacity';
 import { describeSeminarChanges, seminarDetailPairs } from '../utils/seminarChanges';
 import {
@@ -1485,6 +1488,50 @@ const joinGroupChat = async (req, res) => {
 }
 
 
+// Their offer stands, but they decide whether to pay against the current details. A
+// deadline must also not outlive a start that moved earlier: past the start nobody can pay.
+const applySeminarChangeToOpenSeats = async (before: any, changes: string[], updateFields: Record<string, any>) => {
+    if (updateFields.start) {
+        const newStart = new Date(updateFields.start);
+        await SeminarSeatRequest.updateMany(
+            { groupChat: before._id, status: 'awaiting_payment', paymentDeadline: { $gt: newStart } },
+            { $set: { paymentDeadline: newStart } },
+        );
+    }
+    const open = await SeminarSeatRequest.find({
+        groupChat: before._id,
+        status: { $in: ['pending', 'awaiting_payment'] },
+    }).select('customer status');
+    const host = await User.findById(before?.admin).select('username email');
+    const details: Array<[string, string]> = [
+        ...seminarDetailPairs(before, updateFields),
+        ['Host', host?.username || host?.email || 'Your host'],
+    ];
+    for (const request of open) {
+        const student = await User.findById(String(request.customer));
+        if (!student?.email) continue;
+        const offered = request.status === 'awaiting_payment';
+        await sendSeminarEmail(
+            bookingEmailTo(student),
+            `${before?.name || 'A seminar'} has been updated`,
+            {
+                heading: 'A seminar you are waiting on has been updated',
+                previewText: offered ? 'Check the details before you pay.' : 'You are still on the waitlist.',
+                blocks: [
+                    emailParagraph('<strong>What changed</strong>'),
+                    emailBullets(changes.map((c: string) => String(c))),
+                    emailParagraph('<strong>Current seminar details</strong>'),
+                    emailFacts(details),
+                    emailCallout(offered
+                        ? 'Your seat is still held. Please check these details before you pay.'
+                        : 'You are still on the waitlist. Nothing has been charged.'),
+                    emailButton('View the seminar', seminarStudentDashboardUrl(String(before._id))),
+                ],
+            },
+        );
+    }
+};
+
 // Emails every enrolled student (never the host) when a seminar's time/length/price
 // changes, so a reschedule or re-price is never silent. Best-effort; a failed send
 // must not fail the host's edit.
@@ -1514,6 +1561,41 @@ const notifySeminarChangeToStudents = async (before: any, changes: string[], upd
                     emailCallout('Your registration remains confirmed. No action is required unless these changes affect your plans.'),
                     emailParagraph('If the updated details no longer work for you, you can withdraw from the seminar through your dashboard, subject to the applicable cancellation and refund policy.'),
                     emailButton('View the seminar'),
+                ],
+            },
+        );
+    }
+};
+
+// Requests still holding a payment are left for the sweep, which releases the money.
+const closeOpenSeatsOfDeletedSeminars = async (docs: any[]) => {
+    const seminars = (docs || []).filter((d: any) => d?.type === 'seminar');
+    if (!seminars.length) return;
+    const names = new Map(seminars.map((d: any) => [String(d._id), d.name]));
+    const open = await SeminarSeatRequest.find({
+        groupChat: { $in: seminars.map((d: any) => d._id) },
+        status: { $in: ['pending', 'awaiting_payment'] },
+    });
+    for (const request of open) {
+        if (isLegacyHeldSeatRequest(request) && request.status === 'pending') continue;
+        const closed = await SeminarSeatRequest.findOneAndUpdate(
+            { _id: request._id, status: request.status },
+            { $set: { status: 'expired' } },
+        );
+        if (!closed) continue;
+        const customer = await User.findById(String(request.customer));
+        if (!customer?.email) continue;
+        const name = names.get(String(request.groupChat)) || 'this seminar';
+        await sendSeminarEmail(
+            bookingEmailTo(customer),
+            `${name} has been cancelled`,
+            {
+                heading: 'This seminar has been cancelled',
+                previewText: 'No charge has been made.',
+                blocks: [
+                    emailParagraph(`<strong>${emailEscape(name)}</strong> has been cancelled, so your place on its waitlist has ended.`),
+                    emailCallout('No charge has been made to your account.'),
+                    emailButton('Browse seminars'),
                 ],
             },
         );
@@ -1604,6 +1686,7 @@ const updateGroupChat = async (req, res) => {
         }
 
         let seminarEnrolledCount = 0;
+        let seminarSoftHeld = 0;
         if (groupChat.type === 'seminar') {
             const seriesDocs = groupChat.seriesId
                 ? await GroupChat.find({ seriesId: groupChat.seriesId, type: 'seminar' })
@@ -1611,6 +1694,10 @@ const updateGroupChat = async (req, res) => {
             const enrolledSet = new Set<string>();
             for (const g of seriesDocs) enrolledStudentIds(g).forEach((id) => enrolledSet.add(id));
             seminarEnrolledCount = enrolledSet.size;
+            // A held offer on any date claims a seat on the later dates too when it is paid.
+            if (typeof maxAttendees === 'number') {
+                seminarSoftHeld = await countSoftHeldSeats(groupChat._id);
+            }
         }
 
         const updateFields: Record<string, any> = {};
@@ -1643,8 +1730,9 @@ const updateGroupChat = async (req, res) => {
             updateFields.price = parsedPrice;
         }
         if (typeof maxAttendees === 'number') {
-            updateFields.maxAttendees = groupChat.type === 'seminar' && maxAttendees > 0
-                ? Math.max(maxAttendees, seminarEnrolledCount)
+            // A held offer owns its seat: lowering past it would take the money, then refund it.
+            updateFields.maxAttendees = groupChat.type === 'seminar' && (maxAttendees > 0 || seminarSoftHeld > 0)
+                ? Math.max(maxAttendees, seminarEnrolledCount + seminarSoftHeld)
                 : maxAttendees;
         } else if (maxAttendees === null) updateFields.maxAttendees = null;
         if (typeof currency === 'string') updateFields.currency = currency;
@@ -1788,6 +1876,11 @@ const updateGroupChat = async (req, res) => {
                 } catch (notifyErr) {
                     console.log('[updateGroupChat] change notification failed', notifyErr);
                 }
+                try {
+                    await applySeminarChangeToOpenSeats(groupChat, changes, updateFields);
+                } catch (seatErr) {
+                    console.log('[updateGroupChat] updating open seats failed', seatErr);
+                }
             }
         }
 
@@ -1814,6 +1907,8 @@ const resolveServerStripeMode = async (): Promise<'test' | 'live'> => {
  * When a student is converting their own offer into enrollment, pass excludeCustomerId
  * so their offer does not block themselves.
  */
+// Paying for one date of a recurring seminar claims a seat on all its future dates, so
+// an offer on any date reserves a seat on every one of them.
 const countSoftHeldSeats = async (
     groupChatId: any,
     opts?: { excludeCustomerId?: string },
@@ -1825,14 +1920,25 @@ const countSoftHeldSeats = async (
     if (opts?.excludeCustomerId) {
         filter.customer = { $ne: opts.excludeCustomerId };
     }
-    return SeminarSeatRequest.countDocuments(filter);
+    const seminar = await GroupChat.findById(String(groupChatId));
+    if (!seminar?.seriesId) return SeminarSeatRequest.countDocuments(filter);
+
+    const dates = await GroupChat.find({
+        seriesId: seminar.seriesId,
+        type: 'seminar',
+        status: 'active',
+        start: { $gt: new Date() },
+    }).select('_id');
+    filter.groupChat = { $in: [groupChatId, ...dates.map((d: any) => d._id)] };
+    // One student needs one seat per date, even with offers on two dates.
+    return (await SeminarSeatRequest.distinct('customer', filter)).length;
 };
 
 const claimSeminarSeat = async (
     groupChatId: any,
     userId: string,
     maxAttendees: unknown,
-    opts?: { excludeOwnSoftHold?: boolean },
+    opts?: { excludeOwnSoftHold?: boolean; holdsSeat?: boolean },
 ) => {
     const filter: Record<string, any> = {
         _id: groupChatId,
@@ -1841,9 +1947,14 @@ const claimSeminarSeat = async (
         admin: { $ne: userId },
         participants: { $ne: userId },
     };
-    const softHeld = await countSoftHeldSeats(groupChatId, {
-        excludeCustomerId: opts?.excludeOwnSoftHold ? userId : undefined,
-    });
+    // A holder's seat is already reserved, so other holds cannot take it: they only need
+    // a place under the cap. Counting those holds refuses students paying at the same
+    // moment, because someone who has just paid counts as both enrolled and held.
+    const softHeld = opts?.holdsSeat
+        ? 0
+        : await countSoftHeldSeats(groupChatId, {
+            excludeCustomerId: opts?.excludeOwnSoftHold ? userId : undefined,
+        });
     // Soft holds reserve capacity: claim only against the remaining hard seats.
     const effectiveCap = claimableSeatCap(maxAttendees, softHeld);
     if (effectiveCap != null && effectiveCap <= 0) {
@@ -1876,7 +1987,7 @@ const claimSeminarSeat = async (
 const claimFutureSiblingSeats = async (
     groupChat: any,
     userId: string,
-    opts?: { excludeOwnSoftHold?: boolean },
+    opts?: { excludeOwnSoftHold?: boolean; holdsSeat?: boolean },
 ): Promise<boolean> => {
     if (!groupChat.seriesId) return true;
     const claimedIds: any[] = [];
@@ -1963,6 +2074,8 @@ const unenrollSeminarSeries = async (groupChat: any, userId: string) => {
 
 const AUTO_SEAT_OFFER_NOTE_PAID =
     'A seat opened for you. Pay to confirm your spot — first come, first served on the waitlist.';
+const AUTO_SEAT_OFFER_NOTE_PAID_DONE =
+    'Your payment is confirmed and your seat is booked.';
 const AUTO_SEAT_OFFER_NOTE_FREE =
     'A seat opened for you on this seminar — you are enrolled.';
 
@@ -1971,15 +2084,25 @@ const AUTO_SEAT_OFFER_NOTE_FREE =
  * interest waitlist entry (FIFO by createdAt). A charge above 0, including the
  * free-session platform fee, becomes awaiting_payment. A quote of 0 enrolls.
  * Does not enroll past capacity. No-op when full or no pending rows.
+ * maxOffers stops after that many students, and lets a host admit more than one
+ * sweep's usual 25.
  */
-const offerNextWaitlistedSeat = async (groupChatId: any): Promise<boolean> => {
+const offerNextWaitlistedSeat = async (
+    groupChatId: any,
+    opts?: { maxOffers?: number },
+): Promise<boolean> => {
     try {
         const seminarId = String(groupChatId || '');
         if (!seminarId) return false;
 
+        const maxOffers = opts?.maxOffers;
+        // Rows skipped as already enrolled or missing use a round without using an offer.
+        const maxRounds = maxOffers ? maxOffers + 25 : 25;
         let offered = false;
+        let offerCount = 0;
         // Capacity may open by more than one seat (e.g. host raised maxAttendees).
-        for (let i = 0; i < 25; i += 1) {
+        for (let i = 0; i < maxRounds; i += 1) {
+            if (maxOffers && offerCount >= maxOffers) break;
             const groupChat = await GroupChat.findById(seminarId);
             if (!groupChat || groupChat.type !== 'seminar' || groupChat.status !== 'active') break;
             const startMs = groupChat.start ? new Date(groupChat.start).getTime() : 0;
@@ -1987,11 +2110,24 @@ const offerNextWaitlistedSeat = async (groupChatId: any): Promise<boolean> => {
 
             const softHeld = await countSoftHeldSeats(groupChat._id);
             if (seminarIsFull(groupChat, softHeld)) break;
+            // Paying claims every future date, so an offer a later date cannot seat would
+            // only end in a refund. The student stays waiting until the host raises it too.
+            if (groupChat.seriesId) {
+                const siblings = await GroupChat.find({
+                    seriesId: groupChat.seriesId,
+                    type: 'seminar',
+                    status: 'active',
+                    _id: { $ne: groupChat._id },
+                });
+                if (firstFullFutureOccurrence(siblings, Date.now(), softHeld)) break;
+            }
 
             // Oldest pending interest row (skip legacy card/wallet holds still awaiting host approve).
             const pending = await SeminarSeatRequest.find({
                 groupChat: groupChat._id,
                 status: 'pending',
+                paymentIntent: { $in: [null, ''] },
+                $nor: [{ paymentMode: 'wallet', amount: { $gt: 0 } }],
             }).sort({ createdAt: 1 }).limit(20);
 
             const interest = pending.find((r: any) => !isLegacyHeldSeatRequest(r));
@@ -2000,7 +2136,7 @@ const offerNextWaitlistedSeat = async (groupChatId: any): Promise<boolean> => {
             const customerId = interest.customer.toString();
             const customer = await User.findById(customerId);
             const expert = await User.findById(groupChat.admin.toString());
-            if (!customer || !expert) {
+            if (!customer || !expert || customer.status === 'blocked') {
                 await SeminarSeatRequest.updateOne(
                     { _id: interest._id, status: 'pending' },
                     { $set: { status: 'failed' } },
@@ -2093,6 +2229,7 @@ const offerNextWaitlistedSeat = async (groupChatId: any): Promise<boolean> => {
                     );
                 }
                 offered = true;
+                offerCount += 1;
                 continue;
             }
 
@@ -2166,6 +2303,7 @@ const offerNextWaitlistedSeat = async (groupChatId: any): Promise<boolean> => {
                 );
             }
             offered = true;
+            offerCount += 1;
         }
         return offered;
     } catch (err: any) {
@@ -2177,8 +2315,159 @@ const offerNextWaitlistedSeat = async (groupChatId: any): Promise<boolean> => {
 const maybeOfferWaitlistAfterCapacityChange = async (groupChatId: any) => {
     try {
         await offerNextWaitlistedSeat(groupChatId);
+        // A seat freed on one date of a series is usually free on its other dates too.
+        const seminar = await GroupChat.findById(String(groupChatId));
+        if (!seminar?.seriesId) return;
+        const siblings = await GroupChat.find({
+            seriesId: seminar.seriesId,
+            type: 'seminar',
+            status: 'active',
+            _id: { $ne: seminar._id },
+            start: { $gt: new Date() },
+        }).sort({ start: 1 });
+        for (const sib of siblings) await offerNextWaitlistedSeat(sib._id);
     } catch (err: any) {
         console.log('[maybeOfferWaitlistAfterCapacityChange]', err?.message || err);
+    }
+};
+
+// $max keeps two admits at once from lowering each other's cap. The type check keeps
+// an unlimited seminar unlimited, since $max would otherwise turn null into a number.
+const raiseSeminarCap = async (groupChatId: any, cap: number) =>
+    GroupChat.updateOne(
+        { _id: groupChatId, maxAttendees: { $type: 'number' } },
+        { $max: { maxAttendees: cap } },
+    );
+
+/**
+ * Paying for or enrolling in a recurring seminar claims a seat on every future date,
+ * so each must fit this admit as well as the students already holding unpaid offers.
+ */
+const raiseFutureSiblingCaps = async (groupChat: any, admitCount: number, softHeld: number) => {
+    if (!groupChat.seriesId) return;
+    const now = Date.now();
+    const siblings = await GroupChat.find({
+        seriesId: groupChat.seriesId,
+        type: 'seminar',
+        status: 'active',
+        _id: { $ne: groupChat._id },
+    });
+    for (const sib of siblings) {
+        const sibStart = sib.start ? new Date(sib.start).getTime() : 0;
+        if (!(sibStart >= now)) continue;
+        const cap = raisedSeatCap(
+            sib.maxAttendees,
+            occupiedSeminarSeats(sib, softHeld),
+            admitCount,
+        );
+        if (cap != null) await raiseSeminarCap(sib._id, cap);
+    }
+};
+
+const admitWaitlistStudents = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { groupChatId, count, all, expectedCount } = req.body;
+        const admitAll = all === true;
+        const requested = Number(count);
+        if (!groupChatId) {
+            return res.status(400).send("Choose a seminar first.");
+        }
+        if (!admitAll && (!Number.isInteger(requested) || requested < 1)) {
+            return res.status(400).send("Enter how many students to admit.");
+        }
+
+        const groupChat = await GroupChat.findById(String(groupChatId));
+        if (!groupChat || groupChat.type !== 'seminar') {
+            return res.status(404).send("Seminar not found.");
+        }
+        // 409, not 403: the frontend logs the user out on a 403.
+        if (normalizeId(groupChat.admin) !== String(userId)) {
+            return res.status(409).send("Only the seminar host can admit students.");
+        }
+        if (!waitlistSeminarIsOpen(groupChat)) {
+            return res.status(409).send("This seminar is no longer open, so students can't be admitted.");
+        }
+
+        const pending = await SeminarSeatRequest.find({
+            groupChat: groupChat._id,
+            status: 'pending',
+        }).sort({ createdAt: 1 });
+        const entries = pending.filter((r: any) => !isLegacyHeldSeatRequest(r));
+        const usable = await User.find({
+            _id: { $in: entries.map((r: any) => r.customer) },
+            status: { $ne: 'blocked' },
+        }).select('_id');
+        const usableIds = new Set(usable.map((u: any) => String(u._id)));
+        const enrolledIds = new Set(enrolledStudentIds(groupChat));
+        // Settled here, before any seat is counted, so nobody raises the cap for them.
+        const unusable = entries.filter((r: any) => !usableIds.has(String(r.customer)));
+        const alreadyEnrolled = entries.filter((r: any) =>
+            usableIds.has(String(r.customer)) && enrolledIds.has(String(r.customer)));
+        if (unusable.length) {
+            await SeminarSeatRequest.updateMany(
+                { _id: { $in: unusable.map((r: any) => r._id) }, status: 'pending' },
+                { $set: { status: 'failed' } },
+            );
+        }
+        if (alreadyEnrolled.length) {
+            await SeminarSeatRequest.updateMany(
+                { _id: { $in: alreadyEnrolled.map((r: any) => r._id) }, status: 'pending' },
+                { $set: { status: 'approved' } },
+            );
+        }
+        const waiting = entries.filter((r: any) =>
+            usableIds.has(String(r.customer)) && !enrolledIds.has(String(r.customer)));
+        if (!waiting.length) {
+            return res.status(409).send("No students are waiting for this seminar.");
+        }
+        // The host agreed to a specific new limit, so All must not admit more than they saw.
+        if (admitAll && typeof expectedCount === 'number' && expectedCount !== waiting.length) {
+            return res.status(409).send("The waitlist has changed. Please check the updated list and try again.");
+        }
+
+        const admitCount = admitAll ? waiting.length : Math.min(requested, waiting.length);
+        const previousMaxAttendees = groupChat.maxAttendees ?? null;
+        const softHeld = await countSoftHeldSeats(groupChat._id);
+        // Future dates first, so nobody can pay before their seat exists on every date.
+        await raiseFutureSiblingCaps(groupChat, admitCount, softHeld);
+        const cap = raisedSeatCap(
+            groupChat.maxAttendees,
+            occupiedSeminarSeats(groupChat, softHeld),
+            admitCount,
+        );
+        if (cap != null) await raiseSeminarCap(groupChat._id, cap);
+
+        await offerNextWaitlistedSeat(groupChat._id, { maxOffers: admitCount });
+
+        const after = await SeminarSeatRequest.find({
+            _id: { $in: waiting.map((r: any) => r._id) },
+        }).select('status');
+        const countByStatus = (status: string) =>
+            after.filter((r: any) => r.status === status).length;
+        const awaitingPayment = countByStatus('awaiting_payment');
+        const enrolled = countByStatus('approved');
+        const admitted = awaitingPayment + enrolled;
+        if (!admitted) {
+            return res.status(409).send("Could not admit students right now. Please try again.");
+        }
+
+        const updated = await GroupChat.findById(String(groupChat._id)).select('maxAttendees');
+        return res.status(200).json({
+            success: true,
+            admitted,
+            awaitingPayment,
+            enrolled,
+            stillWaiting: countByStatus('pending'),
+            maxAttendees: updated?.maxAttendees ?? null,
+            previousMaxAttendees,
+        });
+    } catch (err: any) {
+        if (err?.name === 'CastError') {
+            return res.status(404).send("Seminar not found.");
+        }
+        console.log(err);
+        return res.status(500).send(safeHttp500Message(err));
     }
 };
 
@@ -2244,6 +2533,37 @@ const releaseUncapturedSeatClaim = async (seminarId: any, userId: any) => {
     }
 };
 
+// A blocked student can't pay, so their offer must not sit on a seat until its deadline.
+const releaseOffersOfBlockedUser = async (userId: any) => {
+    const offers = await SeminarSeatRequest.find({ customer: userId, status: 'awaiting_payment' });
+    for (const offer of offers) {
+        const released = await SeminarSeatRequest.findOneAndUpdate(
+            { _id: offer._id, status: 'awaiting_payment' },
+            { $set: { status: 'expired' } },
+        );
+        if (released) await maybeOfferWaitlistAfterCapacityChange(offer.groupChat);
+    }
+};
+
+// Requests holding a payment are left alone: their money still has to be released.
+// The offer's "pay to confirm" banner is marked read, because nothing is left to pay.
+const settleOwnOpenSeats = async (seminarIds: any[], userId: any) => {
+    try {
+        await SeminarSeatRequest.updateMany(
+            {
+                customer: userId,
+                groupChat: { $in: seminarIds },
+                status: { $in: ['pending', 'awaiting_payment'] },
+                paymentIntent: { $in: [null, ''] },
+                paymentMode: { $ne: 'wallet' },
+            },
+            { $set: { status: 'approved', decisionNoteReadAt: new Date() } },
+        );
+    } catch (err: any) {
+        console.log('[settleOwnOpenSeats]', err?.message || err);
+    }
+};
+
 const enrollAndConfirmSeminar = async ({ groupChat, customer, expert, charge, payment_intent, recordPayment = true, paymentStatus = 'completed' }: any) => {
     const occurrences = [groupChat];
     if (groupChat.seriesId) {
@@ -2273,6 +2593,7 @@ const enrollAndConfirmSeminar = async ({ groupChat, customer, expert, charge, pa
         { _id: customer._id },
         { $addToSet: { groupChats: { $each: occurrenceIds } } },
     );
+    await settleOwnOpenSeats(occurrenceIds, customer._id);
 
     try {
         await syncGroupRocketChannel(String(groupChat._id));
@@ -2556,7 +2877,7 @@ const registerForSeminar = async (req, res) => {
             return refundAndFail(409, "Sorry, we couldn't reserve your seat. Please try again.", "Seat claim failed");
         }
  
-        if (!(await claimFutureSiblingSeats(groupChat, userId))) {
+        if (!(await claimFutureSiblingSeats(groupChat, userId, { excludeOwnSoftHold: true }))) {
             await releaseSeminarSeat(claimed._id, userId);
             return refundAndFail(409, "Sorry, a later session in this seminar series is full, so we couldn't complete your registration.", "A later session in the series reached capacity");
         }
@@ -3429,7 +3750,7 @@ const recordSeatRequest = async ({ groupChat, userId }: any) => {
                     ]),
                     emailCallout('<strong>Nothing has been charged.</strong> You’ll only pay if a seat opens and you confirm.'),
                     emailBullets([
-                        'When a seat opens, the oldest waitlist entry is offered automatically — the host does not need to approve.',
+                        'Seats are offered in the order people joined, when one opens or when the host admits students from the waitlist.',
                         waitlistChargeCents > 0
                             ? 'If offered a paid seat, you’ll get an email and homepage notice with a link to pay and confirm.'
                             : 'If offered a free seat, you’ll be enrolled automatically and notified by email.',
@@ -3455,7 +3776,7 @@ const recordSeatRequest = async ({ groupChat, userId }: any) => {
                         ['Date & time', emailWhen(groupChat.start, expert.timeZone)],
                         ['Student', customer?.username],
                     ]),
-                    emailCallout('No action needed. When a seat opens, the oldest waitlisted student is offered it automatically.'),
+                    emailCallout('When a seat opens, the oldest waitlisted student is offered it automatically. To admit students sooner, use the Seminar waitlist on your dashboard.'),
                     emailButton('Open your dashboard', expertDeepLink),
                 ],
             },
@@ -3954,13 +4275,12 @@ const paySeminarSeatRequest = async (req, res) => {
             return refundAndFail(409, "You are already registered for this seminar.", "Already enrolled before the seat was paid for");
         }
 
-        // Atomically claim a hard seat. Exclude this student's own soft offer so it
-        // does not block converting awaiting_payment → enrolled.
+        // Atomically claim a hard seat. This student's offer already reserved one.
         const seatClaimed = await claimSeminarSeat(
             groupChat._id,
             String(userId),
             groupChat.maxAttendees,
-            { excludeOwnSoftHold: true },
+            { holdsSeat: true },
         );
         if (!seatClaimed) {
             await SeminarSeatRequest.updateOne(
@@ -3974,7 +4294,7 @@ const paySeminarSeatRequest = async (req, res) => {
                 "Seat taken before waitlist payment completed",
             );
         }
-        if (!(await claimFutureSiblingSeats(seatClaimed, String(userId), { excludeOwnSoftHold: true }))) {
+        if (!(await claimFutureSiblingSeats(seatClaimed, String(userId), { holdsSeat: true }))) {
             await unenrollSeminarSeries(groupChat, String(userId));
             await SeminarSeatRequest.updateOne(
                 { _id: request._id, status: 'awaiting_payment' },
@@ -3998,6 +4318,10 @@ const paySeminarSeatRequest = async (req, res) => {
                     stripeMode: charge.paidBy,
                     amount: charge.amount,
                     currency: charge.currency,
+                    // The offer's "pay to confirm" must not stay on the banner after paying.
+                    ...(request.decisionNote === AUTO_SEAT_OFFER_NOTE_PAID
+                        ? { decisionNote: AUTO_SEAT_OFFER_NOTE_PAID_DONE }
+                        : {}),
                 },
             },
             { new: true },
@@ -4479,10 +4803,10 @@ const getSeminarSeatRequests = async (req, res) => {
             await maybeOfferWaitlistAfterCapacityChange(sid);
         }
         const requests = await SeminarSeatRequest.find({ expert: userId, status: 'pending' })
-            .populate('customer', 'username email image')
+            .populate('customer', 'username email image status')
             .populate({
                 path: 'groupChat',
-                select: 'name start description duration price keywords services purposeOther type isRecurring recurrenceFrequency admin participants',
+                select: 'name start description duration price keywords services purposeOther type isRecurring recurrenceFrequency admin participants status maxAttendees seriesId',
                 populate: [
                     { path: 'admin', select: 'username email image' },
                     { path: 'participants', select: 'username email image' },
@@ -4491,7 +4815,27 @@ const getSeminarSeatRequests = async (req, res) => {
                 ],
             })
             .sort({ createdAt: 1 });
-        return res.status(200).json({ success: true, result: requests });
+        // Waitlist rows never expire, so hide the ones on past or cancelled seminars.
+        // Legacy holds stay: the sweep still has to release their money.
+        const visible = requests.filter((r: any) =>
+            isLegacyHeldSeatRequest(r)
+            || (waitlistSeminarIsOpen(r.groupChat)
+                && r.customer
+                && r.customer.status !== 'blocked'
+                && !(r.groupChat.participants || []).some((p: any) =>
+                    String(p?._id ?? p) === String(r.customer._id))));
+        const seats: Record<string, { occupied: number; maxAttendees: number | null }> = {};
+        for (const r of visible) {
+            const seminar: any = r.groupChat;
+            const sid = String(seminar?._id || '');
+            if (!sid || seats[sid]) continue;
+            const softHeld = await countSoftHeldSeats(seminar._id);
+            seats[sid] = {
+                occupied: occupiedSeminarSeats(seminar, softHeld),
+                maxAttendees: typeof seminar.maxAttendees === 'number' ? seminar.maxAttendees : null,
+            };
+        }
+        return res.status(200).json({ success: true, result: visible, seats });
     } catch (err) {
         console.log(err);
         return res.status(500).send(safeHttp500Message(err));
@@ -4518,12 +4862,13 @@ const getMyDecisionNotices = async (req, res) => {
 
         const seats = await SeminarSeatRequest.find({
             customer: userId,
+            status: { $nin: ['expired', 'failed'] },
             decisionNote: { $nin: [null, ''] },
             decisionNoteAt: { $gte: cutoff },
             decisionNoteReadAt: null,
         })
             .select('status decisionNote decisionNoteAt groupChat expert amount paymentMode paymentDeadline')
-            .populate('groupChat', 'name start')
+            .populate('groupChat', 'name start status')
             .populate('expert', 'username image')
             .sort({ decisionNoteAt: -1 })
             .limit(20);
@@ -4552,7 +4897,8 @@ const getMyDecisionNotices = async (req, res) => {
                     expertImage: g.admin?.image || null,
                 };
             }),
-            ...seats.map((r: any) => {
+            ...seats.filter((r: any) =>
+                r.status !== 'awaiting_payment' || waitlistSeminarIsOpen(r.groupChat)).map((r: any) => {
                 const outcome = resolveSeatDecisionOutcome(r.status);
                 return {
                     id: String(r._id),
@@ -4620,7 +4966,7 @@ const getMySeatRequests = async (req, res) => {
             .select('groupChat status decisionDeadline paymentDeadline paymentMode amount currency origin')
             .populate({
                 path: 'groupChat',
-                select: 'name start description duration price keywords services purposeOther type isRecurring recurrenceFrequency admin',
+                select: 'name start description duration price keywords services purposeOther type isRecurring recurrenceFrequency admin status',
                 populate: [
                     { path: 'admin', select: 'username email image' },
                     { path: 'keywords', select: 'value label approved' },
@@ -4628,7 +4974,12 @@ const getMySeatRequests = async (req, res) => {
                 ],
             })
             .sort({ createdAt: -1 });
-        return res.status(200).json({ success: true, result: requests });
+        // Waitlist rows never expire, so a student's list must not keep counting closed seminars.
+        const visible = requests.filter((r: any) =>
+            !['pending', 'awaiting_payment'].includes(r.status)
+            || isLegacyHeldSeatRequest(r)
+            || waitlistSeminarIsOpen(r.groupChat));
+        return res.status(200).json({ success: true, result: visible });
     } catch (err) {
         console.log(err);
         return res.status(500).send(safeHttp500Message(err));
@@ -5324,6 +5675,28 @@ const handleBookingPaymentIntentEvent = async (event: any): Promise<string> => {
     const stripeMode: 'test' | 'live' = event?.livemode ? 'live' : 'test';
 
     if (event.type === 'payment_intent.payment_failed' || event.type === 'payment_intent.canceled') {
+        if (meta.seatRequestId) {
+            const failedSeat = await SeminarSeatRequest.findOneAndUpdate(
+                { _id: String(meta.seatRequestId), status: 'approved', paymentIntent: String(intent.id) },
+                { $set: { status: 'failed' } },
+            );
+            const student = failedSeat ? await User.findById(String(meta.userId)) : null;
+            if (student?.email) {
+                await sendSeminarEmail(
+                    student.email,
+                    'Your payment did not go through — seat released',
+                    {
+                        heading: 'Your payment did not go through',
+                        previewText: 'You have not been charged.',
+                        blocks: [
+                            emailParagraph('Your payment could not be completed, so your seminar seat has been released and you have not been charged.'),
+                            emailParagraph('If you would still like to attend, you can book again or rejoin the waitlist.', { muted: true }),
+                            emailButton('View the seminar', seminarStudentDashboardUrl(String(meta.groupChatId))),
+                        ],
+                    },
+                );
+            }
+        }
         const pending = await PaymentHistory.find({
             paymentIntent: String(intent.id),
             paymentType: 'charge',
@@ -6185,6 +6558,12 @@ const deleteGroup = async (req, res) => {
         await GroupChat.deleteMany({ _id: { $in: groupChats.map((g: any) => g._id) } });
 
         try {
+            await closeOpenSeatsOfDeletedSeminars(groupChats);
+        } catch (closeErr) {
+            console.log('[deleteGroup] closing open seats failed', closeErr);
+        }
+
+        try {
             await notifySeminarCancelledToStudents(groupChats);
         } catch (notifyErr) {
             console.log('[deleteGroup] cancellation notification failed', notifyErr);
@@ -6705,4 +7084,8 @@ module.exports = {
     removeMemberFromCommunityChat,
     setCommunityCoModerator,
     offerNextWaitlistedSeat,
+    claimSeminarSeat,
+    admitWaitlistStudents,
+    countSoftHeldSeats,
+    releaseOffersOfBlockedUser,
 };

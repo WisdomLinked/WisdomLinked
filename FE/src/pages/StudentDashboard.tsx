@@ -853,7 +853,12 @@ export default function StudentDashboard() {
         const awaitingPayment = (r?.status || '').toLowerCase() === 'awaiting_payment';
         const amountDollars = typeof r?.amount === 'number' ? r.amount / 100 : 0;
         const metaLines: string[] = [
-          awaitingPayment ? 'Approved — payment needed' : 'Awaiting host approval',
+          // Only an older request holding money is waiting on the host's decision.
+          awaitingPayment
+            ? 'Seat held — payment needed'
+            : amountDollars > 0
+              ? 'Awaiting host approval'
+              : 'On the waitlist',
         ];
         if (amountDollars > 0) {
           metaLines.push(
@@ -920,6 +925,7 @@ export default function StudentDashboard() {
     name: string;
     /** The host invited them, so no payment method was ever chosen for them. */
     invited?: boolean;
+    paymentMode?: string;
   } | null>(null);
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -962,7 +968,7 @@ export default function StudentDashboard() {
           value: pendingSeatRequests.length,
           icon: AlertCircle,
           color: 'neutral' as const,
-          tooltip: 'Seminar seats awaiting a host decision, or an invitation waiting on your payment',
+          tooltip: 'Seminar waitlists you are on, or a seat waiting on your payment',
           onClick: () => {
             void loadMySeatRequests();
             setUpcomingModal({ kind: 'seminar', status: 'pending' });
@@ -1612,14 +1618,14 @@ export default function StudentDashboard() {
                 }}
                 onPay={(notice) => {
                   if (notice.kind === 'seat') {
+                    const seat = mySeatRequests.find((r: any) => String(r?._id) === notice.id);
                     setSeatPayTarget({
                       requestId: notice.id,
                       groupChatId: String(notice.groupChatId ?? ''),
                       price: typeof notice.price === 'number' ? notice.price : 0,
                       name: notice.title,
-                      invited: String(
-                        mySeatRequests.find((r: any) => String(r?._id) === notice.id)?.origin || 'student',
-                      ) === 'host',
+                      invited: String(seat?.origin || 'student') === 'host',
+                      paymentMode: seat?.paymentMode,
                     });
                     return;
                   }
@@ -1849,6 +1855,7 @@ export default function StudentDashboard() {
                   price: typeof seat.amount === 'number' ? seat.amount / 100 : 0,
                   name: seat.groupChat?.name || session.title,
                   invited: String(seat.origin || 'student') === 'host',
+                  paymentMode: seat.paymentMode,
                 });
                 return;
               }
@@ -1951,7 +1958,10 @@ export default function StudentDashboard() {
                   price: seatPayTarget.price,
                   name: seatPayTarget.name,
                 }}
-                walletOption={seatWalletOption(seatPayTarget.invited ? 'host' : 'student')}
+                walletOption={seatWalletOption(
+                  seatPayTarget.invited ? 'host' : 'student',
+                  seatPayTarget.paymentMode,
+                )}
                 returnUrl={(() => {
                   try {
                     const url = new URL(window.location.href);

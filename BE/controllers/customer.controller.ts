@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 const User = require("../models/User");
 const GroupChat = require("../models/GroupChat");
+const SeminarSeatRequest = require("../models/SeminarSeatRequest");
 const Keyword = require("../models/Keyword")
 const PaymentHistory = require("../models/PaymentHistory");
 import { safeErrorMessage } from '../utils/httpUserFacingCopy';
@@ -116,6 +117,37 @@ const filterExperts = async (req: any, res: Response) => {
     }
 }
 
+// Seats held for an offer are taken, so students must not see them as free. An offer on
+// one date of a recurring seminar holds a seat on all its future dates.
+const heldSeatsBySeminar = async (seminarIds: any[]): Promise<Map<string, number>> => {
+    if (!seminarIds.length) return new Map();
+    const inSeries = await GroupChat.find({ _id: { $in: seminarIds }, seriesId: { $ne: null } }).select('seriesId');
+    const seriesIds = Array.from(new Set(inSeries.map((s: any) => String(s.seriesId))));
+    const dates = seriesIds.length
+        ? await GroupChat.find({
+            seriesId: { $in: seriesIds },
+            type: 'seminar',
+            status: 'active',
+            start: { $gt: new Date() },
+        }).select('seriesId')
+        : [];
+    const holderKey = new Map<string, string>();
+    for (const doc of [...inSeries, ...dates]) holderKey.set(String(doc._id), String(doc.seriesId));
+
+    const offers = await SeminarSeatRequest.find({
+        groupChat: { $in: [...seminarIds, ...dates.map((d: any) => d._id)] },
+        status: 'awaiting_payment',
+    }).select('groupChat customer');
+    const holders = new Map<string, Set<string>>();
+    for (const offer of offers) {
+        const key = holderKey.get(String(offer.groupChat)) || String(offer.groupChat);
+        if (!holders.has(key)) holders.set(key, new Set());
+        holders.get(key)!.add(String(offer.customer));
+    }
+    return new Map(seminarIds.map((id: any) =>
+        [String(id), holders.get(holderKey.get(String(id)) || String(id))?.size || 0]));
+};
+
 const filterSeminars = async (req, res) => {
     try {
         const { name, keywords, services, sortBy } = req.body
@@ -195,9 +227,10 @@ const filterSeminars = async (req, res) => {
             "services"
         ])
         const seminars = (await query.exec()).filter(x => x.admin.status === 'active');
+        const held = await heldSeatsBySeminar(seminars.map(x => x._id));
 
         return res.status(200).json({
-            result: seminars
+            result: seminars.map(x => ({ ...x.toObject(), heldSeats: held.get(String(x._id)) || 0 })),
         })
     } catch (err) {
         console.log(err)
@@ -224,6 +257,10 @@ const getExpertById = async (req, res) => {
         const announcement = await loadPublicAnnouncementForExpert(String(id));
         const result = withFollowInfo(query, followingIdSet(req.user));
         const payload = typeof result?.toObject === 'function' ? result.toObject() : { ...result };
+        const chats = Array.isArray(payload.groupChats) ? payload.groupChats : [];
+        const held = await heldSeatsBySeminar(chats.map((g: any) => g?._id).filter(Boolean));
+        payload.groupChats = chats.map((g: any) =>
+            (g?._id ? { ...g, heldSeats: held.get(String(g._id)) || 0 } : g));
 
         return res.status(200).json({
             result: { ...payload, announcement: announcement || null },
