@@ -14,6 +14,7 @@ const {
     approveSeminarSeatRequest,
     rejectSeminarSeatRequest,
     admitWaitlistStudents,
+    markWaitlistNoticeRead,
     inviteToSeminar,
     getGroupMemberCandidates,
     paySeminarSeatRequest,
@@ -171,6 +172,13 @@ router.post(
     "/admit-waitlist",
     expertAuth(true),
     admitWaitlistStudents
+);
+
+// host dismisses the "joined the waitlist" banner for one seminar
+router.post(
+    "/waitlist-notices/read",
+    expertAuth(true),
+    markWaitlistNoticeRead
 );
 
 // Host invites students or experts, selected from the picker or by email.

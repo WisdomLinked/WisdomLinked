@@ -6,6 +6,8 @@ import {
   groupWaitlistBySeminar,
   isLegacyHeldSeatRequest,
   maxAttendeesAfterAdmit,
+  waitlistJoinHeadline,
+  waitlistJoinNotices,
 } from './seminarWaitlist';
 
 const row = (id: string, seminarId: string, over: any = {}) => ({
@@ -122,5 +124,72 @@ describe('admitResultMessage', () => {
         maxAttendees: null,
       }),
     ).toBe('1 student admitted to “Calculus”. 1 student enrolled.');
+  });
+});
+
+describe('waitlistJoinNotices', () => {
+  const NOW = Date.parse('2026-11-05T12:00:00Z');
+  const HOUR = 3600_000;
+  const joined = (id: string, seminarId: string, hoursAgo: number, over: any = {}) => ({
+    _id: id,
+    createdAt: new Date(NOW - hoursAgo * HOUR).toISOString(),
+    customer: { _id: `u-${id}`, username: `Student ${id}` },
+    groupChat: { _id: seminarId, name: `Seminar ${seminarId}`, start: '2026-12-01T10:00:00Z' },
+    ...over,
+  });
+  const seats = { a: { occupied: 2, maxAttendees: 2 } };
+
+  it('groups by seminar, newest name and newest seminar first, with the whole waitlist counted', () => {
+    const result = waitlistJoinNotices(
+      [joined('1', 'a', 5), joined('2', 'a', 1), joined('3', 'b', 3), joined('old', 'a', 60)],
+      seats,
+      NOW,
+    );
+    expect(result.map(n => n.seminarId)).toEqual(['a', 'b']);
+    expect(result[0].names).toEqual(['Student 2', 'Student 1']);
+    expect(result[0].waiting).toBe(3);
+    expect(result[0].seats).toEqual(seats.a);
+    expect(result[0].latestJoinAt).toBe(new Date(NOW - HOUR).toISOString());
+  });
+
+  it('puts the seminar with the latest join first, whatever its date', () => {
+    const result = waitlistJoinNotices(
+      [joined('1', 'a', 5), joined('2', 'b', 1)],
+      seats,
+      NOW,
+    );
+    expect(result.map(n => n.seminarId)).toEqual(['b', 'a']);
+  });
+
+  it('leaves out dismissed, too old and older held requests', () => {
+    const result = waitlistJoinNotices(
+      [
+        joined('read', 'a', 1, { expertNoticeReadAt: new Date(NOW).toISOString() }),
+        joined('old', 'a', 48),
+        joined('held', 'a', 1, { paymentIntent: 'pi_1', amount: 4000 }),
+      ],
+      seats,
+      NOW,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it('a new student brings the banner back after a dismissal, naming only them', () => {
+    const result = waitlistJoinNotices(
+      [joined('read', 'a', 3, { expertNoticeReadAt: new Date(NOW).toISOString() }), joined('new', 'a', 1)],
+      seats,
+      NOW,
+    );
+    expect(result[0].names).toEqual(['Student new']);
+    expect(result[0].waiting).toBe(2);
+  });
+
+  it.each([
+    [['Ana'], 'Ana joined the waitlist for “X”.'],
+    [['Ana', 'Ben'], 'Ana and Ben joined the waitlist for “X”.'],
+    [['Ana', 'Ben', 'Cy'], 'Ana, Ben and 1 other joined the waitlist for “X”.'],
+    [['Ana', 'Ben', 'Cy', 'Di'], 'Ana, Ben and 2 others joined the waitlist for “X”.'],
+  ])('headline for %j', (names, expected) => {
+    expect(waitlistJoinHeadline({ names, title: 'X' })).toBe(expected);
   });
 });

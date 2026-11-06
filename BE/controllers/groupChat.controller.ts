@@ -4926,6 +4926,36 @@ const getMyDecisionNotices = async (req, res) => {
     }
 };
 
+// Only students who had joined by `through`, the moment the banner was showing, are
+// marked: someone who joined after that still gets their banner.
+const markWaitlistNoticeRead = async (req, res) => {
+    try {
+        const { userId } = req.user;
+        const { seminarId, through } = req.body;
+        const seenUpTo = new Date(typeof through === 'string' ? through : NaN);
+        if (!seminarId || Number.isNaN(seenUpTo.getTime())) {
+            return res.status(400).send("A seminar and time are required.");
+        }
+        await SeminarSeatRequest.updateMany(
+            {
+                expert: userId,
+                groupChat: String(seminarId),
+                status: 'pending',
+                createdAt: { $lte: seenUpTo },
+                expertNoticeReadAt: null,
+            },
+            { $set: { expertNoticeReadAt: new Date() } },
+        );
+        return res.status(200).json({ success: true });
+    } catch (err: any) {
+        if (err?.name === 'CastError') {
+            return res.status(404).send("Seminar not found.");
+        }
+        console.log(err);
+        return res.status(500).send(safeHttp500Message(err));
+    }
+};
+
 // Dismissing a notice is scoped to the caller's own rows, so one student can
 // never clear another's.
 const markDecisionNoticeRead = async (req, res) => {
@@ -7086,6 +7116,7 @@ module.exports = {
     offerNextWaitlistedSeat,
     claimSeminarSeat,
     admitWaitlistStudents,
+    markWaitlistNoticeRead,
     countSoftHeldSeats,
     releaseOffersOfBlockedUser,
 };

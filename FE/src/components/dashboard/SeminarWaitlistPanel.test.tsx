@@ -145,6 +145,28 @@ describe('SeminarWaitlistPanel', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('brings only the requested seminar into view', () => {
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scroll(this: Element, ...args: any[]) {
+      scrollIntoView(this.getAttribute('aria-label'), ...args);
+    } as any;
+    try {
+      render(
+        <SeminarWaitlistPanel
+          seminars={[seminar(), seminar({ seminarId: 'sem-2', title: 'Biology' })]}
+          showEmptyMessage={false}
+          focusSeminarId="sem-2"
+          onAdmit={vi.fn() as any}
+        />,
+      );
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView.mock.calls[0][0]).toBe('Waitlist for Biology');
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
   it('mentions future dates only for a recurring seminar', async () => {
     const { user } = setup({ seminars: [seminar({ recurring: true })] });
     await user.click(screen.getByRole('button', { name: 'All' }));
