@@ -30,6 +30,9 @@ export function isLegacyHeldSeatRequest(request: any): boolean {
   return String(request?.paymentMode || '') === 'wallet' && Number(request?.amount) > 0;
 }
 
+const studentName = (request: any): string =>
+  request?.customer?.username || request?.customer?.email || 'Student';
+
 /** Groups waiting students by seminar, soonest first. Join order comes from the API. */
 export function groupWaitlistBySeminar(
   requests: any[],
@@ -54,13 +57,71 @@ export function groupWaitlistBySeminar(
     bySeminar.get(seminarId)!.students.push({
       requestId: String(request?._id || ''),
       userId: String(request?.customer?._id || ''),
-      name: request?.customer?.username || request?.customer?.email || 'Student',
+      name: studentName(request),
       joinedAt: request?.createdAt || null,
     });
   }
   const startMs = (seminar: WaitlistSeminar) =>
     seminar.start ? new Date(seminar.start).getTime() : Number.MAX_SAFE_INTEGER;
   return Array.from(bySeminar.values()).sort((a, b) => startMs(a) - startMs(b));
+}
+
+export const WAITLIST_NOTICE_TTL_MS = 48 * 60 * 60 * 1000;
+
+export type WaitlistJoinNotice = {
+  seminarId: string;
+  title: string;
+  start: string | null;
+  /** Students new to this banner, most recent first. */
+  names: string[];
+  latestJoinAt: string;
+  waiting: number;
+  seats: WaitlistSeats;
+};
+
+/** One banner per seminar, for students who joined recently and aren't dismissed. */
+export function waitlistJoinNotices(
+  requests: any[],
+  seats: Record<string, WaitlistSeats> = {},
+  nowMs: number = Date.now(),
+): WaitlistJoinNotice[] {
+  const notices = new Map<string, WaitlistJoinNotice>();
+  for (const seminar of groupWaitlistBySeminar(requests, seats)) {
+    const fresh = requests.filter((request) => {
+      if (String(request?.groupChat?._id || '') !== seminar.seminarId) return false;
+      if (isLegacyHeldSeatRequest(request) || request?.expertNoticeReadAt) return false;
+      const joinedMs = new Date(request?.createdAt).getTime();
+      return nowMs - joinedMs < WAITLIST_NOTICE_TTL_MS;
+    });
+    if (!fresh.length) continue;
+    const newestFirst = fresh
+      .slice()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    notices.set(seminar.seminarId, {
+      seminarId: seminar.seminarId,
+      title: seminar.title,
+      start: seminar.start,
+      names: newestFirst.map(studentName),
+      latestJoinAt: newestFirst[0].createdAt,
+      waiting: seminar.students.length,
+      seats: seminar.seats,
+    });
+  }
+  return Array.from(notices.values()).sort(
+    (a, b) => new Date(b.latestJoinAt).getTime() - new Date(a.latestJoinAt).getTime(),
+  );
+}
+
+/** "Ana joined…", "Ana and Ben joined…", "Ana, Ben and 3 others joined…". */
+export function waitlistJoinHeadline(notice: Pick<WaitlistJoinNotice, 'names' | 'title'>): string {
+  const [first, second] = notice.names;
+  const others = notice.names.length - 2;
+  const who = notice.names.length === 1
+    ? first
+    : others <= 0
+      ? `${first} and ${second}`
+      : `${first}, ${second} and ${others} ${others === 1 ? 'other' : 'others'}`;
+  return `${who} joined the waitlist for “${notice.title}”.`;
 }
 
 /** How many students a typed number admits: limited to the waitlist, null if not valid. */

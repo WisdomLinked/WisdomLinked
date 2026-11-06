@@ -627,6 +627,15 @@ export const admitWaitlistStudents = async (
     }
 };
 
+export const markWaitlistNoticeRead = async (seminarId: string, through: string) => {
+    try {
+        const res = await api.post("group-chat/waitlist-notices/read", { seminarId, through });
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const rejectSeminarSeatRequest = async (requestId: string, note?: string) => {
     try {
         const res = await api.post("group-chat/reject-seat-request", { requestId, note });

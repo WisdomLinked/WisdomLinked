@@ -34,6 +34,8 @@ const seminarSeatRequestSchema = new mongoose.Schema(
         decisionNote: { type: String, default: '' },
         decisionNoteAt: { type: Date, default: null },
         decisionNoteReadAt: { type: Date, default: null },
+        // When the host dismissed the "joined the waitlist" banner on their dashboard.
+        expertNoticeReadAt: { type: Date, default: null },
     },
     { timestamps: true }
 );

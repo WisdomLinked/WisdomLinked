@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { UserCheck } from 'lucide-react';
 import {
   admitConfirmation,
@@ -21,12 +21,14 @@ const formatWhen = (value: string | null) =>
 
 function WaitlistSeminarCard({
   seminar,
+  focused,
   onAdmit,
   onAdmitted,
   onRefused,
   onViewStudent,
 }: {
   seminar: WaitlistSeminar;
+  focused: boolean;
   onAdmit: AdmitHandler;
   onAdmitted: (message: string) => void;
   onRefused: (seminar: WaitlistSeminar, error: string) => void;
@@ -38,6 +40,10 @@ function WaitlistSeminarCard({
   const [confirming, setConfirming] = useState<WaitlistAdmitRequest | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const cardRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (focused) cardRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [focused]);
   const numberLabel = `Number of students to admit to ${seminar.title}`;
   const confirmingCount = confirming
     ? 'all' in confirming
@@ -73,8 +79,11 @@ function WaitlistSeminarCard({
 
   return (
     <section
+      ref={cardRef}
       aria-label={`Waitlist for ${seminar.title}`}
-      className="rounded-xl border border-slate-200 bg-white p-4"
+      className={`scroll-mt-1 rounded-xl border bg-white p-4 ${
+        focused ? 'border-[#234C6A] ring-1 ring-[#234C6A]' : 'border-slate-200'
+      }`}
     >
       <h4 className="text-sm font-semibold text-slate-900">{seminar.title}</h4>
       <p className="mt-0.5 text-xs text-slate-500">
@@ -187,11 +196,14 @@ function WaitlistSeminarCard({
 export default function SeminarWaitlistPanel({
   seminars,
   showEmptyMessage,
+  focusSeminarId,
   onAdmit,
   onViewStudent,
 }: {
   seminars: WaitlistSeminar[];
   showEmptyMessage: boolean;
+  /** Brought into view when the panel opens, e.g. from a "joined the waitlist" banner. */
+  focusSeminarId?: string | null;
   onAdmit: AdmitHandler;
   onViewStudent?: (userId: string, name: string) => void;
 }) {
@@ -230,6 +242,7 @@ export default function SeminarWaitlistPanel({
         <WaitlistSeminarCard
           key={seminar.seminarId}
           seminar={seminar}
+          focused={seminar.seminarId === focusSeminarId}
           onAdmit={onAdmit}
           onAdmitted={message => {
             setNotices(prev => [message, ...prev.filter(item => item !== message)]);

@@ -618,3 +618,34 @@ test("an empty waitlist is refused without raising the cap", async () => {
     assert.deepEqual(store.capWrites, []);
   });
 });
+
+test("dismissing the waitlist banner only touches the host's own seminar, up to what they saw", async () => {
+  const original = SeminarSeatRequest.updateMany;
+  const calls: any[] = [];
+  SeminarSeatRequest.updateMany = async (filter: any, update: any) => {
+    calls.push({ filter, update });
+    return {};
+  };
+  const dismiss = async (body: any) => {
+    const res = createRes();
+    await groupController.markWaitlistNoticeRead({ user: { userId: "host-1" }, body }, res);
+    return res;
+  };
+  try {
+    const through = "2026-11-05T12:00:00.000Z";
+    const ok = await dismiss({ seminarId: "sem-1", through });
+    assert.equal(ok.statusCode, 200);
+    assert.equal(calls[0].filter.expert, "host-1");
+    assert.equal(calls[0].filter.groupChat, "sem-1");
+    assert.equal(calls[0].filter.status, "pending");
+    assert.equal(calls[0].filter.createdAt.$lte.toISOString(), through);
+    assert.ok(calls[0].update.$set.expertNoticeReadAt instanceof Date);
+
+    for (const body of [{ through }, { seminarId: "sem-1" }, { seminarId: "sem-1", through: "soon" }, { seminarId: "sem-1", through: { $gt: "" } }]) {
+      assert.equal((await dismiss(body)).statusCode, 400);
+    }
+    assert.equal(calls.length, 1);
+  } finally {
+    SeminarSeatRequest.updateMany = original;
+  }
+});

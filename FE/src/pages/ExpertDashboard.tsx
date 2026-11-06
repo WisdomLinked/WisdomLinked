@@ -31,16 +31,20 @@ import {
   approveSeminarSeatRequest,
   rejectSeminarSeatRequest,
   admitWaitlistStudents,
+  markWaitlistNoticeRead,
   getMyFollowers,
 } from '../api/api';
 import SeminarWaitlistPanel, {
   type WaitlistAdmitOutcome,
   type WaitlistAdmitRequest,
 } from '../components/dashboard/SeminarWaitlistPanel';
+import WaitlistJoinNotices from '../components/dashboard/WaitlistJoinNotices';
 import {
   admitResultMessage,
   groupWaitlistBySeminar,
   isLegacyHeldSeatRequest,
+  waitlistJoinNotices,
+  type WaitlistJoinNotice,
   type WaitlistSeats,
   type WaitlistSeminar,
 } from '../utils/seminarWaitlist';
@@ -485,6 +489,7 @@ export default function ExpertDashboard() {
   // the interest waitlist — surfaced as the "Seminar waitlist" card + modal.
   const [seatRequests, setSeatRequests] = useState<any[]>([]);
   const [waitlistSeats, setWaitlistSeats] = useState<Record<string, WaitlistSeats>>({});
+  const [waitlistFocusId, setWaitlistFocusId] = useState<string | null>(null);
 
   const loadSeatRequests = useCallback(async () => {
     const res: any = await getSeminarSeatRequests({ quietAccountRestriction: true });
@@ -1215,6 +1220,22 @@ export default function ExpertDashboard() {
     [seatRequests, waitlistSeats],
   );
 
+  const joinNotices = useMemo(
+    () => waitlistJoinNotices(seatRequests, waitlistSeats),
+    [seatRequests, waitlistSeats],
+  );
+
+  const dismissJoinNotice = useCallback((notice: WaitlistJoinNotice) => {
+    const seenUpTo = new Date(notice.latestJoinAt).getTime();
+    const readAt = new Date().toISOString();
+    setSeatRequests((rows) => rows.map((row: any) =>
+      String(row?.groupChat?._id || '') === notice.seminarId
+        && new Date(row?.createdAt).getTime() <= seenUpTo
+        ? { ...row, expertNoticeReadAt: readAt }
+        : row));
+    void markWaitlistNoticeRead(notice.seminarId, notice.latestJoinAt);
+  }, []);
+
   const handleAdmitWaitlist = useCallback(
     async (
       seminar: WaitlistSeminar,
@@ -1386,6 +1407,7 @@ export default function ExpertDashboard() {
               tooltip="Students waiting for a seat — admit them here, or they're offered one when it opens"
               onClick={() => {
                 void loadSeatRequests();
+                setWaitlistFocusId(null);
                 setExpertUpcomingModal({ kind: 'seminar', status: 'pending' });
               }}
             />
@@ -1745,6 +1767,19 @@ export default function ExpertDashboard() {
             onProfileClick={() => setActiveItem('profile')}
             onSettingsClick={() => setActiveItem('settings')}
           />
+          {activeItem !== 'chat' && joinNotices.length > 0 ? (
+            <div className="px-4 pt-3 sm:px-6">
+              <WaitlistJoinNotices
+                notices={joinNotices}
+                onOpenWaitlist={(notice) => {
+                  void loadSeatRequests();
+                  setWaitlistFocusId(notice.seminarId);
+                  setExpertUpcomingModal({ kind: 'seminar', status: 'pending' });
+                }}
+                onDismiss={dismissJoinNotice}
+              />
+            </div>
+          ) : null}
           {content}
           {activeItem !== 'chat' ? <Chatbot /> : null}
 
@@ -1762,6 +1797,7 @@ export default function ExpertDashboard() {
                 <SeminarWaitlistPanel
                   seminars={waitlistSeminars}
                   showEmptyMessage={expertModalSessions.length === 0}
+                  focusSeminarId={waitlistFocusId}
                   onAdmit={handleAdmitWaitlist}
                   onViewStudent={openPeerProfileById}
                 />
