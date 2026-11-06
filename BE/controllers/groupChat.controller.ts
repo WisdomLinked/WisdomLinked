@@ -1920,7 +1920,7 @@ const countSoftHeldSeats = async (
     if (opts?.excludeCustomerId) {
         filter.customer = { $ne: opts.excludeCustomerId };
     }
-    const seminar = await GroupChat.findById(groupChatId);
+    const seminar = await GroupChat.findById(String(groupChatId));
     if (!seminar?.seriesId) return SeminarSeatRequest.countDocuments(filter);
 
     const dates = await GroupChat.find({
@@ -2316,7 +2316,7 @@ const maybeOfferWaitlistAfterCapacityChange = async (groupChatId: any) => {
     try {
         await offerNextWaitlistedSeat(groupChatId);
         // A seat freed on one date of a series is usually free on its other dates too.
-        const seminar = await GroupChat.findById(groupChatId);
+        const seminar = await GroupChat.findById(String(groupChatId));
         if (!seminar?.seriesId) return;
         const siblings = await GroupChat.find({
             seriesId: seminar.seriesId,
