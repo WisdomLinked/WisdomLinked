@@ -558,14 +558,15 @@ const receiptFieldsFromPaymentIntent = async (paymentIntentId: string, stripeMod
     }
 };
 
-const enrichPaymentIntentReceipt = async ({ payment_intent, stripeMode, description, metadata, receiptEmail }) => {
+const enrichPaymentIntentReceipt = async ({ payment_intent, stripeMode, description, metadata }) => {
     try {
         if (!payment_intent) return;
         const stripe = require('stripe')(stripeMode === 'test' ? process.env.STRIPE_SECRET_KEY_TEST : process.env.STRIPE_SECRET_KEY_LIVE);
+        // Do not set receipt_email. In live mode Stripe emails that address even when
+        // Dashboard "Successful payments" is off. WisdomLinked sends its own confirmation.
         await stripe.paymentIntents.update(payment_intent, {
             description,
             metadata,
-            receipt_email: receiptEmail,
         });
     } catch (err) {
         console.error('[enrichPaymentIntentReceipt]', err.message);
@@ -662,10 +663,9 @@ const sendBookingReceiptAndConfirmation = async ({ payment_intent, charge, sessi
             stripeMode: charge.paidBy,
             description,
             metadata,
-            receiptEmail: studentEmail,
         });
-        // Our own branded receipt is the link we send; Stripe's stays as the official
-        // record underneath it. A row we cannot find just falls back to Stripe's.
+        // Our confirmation email is the one the student receives. Stripe's receipt page
+        // stays the payment record. A row we cannot find just falls back to Stripe's.
         let receiptPageUrl = '';
         try {
             const row = await PaymentHistory.findOne({ paymentIntent: String(payment_intent), paymentType: 'charge' })
