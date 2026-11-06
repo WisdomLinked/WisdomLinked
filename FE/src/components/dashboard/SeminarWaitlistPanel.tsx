@@ -231,7 +231,11 @@ export default function SeminarWaitlistPanel({
           key={seminar.seminarId}
           seminar={seminar}
           onAdmit={onAdmit}
-          onAdmitted={message => setNotices(prev => [message, ...prev.filter(item => item !== message)])}
+          onAdmitted={message => {
+            setNotices(prev => [message, ...prev.filter(item => item !== message)]);
+            // An earlier refusal no longer applies, and must not reappear when the card leaves.
+            setRefusals(({ [seminar.seminarId]: _settled, ...rest }) => rest);
+          }}
           onRefused={(refused, error) =>
             setRefusals(prev => ({ ...prev, [refused.seminarId]: `“${refused.title}”: ${error}` }))
           }

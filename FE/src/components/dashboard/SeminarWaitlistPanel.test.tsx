@@ -125,6 +125,26 @@ describe('SeminarWaitlistPanel', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('“Calculus”: This seminar is no longer open.');
   });
 
+  it('drops an earlier refusal once a retry succeeds', async () => {
+    const onAdmit = vi
+      .fn()
+      .mockResolvedValueOnce({ error: 'The waitlist has changed.' })
+      .mockResolvedValueOnce({ message: 'Done.' });
+    const { rerender } = render(
+      <SeminarWaitlistPanel seminars={[seminar()]} showEmptyMessage={false} onAdmit={onAdmit} />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'All' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+    await screen.findByRole('alert');
+    await user.click(screen.getByRole('button', { name: 'All' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+    await screen.findByRole('status');
+    rerender(<SeminarWaitlistPanel seminars={[]} showEmptyMessage={false} onAdmit={onAdmit} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Done.');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('mentions future dates only for a recurring seminar', async () => {
     const { user } = setup({ seminars: [seminar({ recurring: true })] });
     await user.click(screen.getByRole('button', { name: 'All' }));
