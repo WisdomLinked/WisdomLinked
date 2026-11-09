@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
-import { listPayrollMonth, recordPayrollCheque, updatePayrollCheque } from '../../../api/api';
+import { listPayrollCheques, listPayrollMonth, recordPayrollCheque, updatePayrollCheque } from '../../../api/api';
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 import { formatDollarsFromCents } from '../../../utils/bookingPrice';
+import type { PaidOutCheque } from '../../../utils/paidOutFilter';
+import PaidOutSection from './PaidOutSection';
 import {
   PAYOUT_NUMBER_LABELS,
   payoutNumberText,
@@ -117,6 +119,29 @@ export default function AdminPayroll() {
   const monthLoadInFlight = useRef(false);
   const selectedMonth = useRef({ year, month });
   selectedMonth.current = { year, month };
+  const [cheques, setCheques] = useState<PaidOutCheque[]>([]);
+  const [chequesLoading, setChequesLoading] = useState(true);
+  const [chequesError, setChequesError] = useState('');
+  const chequesSeq = useRef(0);
+
+  const loadCheques = async () => {
+    const seq = ++chequesSeq.current;
+    const data = await listPayrollCheques();
+    // Two saves in a row: only the newest list is shown.
+    if (seq !== chequesSeq.current) return;
+    setChequesLoading(false);
+    if (!data || !Array.isArray(data.cheques)) {
+      setChequesError('Could not load the paid-out list. Reload the page to try again.');
+      return;
+    }
+    setChequesError('');
+    setCheques(data.cheques);
+  };
+
+  useEffect(() => {
+    void loadCheques();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const load = async (nextYear = year, nextMonth = month) => {
     const seq = ++loadSeq.current;
@@ -218,7 +243,7 @@ export default function AdminPayroll() {
       return next;
     });
     setExpandedIds((current) => current.filter((id) => id !== row.expertId));
-    await refresh();
+    await Promise.all([refresh(), loadCheques()]);
   };
 
   return (
@@ -383,6 +408,8 @@ export default function AdminPayroll() {
             </tbody>
           </table>
         </div>
+
+        <PaidOutSection cheques={cheques} loading={chequesLoading} error={chequesError} />
       </div>
     </div>
   );
