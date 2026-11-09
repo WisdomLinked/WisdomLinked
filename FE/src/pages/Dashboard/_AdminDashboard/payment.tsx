@@ -3,7 +3,9 @@ import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../../utils/notify';
 import {
   doFilterPaymentHistories,
+  doGetAdminPaymentStats,
   doGetPaymentIntegrityReport,
+  type AdminPaymentStatsData,
   getStripeMode,
   processRefund,
   sendAdHocPaymentLink,
@@ -27,6 +29,7 @@ import {
   EMPTY_PAYMENT_STATUS_TOTALS,
   countActiveFilters,
   hasAnyParty,
+  historyDateBounds,
   historySearchFromState,
   parseHistorySearch,
   type HistoryFilters,
@@ -34,12 +37,22 @@ import {
   type PaymentStatusTotals,
 } from './payment/paymentHistoryUtils';
 import PaymentStatusTotalsBar from './payment/PaymentStatusTotalsBar';
+import SnapshotRangeControl from '../../../components/dashboard/SnapshotRangeControl';
+import SnapshotKpiStrip, { paymentKpis } from '../../../components/dashboard/SnapshotKpiStrip';
+import SnapshotMonthlyChart from '../../../components/dashboard/SnapshotMonthlyChart';
+import { type SnapshotCustomRange, type SnapshotRangeKey } from '../../../utils/adminSnapshotRange';
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
 const Payment = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const parsed = useMemo(() => parseHistorySearch(searchParams), [searchParams]);
   const filters = parsed.filters;
+  /** One set of dates for the list and the summary, worked out when the range is picked. */
+  const dateBounds = useMemo(
+    () => historyDateBounds(filters),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filters.range, filters.startDate, filters.endDate],
+  );
   const currentPage = parsed.page;
   const pageSize = parsed.pageSize;
 
@@ -127,8 +140,7 @@ const Payment = () => {
       stripeMode: filters.mode,
       paymentType: filters.type,
       status: filters.status,
-      dateFrom: filters.from,
-      dateTo: filters.to,
+      ...dateBounds,
       sortBy: 'createdAt',
     });
     if (response) {
@@ -145,7 +157,39 @@ const Payment = () => {
     }
     setHasLoaded(true);
     setLoading(false);
-  }, [currentPage, pageSize, filters.email, filters.mode, filters.status, filters.type, filters.from, filters.to]);
+  }, [currentPage, pageSize, filters.email, filters.mode, filters.status, filters.type, dateBounds]);
+
+  const [paymentStats, setPaymentStats] = useState<AdminPaymentStatsData | null>(null);
+  const [paymentStatsError, setPaymentStatsError] = useState(false);
+  const statsSeq = useRef(0);
+
+  /** Summary follows the date range and the Stripe mode only, like the Overview Payments view. */
+  const loadPaymentStats = useCallback(async () => {
+    const seq = ++statsSeq.current;
+    setPaymentStats(null);
+    setPaymentStatsError(false);
+    const res = await doGetAdminPaymentStats({ ...dateBounds, stripeMode: filters.mode || undefined });
+    if (seq !== statsSeq.current) return;
+    if (res && res.status === 'SUCCESS' && res.data) setPaymentStats(res.data);
+    else setPaymentStatsError(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.mode, dateBounds]);
+
+  useEffect(() => {
+    if (!historiesReady) return;
+    void loadPaymentStats();
+  }, [historiesReady, loadPaymentStats]);
+
+  const changeRange = useCallback(
+    (range: SnapshotRangeKey, custom?: SnapshotCustomRange) => {
+      patchFilters({
+        range,
+        startDate: range === 'custom' && custom ? custom.startDate : '',
+        endDate: range === 'custom' && custom ? custom.endDate : '',
+      });
+    },
+    [patchFilters],
+  );
 
   useEffect(() => {
     if (!historiesReady) return;
@@ -303,6 +347,7 @@ const Payment = () => {
       setIsRefundModalOpen(false);
       setSelectedRefundItem(null);
       void loadHistories();
+      void loadPaymentStats();
       void loadIntegrityReport();
     } else {
       notify.error(
@@ -419,6 +464,45 @@ const Payment = () => {
             >
               Send Ad-hoc Payment
             </button>
+          </div>
+          <div className="space-y-4 border-b border-wl-line px-4 py-4" data-testid="payment-summary">
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-wl-muted">
+                Collected, count, chart and the list below all use this date range.
+              </p>
+              <SnapshotRangeControl
+                id="payment-range"
+                value={filters.range}
+                customRange={
+                  filters.range === 'custom' ? { startDate: filters.startDate, endDate: filters.endDate } : null
+                }
+                onChange={changeRange}
+              />
+            </div>
+            {paymentStatsError ? (
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-4 text-sm text-rose-700">
+                Could not load the payment summary.
+                <button
+                  type="button"
+                  onClick={() => void loadPaymentStats()}
+                  className="rounded-full border border-wl-line bg-white px-3 py-1 text-sm font-medium text-wl-brand"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : !paymentStats ? (
+              <SnapshotKpiStrip kpis={[]} loadingLabel="Loading payment summary…" />
+            ) : (
+              <>
+                <SnapshotKpiStrip kpis={paymentKpis(paymentStats)} />
+                <SnapshotMonthlyChart
+                  points={paymentStats.monthly}
+                  useAmount
+                  title="Payments collected per month"
+                  emptyLabel="No payments in this range"
+                />
+              </>
+            )}
           </div>
           <PaymentFilterBar
             filters={filters}

@@ -142,7 +142,7 @@ describe('AuditModal date range', () => {
     expect(ranged.some((body: any) => body.numPerPage === 5)).toBe(true);
     expect(ranged.some((body: any) => body.numPerPage === 100)).toBe(true);
     for (const body of ranged) {
-      expect(body.dateFrom).toBe(new Date(new Date(2026, 10, 1).getTime() - 1).toISOString());
+      expect(body.dateFrom).toBe(new Date(2026, 10, 1).toISOString());
       expect(body.dateTo).toBe(new Date(2026, 11, 1).toISOString());
     }
     expect(screen.getByRole('tab', { name: /Payment history/ })).toHaveTextContent('0');
@@ -199,7 +199,7 @@ describe('AuditModal date range', () => {
     fireEvent.change(screen.getByLabelText('To date'), { target: { value: '2026-10-31' } });
     await waitFor(() => expect(mockedPayments).toHaveBeenCalled());
     for (const [body] of mockedPayments.mock.calls as any[]) {
-      expect(body.dateFrom).toBe(new Date(new Date(2026, 9, 1).getTime() - 1).toISOString());
+      expect(body.dateFrom).toBe(new Date(2026, 9, 1).toISOString());
       expect(body.dateTo).toBe(new Date(2026, 10, 1).toISOString());
     }
   });

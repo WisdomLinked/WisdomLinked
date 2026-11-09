@@ -14,6 +14,7 @@ vi.mock('../../../api/api', () => ({
   processRefund: vi.fn(),
   sendAdHocPaymentLink: vi.fn(),
   doGetPaymentIntegrityReport: vi.fn(),
+  doGetAdminPaymentStats: vi.fn(),
   listPayrollCheques: vi.fn(async () => ({ cheques: [] })),
 }));
 
@@ -23,8 +24,10 @@ vi.mock('../../../actions/appActions', () => ({
 
 import {
   doFilterPaymentHistories,
+  doGetAdminPaymentStats,
   doGetPaymentIntegrityReport,
   getStripeMode,
+  processRefund,
   listPayrollCheques,
   setSeminarApprovalDeadline,
   setStripeMode,
@@ -201,6 +204,17 @@ function renderPayment(initial = '/user/admindashboard/payment') {
 describe('Admin Payment Management', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(doGetAdminPaymentStats).mockResolvedValue({
+      status: 'SUCCESS',
+      data: {
+        paymentsCount: 4,
+        paymentsAmountByCurrency: { usd: 30000 },
+        monthly: [
+          { month: '2026-09', count: 3, amountsByCurrency: { usd: 30000 } },
+          { month: '2026-10', count: 1, amountsByCurrency: {} },
+        ],
+      },
+    });
     vi.mocked(getStripeMode).mockResolvedValue({
       stripeMode: 'test',
       seminarApprovalDeadlineHours: 24,
@@ -255,23 +269,126 @@ describe('Admin Payment Management', () => {
     expect(await screen.findByText(/Showing 1 of 1 histories/)).toBeInTheDocument();
   });
 
-  it('filters by stripe mode, payment type, and date range together', async () => {
+  it('filters by stripe mode, payment type, and a custom date range together, counting both end days', async () => {
     renderPayment();
     await screen.findByText(/Showing 5 of 6 histories/);
     chooseSelect('Stripe mode', 'Live');
     chooseSelect('Payment type', 'Charge');
-    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2024-01-01' } });
-    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2024-12-31' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+    fireEvent.change(screen.getByLabelText('Start'), { target: { value: '2024-01-01' } });
+    fireEvent.change(screen.getByLabelText('End'), { target: { value: '2024-12-31' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => {
       expect(doFilterPaymentHistories).toHaveBeenCalledWith(
         expect.objectContaining({
           stripeMode: 'live',
           paymentType: 'charge',
-          dateFrom: '2024-01-01',
-          dateTo: '2024-12-31',
+          dateFrom: new Date(2024, 0, 1).toISOString(),
+          dateTo: new Date(2025, 0, 1).toISOString(),
         }),
       );
     });
+  });
+
+  it('has no From/To boxes any more: the date range control replaces them', async () => {
+    renderPayment();
+    await screen.findByText(/Showing 5 of 6 histories/);
+    expect(screen.queryByLabelText('From')).toBeNull();
+    expect(screen.queryByLabelText('To')).toBeNull();
+    expect(screen.getByRole('radiogroup', { name: 'Date range' })).toBeInTheDocument();
+  });
+
+  it('starts on All time and asks for every date, for both the list and the summary', async () => {
+    renderPayment();
+    await screen.findByText(/Showing 5 of 6 histories/);
+    expect(screen.getByRole('radio', { name: 'All time' })).toHaveAttribute('aria-checked', 'true');
+    const listCall = vi.mocked(doFilterPaymentHistories).mock.calls.at(-1)?.[0] as any;
+    expect(listCall.dateFrom).toBeUndefined();
+    expect(listCall.dateTo).toBeUndefined();
+    const statsCall = vi.mocked(doGetAdminPaymentStats).mock.calls.at(-1)?.[0] as any;
+    expect(statsCall.dateFrom).toBeUndefined();
+    expect(statsCall.dateTo).toBeUndefined();
+  });
+
+  it('shows Collected, Count and Average from the summary inside Payment History', async () => {
+    renderPayment();
+    const summary = await screen.findByTestId('payment-summary');
+    await within(summary).findByText('Collected');
+    const kpi = (label: string) => within(summary).getByText(label).parentElement as HTMLElement;
+    expect(kpi('Collected').textContent).toContain('$300');
+    expect(kpi('Count').textContent).toContain('4');
+    expect(kpi('Count').textContent).toContain('Paid or partly refunded');
+    expect(kpi('Average').textContent).toContain('$75.00');
+    expect(within(summary).getByText('Payments collected per month')).toBeInTheDocument();
+    expect(within(summary).queryByText('No payments in this range')).toBeNull();
+    const section = summary.closest('section') as HTMLElement;
+    expect(within(section).getByText('Payment History')).toBeInTheDocument();
+    expect(summary.compareDocumentPosition(screen.getByTestId('payment-history-table'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('changing the range reloads the list and the summary with the same dates, from page 1', async () => {
+    const now = Date.now();
+    renderPayment('/user/admindashboard/payment?page=2');
+    await waitFor(() => expect(doGetAdminPaymentStats).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('radio', { name: '3 months' }));
+    await waitFor(() => {
+      const list = vi.mocked(doFilterPaymentHistories).mock.calls.at(-1)?.[0] as any;
+      const stats = vi.mocked(doGetAdminPaymentStats).mock.calls.at(-1)?.[0] as any;
+      expect(list.dateFrom).toBeTruthy();
+      expect(list.currentPage).toBe(0);
+      expect(stats.dateFrom).toBe(list.dateFrom);
+      expect(list.dateTo).toBeUndefined();
+      expect(stats.dateTo).toBeUndefined();
+      const months = (now - new Date(list.dateFrom).getTime()) / (1000 * 60 * 60 * 24 * 30.4);
+      expect(months).toBeGreaterThan(2.8);
+      expect(months).toBeLessThan(3.2);
+    });
+    expect(screen.getByRole('radio', { name: '3 months' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('summary follows Stripe mode but not email, status or type', async () => {
+    renderPayment();
+    await screen.findByText(/Showing 5 of 6 histories/);
+    chooseSelect('Stripe mode', 'Test');
+    await waitFor(() => expect((vi.mocked(doGetAdminPaymentStats).mock.calls.at(-1)?.[0] as any).stripeMode).toBe('test'));
+    const before = vi.mocked(doGetAdminPaymentStats).mock.calls.length;
+    chooseSelect('Status', 'Paid');
+    chooseSelect('Payment type', 'Charge');
+    await waitFor(() => expect(doFilterPaymentHistories).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed', paymentType: 'charge' })));
+    expect(vi.mocked(doGetAdminPaymentStats).mock.calls.length).toBe(before);
+  });
+
+  it('the range counts as a filter, and Clear filters puts it back to All time', async () => {
+    renderPayment('/user/admindashboard/payment?range=6m');
+    expect(await screen.findByText(/1 filter active/)).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Clear filters' })[0]);
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'All time' })).toHaveAttribute('aria-checked', 'true'));
+  });
+
+  it('says when the summary cannot be loaded and can try again; the list still works', async () => {
+    vi.mocked(doGetAdminPaymentStats).mockResolvedValueOnce(false);
+    renderPayment();
+    expect(await screen.findByText('Could not load the payment summary.')).toBeInTheDocument();
+    expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    const summary = screen.getByTestId('payment-summary');
+    expect((await within(summary).findByText('Collected')).parentElement?.textContent).toContain('$300');
+    expect(within(summary).queryByText('Could not load the payment summary.')).toBeNull();
+  });
+
+  it('refreshes the summary after a refund', async () => {
+    vi.mocked(processRefund).mockResolvedValue({ status: 'SUCCESS', message: 'Refund processed successfully.' });
+    renderPayment();
+    await screen.findByText(/Showing 5 of 6 histories/);
+    const before = vi.mocked(doGetAdminPaymentStats).mock.calls.length;
+    const row = within(screen.getByTestId('payment-history-table')).getAllByRole('row').find(r => (r.textContent || '').includes('Session A')) as HTMLElement;
+    fireEvent.click(within(row).getByRole('button', { name: 'Payment actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Refund' }));
+    fireEvent.change(await screen.findByPlaceholderText('Enter refund amount'), { target: { value: '10' } });
+    fireEvent.change(screen.getByPlaceholderText('Please provide a reason for this refund...'), { target: { value: 'test' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Process Refund' }));
+    await waitFor(() => expect(processRefund).toHaveBeenCalled());
+    await waitFor(() => expect(vi.mocked(doGetAdminPaymentStats).mock.calls.length).toBeGreaterThan(before));
   });
 
   it('debounces email and sends it to the history API', async () => {

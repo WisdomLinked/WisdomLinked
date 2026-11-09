@@ -1,3 +1,10 @@
+import {
+  parseSnapshotCustomRange,
+  parseSnapshotRangeKey,
+  snapshotRangeBounds,
+  type SnapshotRangeKey,
+} from '../../../../utils/adminSnapshotRange';
+
 export type PaymentHistoryRow = {
   _id?: string;
   amount?: number;
@@ -26,8 +33,11 @@ export type HistoryFilters = {
   mode: string;
   status: string;
   type: string;
-  from: string;
-  to: string;
+  /** Date range for the list, the totals and the summary. Payment History defaults to all time. */
+  range: SnapshotRangeKey;
+  /** YYYY-MM-DD, set only when range is custom. */
+  startDate: string;
+  endDate: string;
 };
 
 export const EMPTY_FILTERS: HistoryFilters = {
@@ -35,9 +45,35 @@ export const EMPTY_FILTERS: HistoryFilters = {
   mode: '',
   status: '',
   type: '',
-  from: '',
-  to: '',
+  range: 'all',
+  startDate: '',
+  endDate: '',
 };
+
+/** Only a valid custom range keeps its dates; anything unknown falls back to all time. */
+function parseHistoryRange(search: URLSearchParams): Pick<HistoryFilters, 'range' | 'startDate' | 'endDate'> {
+  const raw = search.get('range');
+  if (!raw) return { range: 'all', startDate: '', endDate: '' };
+  const range = parseSnapshotRangeKey(raw);
+  if (range !== raw) return { range: 'all', startDate: '', endDate: '' };
+  if (range !== 'custom') return { range, startDate: '', endDate: '' };
+  const custom = parseSnapshotCustomRange(search);
+  if (!custom) return { range: 'all', startDate: '', endDate: '' };
+  return { range, ...custom };
+}
+
+/**
+ * createdAt bounds for the list and the summary, in the admin's own time zone.
+ * Custom: [first day, day after the last day). 3 / 6 / 12 months: from the start onward with no end,
+ * so a payment or refund made after the range was picked still shows on the next refresh.
+ */
+export function historyDateBounds(filters: HistoryFilters, now: Date = new Date()): { dateFrom?: string; dateTo?: string } {
+  if (filters.range === 'custom') {
+    return snapshotRangeBounds('custom', now, { startDate: filters.startDate, endDate: filters.endDate });
+  }
+  const { dateFrom } = snapshotRangeBounds(filters.range, now, null);
+  return dateFrom ? { dateFrom } : {};
+}
 
 export const HISTORY_STATUS_OPTIONS = [
   { value: '', label: 'All' },
@@ -82,8 +118,7 @@ export function parseHistorySearch(search: URLSearchParams): {
       mode: search.get('mode') || '',
       status: search.get('status') || '',
       type: search.get('type') || '',
-      from: search.get('from') || '',
-      to: search.get('to') || '',
+      ...parseHistoryRange(search),
     },
     page,
     pageSize,
@@ -100,17 +135,19 @@ export function historySearchFromState(
   if (filters.mode) next.set('mode', filters.mode);
   if (filters.status) next.set('status', filters.status);
   if (filters.type) next.set('type', filters.type);
-  if (filters.from) next.set('from', filters.from);
-  if (filters.to) next.set('to', filters.to);
+  if (filters.range !== 'all') next.set('range', filters.range);
+  if (filters.range === 'custom') {
+    next.set('startDate', filters.startDate);
+    next.set('endDate', filters.endDate);
+  }
   if (page > 0) next.set('page', String(page + 1));
   if (pageSize !== 5) next.set('pageSize', String(pageSize));
   return next;
 }
 
 export function countActiveFilters(filters: HistoryFilters): number {
-  return (['email', 'mode', 'status', 'type', 'from', 'to'] as const).filter(
-    key => Boolean(filters[key]),
-  ).length;
+  const fields = (['email', 'mode', 'status', 'type'] as const).filter(key => Boolean(filters[key])).length;
+  return fields + (filters.range !== 'all' ? 1 : 0);
 }
 
 export function formatAmount(amount?: number, currency?: string): string {

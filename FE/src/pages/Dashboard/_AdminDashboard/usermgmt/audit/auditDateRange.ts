@@ -100,11 +100,11 @@ export function isChequeInRange(cheque: AuditCheque, range: AuditDateRange): boo
   return true;
 }
 
-/** `filterPaymentHistories` compares `createdAt > dateFrom` and `< dateTo`. */
+/** `filterPaymentHistories` keeps `createdAt >= dateFrom` and `< dateTo`. */
 export function paymentRangeParams(range: AuditDateRange): { dateFrom?: string; dateTo?: string } {
   const { start, endExclusive } = rangeBounds(range);
   const params: { dateFrom?: string; dateTo?: string } = {};
-  if (start !== null) params.dateFrom = new Date(start - 1).toISOString();
+  if (start !== null) params.dateFrom = new Date(start).toISOString();
   if (endExclusive !== null) params.dateTo = new Date(endExclusive).toISOString();
   return params;
 }

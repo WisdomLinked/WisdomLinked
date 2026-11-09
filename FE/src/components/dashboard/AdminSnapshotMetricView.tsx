@@ -44,7 +44,6 @@ import {
   formatHourlyPrice,
   formatMoney,
   formatMoneyByCurrency,
-  formatMonthKey,
   formatSnapshotDateParts,
   initialsFromName,
   isValidRecordDate,
@@ -57,7 +56,8 @@ import {
 import { formatProfileLocation } from '../../utils/profileLocation';
 import { isLoginLocked } from '../../pages/Dashboard/_AdminDashboard/usermgmt/userStatus';
 import { OVERLAY_Z_DIALOG } from '../../utils/overlayLayers';
-import MetricValue, { METRIC_VALUE_CLASS } from './MetricValue';
+import SnapshotKpiStrip, { paymentKpis, type KpiItem } from './SnapshotKpiStrip';
+import SnapshotMonthlyChart from './SnapshotMonthlyChart';
 
 const AUTH_BASE = process.env.REACT_APP_AUTH_URL || '/user/';
 const PAGE_SIZE = 50;
@@ -308,137 +308,11 @@ function AvatarMark({
   );
 }
 
-function pointValue(point: AdminSnapshotMonthlyPoint, useAmount?: boolean): number {
-  if (!useAmount) return point.count;
-  return Object.values(point.amountsByCurrency || {}).reduce(
-    (sum, n) => sum + (typeof n === 'number' ? n : 0),
-    0,
-  );
-}
-
-function pointDisplay(point: AdminSnapshotMonthlyPoint, useAmount?: boolean): string {
-  if (useAmount) return formatMoneyByCurrency(point.amountsByCurrency, { fractionDigits: 0 }) || '—';
-  return point.count.toLocaleString();
-}
-
-function chartMaxDisplay(points: AdminSnapshotMonthlyPoint[], max: number, useAmount?: boolean): string {
-  if (!useAmount) return max.toLocaleString();
-  const currencies = [
-    ...new Set(points.flatMap(p => Object.keys(p.amountsByCurrency || {}))),
-  ];
-  if (currencies.length === 1) {
-    return formatMoney(max, currencies[0], { fractionDigits: 0 }) || max.toLocaleString();
-  }
-  return max.toLocaleString();
-}
-
-const PLOT_H = 128;
-
-function plotBarHeight(value: number, max: number): number {
-  return value > 0 ? Math.max(4, Math.round((value / max) * PLOT_H)) : 2;
-}
-
 function ofTotalHint(count: number | undefined): string | undefined {
   if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) return undefined;
   return `of ${count.toLocaleString()} total`;
 }
 
-function MonthlyChart({
-  points,
-  useAmount,
-  title,
-  emptyLabel,
-}: {
-  points: AdminSnapshotMonthlyPoint[] | undefined;
-  useAmount?: boolean;
-  title: string;
-  emptyLabel: string;
-}) {
-  const rows = points || [];
-  const [hovered, setHovered] = useState<number | null>(null);
-  const values = rows.map(p => pointValue(p, useAmount));
-  const max = Math.max(0, ...values);
-  const latestWithData = values.reduce((last, v, i) => (v > 0 ? i : last), -1);
-  const active = hovered ?? (latestWithData >= 0 ? latestWithData : rows.length - 1);
-  const activePoint = rows[active];
-  const activeLabel = activePoint ? formatMonthKey(activePoint.month).long : '';
-  const activeValue = activePoint ? pointDisplay(activePoint, useAmount) : '';
-  const labelEveryOther = rows.length > 8;
-  const showBars = rows.length > 0 && max > 0;
-
-  return (
-    <figure className="min-w-0 overflow-hidden rounded-xl border border-line bg-surface p-4 sm:p-5">
-      <figcaption className="mb-3 flex min-w-0 flex-wrap items-baseline justify-between gap-2">
-        <span className="min-w-0 text-sm font-semibold text-ink">{title}</span>
-        {activePoint ? (
-          <span className="min-w-0 text-sm text-muted">
-            {activeLabel}:{' '}
-            <span className={METRIC_VALUE_CLASS}>{activeValue}</span>
-          </span>
-        ) : null}
-      </figcaption>
-      <div className="relative h-32 min-w-0 border-b border-line">
-        {showBars ? (
-          <>
-            <div className="pointer-events-none absolute right-1 top-1 text-xs font-numeric tabular-nums lining-nums tracking-tight text-muted">
-              {chartMaxDisplay(rows, max, useAmount)}
-            </div>
-            <div className="flex h-full min-w-0 items-end gap-1 sm:gap-2">
-              {rows.map((p, i) => {
-                const v = values[i] || 0;
-                const barHeight = plotBarHeight(v, max);
-                const isActive = i === active;
-                const month = formatMonthKey(p.month);
-                const display = pointDisplay(p, useAmount);
-                return (
-                  <button
-                    key={p.month}
-                    type="button"
-                    aria-label={`${month.long}: ${display}`}
-                    onMouseEnter={() => setHovered(i)}
-                    onMouseLeave={() => setHovered(null)}
-                    onFocus={() => setHovered(i)}
-                    onBlur={() => setHovered(null)}
-                    className={`flex h-full min-w-0 flex-1 items-end ${FOCUS}`}
-                  >
-                    <span
-                      style={{ height: barHeight }}
-                      className={`block w-full rounded-t ${
-                        v === 0 ? 'bg-line' : isActive ? 'bg-wl-brand' : 'bg-brand-soft'
-                      }`}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        ) : (
-          <p className="flex h-full items-center justify-center px-4 text-center text-sm text-muted">
-            {emptyLabel}
-          </p>
-        )}
-      </div>
-      {rows.length ? (
-        <div className="mt-1.5 flex min-w-0 gap-1 sm:gap-2">
-          {rows.map((p, i) => {
-            const month = formatMonthKey(p.month);
-            const showLabel = !labelEveryOther || i % 2 === 0 || i === rows.length - 1;
-            return (
-              <span
-                key={`lbl-${p.month}`}
-                className="min-w-0 flex-1 truncate text-center text-[11px] text-muted"
-              >
-                {showLabel ? month.short : ''}
-              </span>
-            );
-          })}
-        </div>
-      ) : null}
-    </figure>
-  );
-}
-
-type KpiItem = { label: string; value: string; hint?: string };
 
 function kpisFor(type: SnapshotListType, stats: AdminDashboardStatsData | null): KpiItem[] {
   const range = stats?.range;
@@ -489,22 +363,7 @@ function kpisFor(type: SnapshotListType, stats: AdminDashboardStatsData | null):
       { label: 'Upcoming', value: (stats.upcomingSeminars ?? 0).toLocaleString() },
     ];
   }
-  if (type === 'payments') {
-    const currencies = Object.keys(range.paymentsAmountByCurrency || {});
-    // AVERAGE = COLLECTED / COUNT; safe when COUNT is 0 or multi-currency.
-    const avg =
-      currencies.length === 1 && range.paymentsCount > 0
-        ? formatMoney(
-            range.paymentsAmountByCurrency[currencies[0]] / range.paymentsCount,
-            currencies[0],
-          )
-        : '—';
-    return [
-      { label: 'Collected', value: formatMoneyByCurrency(range.paymentsAmountByCurrency, { fractionDigits: 0 }) || '—' },
-      { label: 'Count', value: range.paymentsCount.toLocaleString() },
-      { label: 'Average', value: avg },
-    ];
-  }
+  if (type === 'payments') return paymentKpis(range);
   const rate =
     range.paymentsCount > 0
       ? `${Math.round((range.refundsCount / range.paymentsCount) * 1000) / 10}%`
@@ -1187,12 +1046,6 @@ export default function AdminSnapshotMetricView() {
   const paymentsHaveBooking = rows.some(
     row => row.kind === 'payment' && isValidRecordDate(row.bookingStart),
   );
-  const kpiCols =
-    kpis.length >= 4
-      ? 'grid-cols-2 sm:grid-cols-4'
-      : kpis.length === 3
-        ? 'grid-cols-2 sm:grid-cols-3'
-        : 'grid-cols-2';
 
   const goMetric = (type: SnapshotListType) => {
     navigate(`${AUTH_BASE}admindashboard/snapshot/${type}${snapshotRangeQuery(rangeKey, customRange)}`);
@@ -1242,23 +1095,9 @@ export default function AdminSnapshotMetricView() {
           ))}
         </div>
 
-        {kpis.length ? (
-          <div className={`min-w-0 grid ${kpiCols} gap-px overflow-hidden rounded-xl border border-line bg-line`}>
-            {kpis.map(kpi => (
-              <div key={kpi.label} className="min-w-0 bg-surface px-5 py-4">
-                <div className="text-xs uppercase tracking-wider text-muted">{kpi.label}</div>
-                <MetricValue size="md" className="break-words">
-                  {kpi.value}
-                </MetricValue>
-                {kpi.hint ? <div className="mt-1 text-xs text-muted">{kpi.hint}</div> : null}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="min-w-0 rounded-xl border border-line bg-surface p-4 text-sm text-muted">Loading…</div>
-        )}
+        <SnapshotKpiStrip kpis={kpis} />
 
-        <MonthlyChart
+        <SnapshotMonthlyChart
           points={chart.points}
           useAmount={chart.useAmount}
           title={meta.chart}

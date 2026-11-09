@@ -1,6 +1,6 @@
 import React from 'react';
 import SelectField from '../../../../components/ui/SelectField';
-import ClearableInput, { FILTER_CONTROL_CLASS } from '../../../../components/ui/ClearableInput';
+import ClearableInput from '../../../../components/ui/ClearableInput';
 import {
   HISTORY_STATUS_OPTIONS,
   MODE_OPTIONS,
@@ -28,8 +28,6 @@ export default function PaymentFilterBar({
   onClear: () => void;
   showStripeModeFilter?: boolean;
 }) {
-  const field = FILTER_CONTROL_CLASS;
-
   return (
     <div className="space-y-3 border-b border-wl-line bg-wl-pageAlt/40 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -100,32 +98,6 @@ export default function PaymentFilterBar({
             placeholder="All"
             size="filter"
           />
-        </div>
-        <div className="flex w-full basis-full flex-wrap gap-3 xl:w-auto xl:basis-auto xl:flex-nowrap">
-          <div className="min-w-[160px] flex-1 xl:flex-none">
-            <label htmlFor="payment-filter-from" className="mb-1 block text-[12px] text-wl-muted">
-              From
-            </label>
-            <input
-              id="payment-filter-from"
-              type="date"
-              value={filters.from}
-              onChange={e => onChange({ from: e.target.value })}
-              className={`${field} min-w-[160px]`}
-            />
-          </div>
-          <div className="min-w-[160px] flex-1 xl:flex-none">
-            <label htmlFor="payment-filter-to" className="mb-1 block text-[12px] text-wl-muted">
-              To
-            </label>
-            <input
-              id="payment-filter-to"
-              type="date"
-              value={filters.to}
-              onChange={e => onChange({ to: e.target.value })}
-              className={`${field} min-w-[160px]`}
-            />
-          </div>
         </div>
       </div>
     </div>
