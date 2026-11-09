@@ -229,7 +229,6 @@ describe('Admin Payment Management', () => {
       stuckPendingPayments: [],
     });
     vi.mocked(doFilterPaymentHistories).mockImplementation(async filter => applyFilter(filter));
-    vi.mocked(listPayrollCheques).mockResolvedValue({ cheques: [] });
     vi.mocked(setStripeMode).mockResolvedValue({ status: 'SUCCESS' });
     vi.mocked(setSeminarApprovalDeadline).mockResolvedValue({ status: 'SUCCESS' });
   });
@@ -571,63 +570,12 @@ describe('Admin Payment Management', () => {
     expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
   });
 
-  it('marks a reference number in the paid-out table and leaves cheque numbers as they were', async () => {
-    vi.mocked(listPayrollCheques).mockResolvedValue({
-      cheques: [
-        { _id: 'r1', expertId: 'e1', expertName: 'Ada', expertEmail: 'ada@x.com', year: 2026, month: 10, amountCents: 800, numberType: 'reference', chequeNumber: 'TXN-9', chequeDate: '2026-11-02T00:00:00.000Z' },
-        { _id: 'c1', expertId: 'e2', expertName: 'Ben', expertEmail: 'ben@x.com', year: 2026, month: 9, amountCents: 800, chequeNumber: '88421', chequeDate: '2026-10-02T00:00:00.000Z' },
-      ],
-    });
+  it('no longer shows or loads the paid-out list, which now lives on the Payroll page', async () => {
     renderPayment();
-    expect(await screen.findByText('Reference TXN-9')).toBeTruthy();
-    expect(screen.getByText('88421')).toBeTruthy();
-    expect(screen.getByText('Cheque / reference number')).toBeTruthy();
-  });
-
-  it('shows paid-out cheques above payment history and hides a non-matching expert', async () => {
-    vi.mocked(listPayrollCheques).mockResolvedValue({
-      cheques: [
-        {
-          _id: 'c1',
-          expertId: 'e1',
-          expertName: 'Ada Expert',
-          expertEmail: 'ada@example.com',
-          year: 2026,
-          month: 10,
-          amountCents: 4000,
-          chequeNumber: '88421',
-          chequeDate: '2026-11-02T00:00:00.000Z',
-        },
-        {
-          _id: 'c2',
-          expertId: 'e2',
-          expertName: 'Other Expert',
-          expertEmail: 'other@example.com',
-          year: 2026,
-          month: 9,
-          amountCents: 1500,
-          chequeNumber: '99002',
-          chequeDate: '2026-09-01T00:00:00.000Z',
-        },
-      ],
-    });
-    renderPayment();
-    expect(await screen.findByText('88421')).toBeInTheDocument();
-    expect(screen.getByText('Nov 2, 2026')).toBeInTheDocument();
-    expect(screen.getByText('October 2026')).toBeInTheDocument();
-    expect(screen.getByText('$40.00')).toBeInTheDocument();
-    expect(screen.getByText('Ada Expert')).toBeInTheDocument();
-    expect(screen.getByText('99002')).toBeInTheDocument();
-    expect(screen.getByTestId('paid-out-cheques').compareDocumentPosition(screen.getByTestId('payment-history-table'))).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
-
-    fireEvent.change(screen.getByLabelText('Filter by email'), { target: { value: 'ADA@EXAMPLE' } });
-    await waitFor(() => {
-      expect(screen.queryByText('99002')).not.toBeInTheDocument();
-    });
-    expect(screen.getByText('88421')).toBeInTheDocument();
-    expect(screen.getByText('Paid out')).toBeInTheDocument();
+    expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
+    expect(screen.queryByTestId('paid-out-cheques')).not.toBeInTheDocument();
+    expect(screen.queryByText('Paid out')).not.toBeInTheDocument();
+    expect(listPayrollCheques).not.toHaveBeenCalled();
   });
 
   it('reads filters from the URL on first load', async () => {
