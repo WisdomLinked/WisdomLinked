@@ -14,6 +14,8 @@ import {
     isValidRecordDate,
     monthKeyUTC,
     monthlyFromAgg,
+    allTimeMonthKeys,
+    monthsInHalfOpenRange,
     monthsInRange,
     oneToOneGroupFilter,
     parseDateParam,
@@ -30,9 +32,11 @@ import {
 } from "../utils/adminSnapshot";
 import {
     computeMonthlyBreakdown,
+    computePaymentSnapshot,
     computePeriodSnapshot,
     computeSnapshotExtras,
 } from "../utils/adminSnapshotStats";
+import { keptChargesPipeline } from "../utils/adminSnapshot";
 
 test("parseDateParam rejects empty and invalid values", () => {
     assert.equal(parseDateParam(null), null);
@@ -277,7 +281,7 @@ function stubModels(opts: {
     return { User: model, Event: model, GroupChat: model, PaymentHistory: model };
 }
 
-test("computePeriodSnapshot maps counts and nets refunds from COLLECTED", async () => {
+test("computePeriodSnapshot maps counts and takes COLLECTED from the kept-per-charge totals", async () => {
     const prevMode = process.env.PAYMENTS_VISIBLE_MODE;
     process.env.PAYMENTS_VISIBLE_MODE = "all";
     const from = new Date("2026-04-01T00:00:00.000Z");
@@ -329,7 +333,9 @@ test("computePeriodSnapshot maps counts and nets refunds from COLLECTED", async 
         assert.equal(period.seminarsHeld, 2);
         assert.equal(period.paymentsCount, 7);
         assert.equal(period.refundsCount, 1);
-        assert.deepEqual(period.paymentsAmountByCurrency, { usd: 10000, eur: 4000 });
+        // The stub stands in for keptChargesPipeline, which already nets each charge against its own refunds.
+        // A refund row in the range is not subtracted a second time.
+        assert.deepEqual(period.paymentsAmountByCurrency, { usd: 12000, eur: 4000 });
         assert.deepEqual(period.refundsAmountByCurrency, { usd: 2000 });
         assert.equal(period.sessionsCancelled, 3);
         assert.equal(period.seminarsAttendees, 11);
@@ -364,8 +370,9 @@ test("computeMonthlyBreakdown fills every month in the range", async () => {
     };
     try {
         const monthly = await computeMonthlyBreakdown(models, from, to, now);
-        assert.deepEqual(monthly.experts.map((p) => p.month), ["2026-04", "2026-05", "2026-06"]);
-        assert.deepEqual(monthly.experts.map((p) => p.count), [0, 3, 0]);
+        // The range ends at 00:00 on June 1 (exclusive), so June is not one of its months.
+        assert.deepEqual(monthly.experts.map((p) => p.month), ["2026-04", "2026-05"]);
+        assert.deepEqual(monthly.experts.map((p) => p.count), [0, 3]);
         assert.equal(monthly.payments[0].amountsByCurrency?.usd, 500);
     } finally {
         if (prevMode === undefined) delete process.env.PAYMENTS_VISIBLE_MODE;
@@ -385,12 +392,12 @@ test("computeMonthlyBreakdown counts older and today's 1:1s together, not semina
             countDocuments: async () => 0,
             aggregate: async (pipeline: any[]) => pipeline[0].$match.type === "individual"
                 ? [{ _id: "2026-04", count: 2 }, { _id: "2026-05", count: 1 }]
-                : [{ _id: "2026-06", count: 9 }],
+                : [{ _id: "2026-05", count: 9 }],
         },
     };
     const monthly = await computeMonthlyBreakdown(models, from, to, to);
-    assert.deepEqual(monthly.sessions.map((p) => p.count), [3, 1, 0]);
-    assert.deepEqual(monthly.seminars.map((p) => p.count), [0, 0, 9]);
+    assert.deepEqual(monthly.sessions.map((p) => p.count), [3, 1]);
+    assert.deepEqual(monthly.seminars.map((p) => p.count), [0, 9]);
 });
 
 test("computeSnapshotExtras counts review, blocked, and upcoming (both kinds of 1:1) from start >= now", async () => {
@@ -411,4 +418,119 @@ test("computeSnapshotExtras counts review, blocked, and upcoming (both kinds of 
     assert.equal(extras.customerBlockedCount, 3);
     assert.equal(extras.upcomingSessions, 6);
     assert.equal(extras.upcomingSeminars, 1);
+});
+
+test("keptChargesPipeline subtracts only refund rows of the same string payment intent, never below 0", () => {
+    const pipeline: any[] = keptChargesPipeline({ status: "completed" }, "$currency");
+    assert.deepEqual(pipeline[0], { $match: { status: "completed" } });
+    const lookup = pipeline[1].$lookup;
+    assert.equal(lookup.from, "paymenthistories");
+    assert.deepEqual(lookup.let, { pi: "$paymentIntent" });
+    const conditions = lookup.pipeline[0].$match.$expr.$and;
+    assert.deepEqual(conditions, [
+        { $eq: ["$paymentType", "refund"] },
+        { $eq: [{ $type: "$$pi" }, "string"] },
+        { $eq: ["$paymentIntent", "$$pi"] },
+    ]);
+    assert.equal(pipeline[2].$addFields.keptCents.$max[0], 0);
+    assert.deepEqual(pipeline[3], { $group: { _id: "$currency", count: { $sum: 1 }, amount: { $sum: "$keptCents" } } });
+});
+
+test("computePaymentSnapshot returns COUNT, COLLECTED and a filled monthly series for the range and Stripe mode", async () => {
+    const prevMode = process.env.PAYMENTS_VISIBLE_MODE;
+    process.env.PAYMENTS_VISIBLE_MODE = "all";
+    const from = new Date("2026-08-01T00:00:00.000Z");
+    const to = new Date("2026-10-15T00:00:00.000Z");
+    const seen: any[] = [];
+    const PaymentHistory = {
+        countDocuments: async (filter: any) => { seen.push(["count", filter]); return 4; },
+        aggregate: async (pipeline: any[]) => {
+            seen.push(["agg", pipeline[0].$match]);
+            const groupId = pipeline[pipeline.length - 1].$group._id;
+            return typeof groupId === "object" && groupId.month
+                ? [{ _id: { month: "2026-09", currency: "usd" }, count: 3, amount: 0 }, { _id: { month: "2026-10", currency: "usd" }, count: 1, amount: 2500 }]
+                : [{ _id: "usd", count: 4, amount: 2500 }];
+        },
+    };
+    try {
+        const out = await computePaymentSnapshot({ PaymentHistory }, from, to, "test");
+        assert.equal(out.paymentsCount, 4);
+        assert.deepEqual(out.paymentsAmountByCurrency, { usd: 2500 });
+        assert.deepEqual(out.monthly.map((p) => [p.month, p.count]), [["2026-08", 0], ["2026-09", 3], ["2026-10", 1]]);
+        assert.deepEqual(out.monthly[1].amountsByCurrency, {});
+        for (const [, filter] of seen) {
+            assert.equal(filter.stripeMode, "test");
+            assert.deepEqual(filter.status, { $in: ["completed", "partially_refunded"] });
+            assert.deepEqual(filter.createdAt, { $gte: from, $lt: to });
+        }
+        process.env.PAYMENTS_VISIBLE_MODE = "live";
+        seen.length = 0;
+        await computePaymentSnapshot({ PaymentHistory }, from, to, "test");
+        assert.ok(seen.every(([, f]) => f.stripeMode === "live"), "production only ever shows live payments");
+    } finally {
+        if (prevMode === undefined) delete process.env.PAYMENTS_VISIBLE_MODE;
+        else process.env.PAYMENTS_VISIBLE_MODE = prevMode;
+    }
+});
+
+test("monthsInHalfOpenRange leaves out a month the range only touches at its exclusive end", () => {
+    assert.deepEqual(monthsInHalfOpenRange(new Date("2026-07-01T05:00:00Z"), new Date("2026-08-01T05:00:00Z")), ["2026-07", "2026-08"]);
+    assert.deepEqual(monthsInHalfOpenRange(new Date("2026-07-01T00:00:00Z"), new Date("2026-08-01T00:00:00Z")), ["2026-07"]);
+    assert.deepEqual(monthsInHalfOpenRange(new Date("2026-08-09T00:00:00Z"), new Date("2026-11-09T12:00:00Z")), ["2026-08", "2026-09", "2026-10", "2026-11"]);
+    assert.deepEqual(monthsInHalfOpenRange(new Date("2026-07-15T00:00:00Z"), new Date("2026-07-15T00:00:00Z")), ["2026-07"]);
+});
+
+test("allTimeMonthKeys runs from the first month with data to now, keeping empty months", () => {
+    const now = new Date("2026-11-09T12:00:00Z");
+    assert.deepEqual(allTimeMonthKeys([{ month: "2026-10" }], now), ["2026-10", "2026-11"]);
+    assert.deepEqual(allTimeMonthKeys([{ month: "2026-10" }, { month: "2026-07" }], now), ["2026-07", "2026-08", "2026-09", "2026-10", "2026-11"]);
+    assert.deepEqual(allTimeMonthKeys([{ month: "2026-12" }, { month: "2026-11" }], now), ["2026-11", "2026-12"]);
+    assert.deepEqual(allTimeMonthKeys([{ month: "2025-12" }], new Date("2026-01-15T00:00:00Z")), ["2025-12", "2026-01"]);
+    assert.deepEqual(allTimeMonthKeys([], now), []);
+});
+
+test("all-time monthly series fill the gaps between months that have data", async () => {
+    const none = { countDocuments: async () => 0, aggregate: async () => [] };
+    const PaymentHistory = {
+        countDocuments: async () => 2,
+        aggregate: async (pipeline: any[]) => {
+            const groupId = pipeline[pipeline.length - 1].$group._id;
+            return typeof groupId === "object" && groupId.month
+                ? [{ _id: { month: "2026-07", currency: "usd" }, count: 1, amount: 1000 }, { _id: { month: "2026-10", currency: "usd" }, count: 1, amount: 2000 }]
+                : [{ _id: "usd", count: 2, amount: 3000 }];
+        },
+    };
+    const now = new Date("2026-11-09T12:00:00Z");
+    const pay = await computePaymentSnapshot({ PaymentHistory }, null, null, "", now);
+    assert.deepEqual(pay.monthly.map((p) => [p.month, p.count]), [["2026-07", 1], ["2026-08", 0], ["2026-09", 0], ["2026-10", 1], ["2026-11", 0]]);
+    const User = { countDocuments: async () => 0, aggregate: async () => [{ _id: "2026-08", count: 2 }, { _id: "2026-10", count: 1 }] };
+    const monthly = await computeMonthlyBreakdown({ User, Event: none, GroupChat: none, PaymentHistory }, null, null, now);
+    assert.deepEqual(monthly.payments, pay.monthly);
+    assert.deepEqual(monthly.experts.map((p) => [p.month, p.count]), [["2026-08", 2], ["2026-09", 0], ["2026-10", 1], ["2026-11", 0]]);
+    assert.deepEqual(monthly.sessions, [], "a chart with no data at all stays empty");
+});
+
+test("computePaymentSnapshot with a start and no end is open-ended, and its months run to now or a later data month", async () => {
+    const prevMode = process.env.PAYMENTS_VISIBLE_MODE;
+    process.env.PAYMENTS_VISIBLE_MODE = "all";
+    const filters: any[] = [];
+    const PaymentHistory = {
+        countDocuments: async (f: any) => { filters.push(f); return 1; },
+        aggregate: async (pipeline: any[]) => {
+            filters.push(pipeline[0].$match);
+            const groupId = pipeline[pipeline.length - 1].$group._id;
+            return typeof groupId === "object" && groupId.month
+                ? [{ _id: { month: "2026-12", currency: "usd" }, count: 1, amount: 100 }]
+                : [{ _id: "usd", count: 1, amount: 100 }];
+        },
+    };
+    try {
+        const from = new Date("2026-08-09T00:00:00Z");
+        const out = await computePaymentSnapshot({ PaymentHistory }, from, null, "", new Date("2026-11-09T00:00:00Z"));
+        for (const f of filters) assert.deepEqual(f.createdAt, { $gte: from });
+        assert.deepEqual(out.monthly.map((p) => p.month), ["2026-08", "2026-09", "2026-10", "2026-11", "2026-12"]);
+    } finally {
+        if (prevMode === undefined) delete process.env.PAYMENTS_VISIBLE_MODE;
+        else process.env.PAYMENTS_VISIBLE_MODE = prevMode;
+    }
 });

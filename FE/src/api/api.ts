@@ -1812,6 +1812,31 @@ export const reorderFeaturedExpert = async (
     }
 };
 
+export type AdminPaymentStatsData = {
+    paymentsCount: number;
+    paymentsAmountByCurrency: AmountByCurrency;
+    monthly: AdminSnapshotMonthlyPoint[];
+};
+
+/** Payments page summary: COLLECTED, COUNT and the monthly series for a date range and Stripe mode. */
+export const doGetAdminPaymentStats = async (params: {
+    dateFrom?: string;
+    dateTo?: string;
+    stripeMode?: string;
+}): Promise<{ status: string; data?: AdminPaymentStatsData } | false> => {
+    try {
+        const search = new URLSearchParams();
+        if (params.dateFrom) search.set("dateFrom", params.dateFrom);
+        if (params.dateTo) search.set("dateTo", params.dateTo);
+        if (params.stripeMode) search.set("stripeMode", params.stripeMode);
+        const q = search.toString();
+        const res = await api.get(`admin/paymentStats${q ? `?${q}` : ""}`);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const doGetAdminDashboardStats = async (params?: {
     dateFrom?: string;
     dateTo?: string;

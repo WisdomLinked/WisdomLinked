@@ -65,4 +65,7 @@ PaymentHistorySchema.index(
     }
 );
 
+// Finds the refund rows of a charge (COLLECTED nets each charge against its own refunds).
+PaymentHistorySchema.index({ paymentType: 1, paymentIntent: 1 });
+
 module.exports = mongoose.model("PaymentHistory", PaymentHistorySchema);

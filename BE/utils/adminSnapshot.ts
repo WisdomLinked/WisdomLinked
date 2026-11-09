@@ -217,6 +217,25 @@ export function monthsInRange(from: Date, to: Date): string[] {
     return keys;
 }
 
+/** Month keys for a range whose end is exclusive: a range ending at 00:00 on Aug 1 does not include August. */
+export function monthsInHalfOpenRange(from: Date, toExclusive: Date): string[] {
+    return monthsInRange(from, new Date(Math.max(from.getTime(), toExclusive.getTime() - 1)));
+}
+
+/**
+ * Month keys for an all-time chart: every month from the first month with data to the
+ * current month (or a later data month), so empty months show as gaps instead of being skipped.
+ */
+export function allTimeMonthKeys(points: { month: string }[], now: Date): string[] {
+    const months = points.map((p) => p.month).filter((m) => /^\d{4}-\d{2}$/.test(m)).sort();
+    if (!months.length) return [];
+    const first = months[0];
+    const last = [months[months.length - 1], monthKeyUTC(now)].sort()[1];
+    const [fy, fm] = first.split("-").map(Number);
+    const [ly, lm] = last.split("-").map(Number);
+    return monthsInRange(new Date(Date.UTC(fy, fm - 1, 1)), new Date(Date.UTC(ly, lm - 1, 1)));
+}
+
 export function fillMonthlySeries(
     keys: string[],
     rows: { month: string; count: number; amountsByCurrency?: AmountByCurrency }[],
@@ -303,22 +322,56 @@ export function amountByCurrencyFromAgg(
     return out;
 }
 
-/** COLLECTED = successful charges − refunds, per currency (zeros dropped). */
-export function netAmountsByCurrency(
-    charges: AmountByCurrency,
-    refunds: AmountByCurrency,
-): AmountByCurrency {
-    const out: AmountByCurrency = { ...charges };
-    for (const [currency, cents] of Object.entries(refunds || {})) {
-        const key = String(currency || "usd").toLowerCase();
-        const next = (out[key] || 0) - (Number(cents) || 0);
-        if (next === 0) delete out[key];
-        else out[key] = next;
-    }
-    for (const [currency, cents] of Object.entries(out)) {
-        if (!cents) delete out[currency];
-    }
-    return out;
+export const PAYMENT_HISTORY_COLLECTION = "paymenthistories";
+
+/**
+ * COLLECTED for charges matching `match`: each charge's amount minus the refunds
+ * recorded against that same charge (same payment intent), whenever they happened,
+ * never below 0 per charge. A refund with no charge in the result is not subtracted,
+ * so a refund for an older or unknown charge cannot pull the total negative.
+ * Groups by `groupId` with `count` (charges) and `amount` (kept cents).
+ */
+export function keptChargesPipeline(match: Record<string, unknown>, groupId: unknown) {
+    return [
+        { $match: match },
+        {
+            $lookup: {
+                from: PAYMENT_HISTORY_COLLECTION,
+                let: { pi: "$paymentIntent" },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: {
+                                $and: [
+                                    { $eq: ["$paymentType", "refund"] },
+                                    { $eq: [{ $type: "$$pi" }, "string"] },
+                                    { $eq: ["$paymentIntent", "$$pi"] },
+                                ],
+                            },
+                        },
+                    },
+                    { $group: { _id: null, refunded: { $sum: { $ifNull: ["$amount", 0] } } } },
+                ],
+                as: "refundTotals",
+            },
+        },
+        {
+            $addFields: {
+                keptCents: {
+                    $max: [
+                        0,
+                        {
+                            $subtract: [
+                                { $ifNull: ["$amount", 0] },
+                                { $ifNull: [{ $arrayElemAt: ["$refundTotals.refunded", 0] }, 0] },
+                            ],
+                        },
+                    ],
+                },
+            },
+        },
+        { $group: { _id: groupId, count: { $sum: 1 }, amount: { $sum: "$keptCents" } } },
+    ];
 }
 
 export function monthlyFromAgg(

@@ -141,9 +141,9 @@ describe('isChequeInRange', () => {
 });
 
 describe('paymentRangeParams', () => {
-  it('sends bounds that match the server\'s exclusive > and < comparisons', () => {
+  it('sends the first day\'s start and the day after the last day, matching the server\'s >= and <', () => {
     const params = paymentRangeParams({ from: '2026-10-01', to: '2026-10-31' });
-    expect(params.dateFrom).toBe(new Date(new Date(2026, 9, 1).getTime() - 1).toISOString());
+    expect(params.dateFrom).toBe(new Date(2026, 9, 1).toISOString());
     expect(params.dateTo).toBe(new Date(2026, 10, 1).toISOString());
   });
 

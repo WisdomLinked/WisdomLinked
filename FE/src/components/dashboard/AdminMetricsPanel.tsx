@@ -9,7 +9,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from 'lucide-react';
-import type { AdminDashboardStatsData, AdminSnapshotMonthlyPoint, AmountByCurrency } from '../../api/api';
+import type { AdminDashboardStatsData, AdminSnapshotMonthlyPoint } from '../../api/api';
 import type { SnapshotListType } from './adminSnapshotTypes';
 import SnapshotRangeControl from './SnapshotRangeControl';
 import {
@@ -19,6 +19,7 @@ import {
 } from '../../utils/adminSnapshotRange';
 import { formatMoneyByCurrency } from '../../utils/adminSnapshotDisplay';
 import MetricValue from './MetricValue';
+import { collectedValue } from './SnapshotKpiStrip';
 
 function MiniBars({
   points,
@@ -140,10 +141,6 @@ function MetricTile({
   );
 }
 
-function amountValue(amounts: AmountByCurrency | undefined, fallbackCount: number): string {
-  return formatMoneyByCurrency(amounts, { fractionDigits: 0 }) || fallbackCount.toLocaleString();
-}
-
 export default function AdminMetricsPanel({
   stats,
   rangeKey,
@@ -246,7 +243,7 @@ export default function AdminMetricsPanel({
             <MetricTile
               icon={Wallet}
               label="Payments"
-              value={amountValue(range?.paymentsAmountByCurrency, range?.paymentsCount ?? 0)}
+              value={collectedValue(range?.paymentsAmountByCurrency, range?.paymentsCount ?? 0)}
               note={`${(range?.paymentsCount ?? 0).toLocaleString()} records`}
               changePct={hideChange ? null : change?.paymentsCount}
               bars={monthly?.payments}

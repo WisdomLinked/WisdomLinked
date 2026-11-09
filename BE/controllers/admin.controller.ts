@@ -18,6 +18,7 @@ import {
 } from '../utils/adminSnapshot';
 import {
     computeMonthlyBreakdown,
+    computePaymentSnapshot,
     computePeriodSnapshot,
     computeSnapshotExtras,
 } from '../utils/adminSnapshotStats';
@@ -418,8 +419,8 @@ const filterPaymentHistories = async (req, res) => {
         }
 
         if (dateFrom) {
-            query.where({ createdAt: { $gt: new Date(dateFrom) } })
-            countQuery.where({ createdAt: { $gt: new Date(dateFrom) } })
+            query.where({ createdAt: { $gte: new Date(dateFrom) } })
+            countQuery.where({ createdAt: { $gte: new Date(dateFrom) } })
         }
 
         if (dateTo) {
@@ -1196,6 +1197,23 @@ const getDashboardStats = async (req: Request, res: Response) => {
                 monthly,
             },
         });
+    } catch (err: any) {
+        console.error(err);
+        return res.status(500).json({ status: "FAILED", message: safeErrorMessage(err) });
+    }
+};
+
+/** Payments page summary: COLLECTED, COUNT and the monthly series for one date range and Stripe mode. */
+const getPaymentStats = async (req: Request, res: Response) => {
+    try {
+        // Same bounds as the Payment History list: a missing end is open, not "now".
+        const data = await computePaymentSnapshot(
+            { PaymentHistory },
+            parseDateParam(req.query.dateFrom),
+            parseDateParam(req.query.dateTo),
+            req.query.stripeMode,
+        );
+        return res.status(200).json({ status: "SUCCESS", data });
     } catch (err: any) {
         console.error(err);
         return res.status(500).json({ status: "FAILED", message: safeErrorMessage(err) });
@@ -2411,6 +2429,7 @@ module.exports = {
     sendEmailToUser,
     sendWelcomeEmail,
     getDashboardStats,
+    getPaymentStats,
     getAdminPlatformEvents,
     getPendingUsers,
     getPendingLogins,
