@@ -1,14 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { format } from 'date-fns';
 import { notify } from '../../../utils/notify';
-import { formatDollarsFromCents } from '../../../utils/bookingPrice';
-import { payoutNumberText } from '../../../utils/payoutNumber';
 import {
   doFilterPaymentHistories,
   doGetPaymentIntegrityReport,
   getStripeMode,
-  listPayrollCheques,
   processRefund,
   sendAdHocPaymentLink,
   sendPaymentLinkToUser,
@@ -40,47 +36,6 @@ import {
 import PaymentStatusTotalsBar from './payment/PaymentStatusTotalsBar';
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
-const UTC_MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-
-type PayrollChequeRow = {
-  _id?: string;
-  expertId?: string;
-  expertName?: string;
-  expertEmail?: string;
-  year?: number;
-  month?: number;
-  amountCents?: number;
-  numberType?: string;
-  chequeNumber?: string;
-  chequeDate?: string | Date | null;
-};
-
-function payrollMonthLabel(year?: number, month?: number): string {
-  const name = month ? UTC_MONTHS[month - 1] : '';
-  if (!name || typeof year !== 'number' || !Number.isFinite(year)) return '—';
-  return `${name} ${year}`;
-}
-
-function formatChequeDate(value?: string | Date | null): string {
-  if (!value) return '—';
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return format(new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()), 'MMM d, yyyy');
-}
-
 const Payment = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const parsed = useMemo(() => parseHistorySearch(searchParams), [searchParams]);
@@ -103,7 +58,6 @@ const Payment = () => {
   const [integrityLoading, setIntegrityLoading] = useState(false);
   const [histories, setHistories] = useState<HistoryRow[]>([]);
   const [statusTotals, setStatusTotals] = useState<PaymentStatusTotals>(EMPTY_PAYMENT_STATUS_TOTALS);
-  const [payrollCheques, setPayrollCheques] = useState<PayrollChequeRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -197,29 +151,6 @@ const Payment = () => {
     if (!historiesReady) return;
     void loadHistories();
   }, [historiesReady, loadHistories]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await listPayrollCheques();
-        if (!cancelled) setPayrollCheques(Array.isArray(data?.cheques) ? data.cheques : []);
-      } catch {
-        if (!cancelled) setPayrollCheques([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const visibleCheques = useMemo(() => {
-    const needle = filters.email.trim().toLowerCase();
-    if (!needle) return payrollCheques;
-    return payrollCheques.filter(cheque =>
-      String(cheque.expertEmail || '').toLowerCase().includes(needle),
-    );
-  }, [filters.email, payrollCheques]);
 
   const loadIntegrityReport = useCallback(async () => {
     setIntegrityLoading(true);
@@ -499,39 +430,6 @@ const Payment = () => {
             onClear={clearFilters}
             showStripeModeFilter={showStripeModeFilter}
           />
-          {visibleCheques.length > 0 ? (
-            <div className="border-b border-wl-line px-4 py-4" data-testid="paid-out-cheques">
-              <h4 className="mb-3 text-sm font-semibold text-wl-ink">Paid out</h4>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] text-left text-sm">
-                  <thead className="text-xs uppercase text-wl-brand">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Expert</th>
-                      <th className="px-3 py-2 font-medium">Month</th>
-                      <th className="px-3 py-2 font-medium">Amount</th>
-                      <th className="px-3 py-2 font-medium">Cheque / reference number</th>
-                      <th className="px-3 py-2 font-medium">Payment date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleCheques.map(cheque => (
-                      <tr key={cheque._id || `${cheque.expertId}-${cheque.year}-${cheque.month}`} className="border-t border-wl-line">
-                        <td className="px-3 py-2 text-wl-ink">{cheque.expertName || cheque.expertEmail || 'Expert'}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-wl-ink">{payrollMonthLabel(cheque.year, cheque.month)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 tabular-nums text-wl-ink">
-                          {formatDollarsFromCents(Number(cheque.amountCents) || 0)}
-                        </td>
-                        <td className="max-w-[220px] break-all px-3 py-2 text-wl-ink">{payoutNumberText(cheque)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 tabular-nums text-wl-ink">
-                          {formatChequeDate(cheque.chequeDate)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
           <div className="space-y-4 p-4">
             {loading ? (
               <div className="space-y-2" data-testid="payment-history-skeleton">

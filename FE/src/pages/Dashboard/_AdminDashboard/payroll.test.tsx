@@ -6,9 +6,10 @@ vi.mock('../../../api/api', () => ({
   listPayrollMonth: vi.fn(),
   recordPayrollCheque: vi.fn(),
   updatePayrollCheque: vi.fn(),
+  listPayrollCheques: vi.fn(),
 }));
 
-import { listPayrollMonth, recordPayrollCheque, updatePayrollCheque } from '../../../api/api';
+import { listPayrollCheques, listPayrollMonth, recordPayrollCheque, updatePayrollCheque } from '../../../api/api';
 import AdminPayroll from './payroll';
 
 const unpaid = {
@@ -48,6 +49,7 @@ const paidBeforeTypes = {
 const mockedList = vi.mocked(listPayrollMonth);
 const mockedRecord = vi.mocked(recordPayrollCheque);
 const mockedUpdate = vi.mocked(updatePayrollCheque);
+const mockedCheques = vi.mocked(listPayrollCheques);
 
 const respondWith = (rows: unknown[]) => mockedList.mockResolvedValue({ year: 2026, month: 10, rows });
 const showButton = (name: string) => screen.findByRole('button', { name: `Show payment details for ${name}` });
@@ -58,6 +60,8 @@ describe('AdminPayroll', () => {
     mockedList.mockReset();
     mockedRecord.mockReset();
     mockedUpdate.mockReset();
+    mockedCheques.mockReset();
+    mockedCheques.mockResolvedValue({ cheques: [] });
     respondWith([unpaid, paid]);
     mockedRecord.mockResolvedValue({ emailSent: true, emailStatus: 'sent' });
     mockedUpdate.mockResolvedValue({ status: 'paid' });
@@ -387,5 +391,131 @@ describe('AdminPayroll', () => {
     render(<AdminPayroll />);
     await open('Ada Expert');
     expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull();
+  });
+});
+
+const payouts = [
+  { _id: 'p1', expertId: 'x1', expertName: 'Ada Lovelace', expertEmail: 'ada@lab.com', year: 2026, month: 10, amountCents: 4000, numberType: 'cheque', chequeNumber: '88421', chequeDate: '2026-11-02T00:00:00.000Z' },
+  { _id: 'p2', expertId: 'x2', expertName: 'Grace Hopper', expertEmail: 'grace@navy.mil', year: 2026, month: 9, amountCents: 1500, numberType: 'reference', chequeNumber: 'TXN-77', chequeDate: '2026-10-15T00:00:00.000Z' },
+  { _id: 'p3', expertId: 'x3', expertName: 'Old Record', expertEmail: 'old@x.com', year: 2026, month: 7, amountCents: 900, chequeNumber: '1200', chequeDate: '2026-08-01T00:00:00.000Z' },
+];
+
+const paidOut = () => within(screen.getByRole('region', { name: 'Paid out' }));
+const paidOutRows = () => paidOut().queryAllByRole('row').slice(1).map(row => within(row).getAllByRole('cell')[0].textContent);
+
+describe('AdminPayroll paid-out section', () => {
+  beforeEach(() => {
+    mockedList.mockReset();
+    mockedRecord.mockReset();
+    mockedCheques.mockReset();
+    respondWith([unpaid, paid]);
+    mockedRecord.mockResolvedValue({ emailSent: true, emailStatus: 'sent' });
+    mockedCheques.mockResolvedValue({ cheques: payouts });
+  });
+
+  it('shows every payout below the monthly table, with the moved columns', async () => {
+    render(<AdminPayroll />);
+    await showButton('Ada Expert');
+    expect(await paidOut().findByText('88421')).toBeTruthy();
+    const monthTable = screen.getAllByRole('table')[0];
+    expect(monthTable.compareDocumentPosition(screen.getByTestId('paid-out-cheques'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(paidOut().getByText('October 2026')).toBeTruthy();
+    expect(paidOut().getByText('$40.00')).toBeTruthy();
+    expect(paidOut().getByText('Nov 2, 2026')).toBeTruthy();
+    expect(paidOut().getByText('Reference TXN-77')).toBeTruthy();
+    expect(paidOut().getByText('1200')).toBeTruthy();
+    expect(paidOut().getByText('Showing 3 of 3 payouts')).toBeTruthy();
+  });
+
+  it('filters by expert name or email, ignoring case', async () => {
+    render(<AdminPayroll />);
+    await paidOut().findByText('88421');
+    fireEvent.change(screen.getByLabelText('Expert'), { target: { value: 'GRACE' } });
+    expect(paidOutRows()).toEqual(['Grace Hopper']);
+    fireEvent.change(screen.getByLabelText('Expert'), { target: { value: 'lab.com' } });
+    expect(paidOutRows()).toEqual(['Ada Lovelace']);
+    expect(paidOut().getByText(/Showing 1 of 3 payouts · 1 filter active/)).toBeTruthy();
+  });
+
+  it('filters by cheque or reference number', async () => {
+    render(<AdminPayroll />);
+    await paidOut().findByText('88421');
+    fireEvent.change(screen.getByLabelText('Cheque / reference number'), { target: { value: 'txn' } });
+    expect(paidOutRows()).toEqual(['Grace Hopper']);
+    fireEvent.change(screen.getByLabelText('Cheque / reference number'), { target: { value: '12' } });
+    expect(paidOutRows()).toEqual(['Old Record']);
+  });
+
+  it('filters by payment date, counting both From and To days', async () => {
+    render(<AdminPayroll />);
+    await paidOut().findByText('88421');
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-10-15' } });
+    expect(paidOutRows()).toEqual(['Ada Lovelace', 'Grace Hopper']);
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-10-15' } });
+    expect(paidOutRows()).toEqual(['Grace Hopper']);
+  });
+
+  it('says when nothing matches and clears every filter at once', async () => {
+    render(<AdminPayroll />);
+    await paidOut().findByText('88421');
+    fireEvent.change(screen.getByLabelText('Expert'), { target: { value: 'ada' } });
+    fireEvent.change(screen.getByLabelText('Cheque / reference number'), { target: { value: 'TXN' } });
+    expect(paidOut().getByText(/No payouts match these filters/)).toBeTruthy();
+    await userEvent.click(paidOut().getAllByRole('button', { name: 'Clear filters' })[0]);
+    expect(paidOutRows()).toHaveLength(3);
+    expect(screen.getByLabelText('Expert')).toHaveValue('');
+    expect(screen.getByLabelText('Cheque / reference number')).toHaveValue('');
+  });
+
+  it('leaves the monthly table alone when filtering', async () => {
+    render(<AdminPayroll />);
+    await paidOut().findByText('88421');
+    fireEvent.change(screen.getByLabelText('Expert'), { target: { value: 'nobody' } });
+    expect(screen.getByText('Ada Expert')).toBeTruthy();
+    expect(screen.getByText('Ben Paid')).toBeTruthy();
+    expect(mockedList).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads the paid-out list after a payout is saved, and not after a failed save', async () => {
+    render(<AdminPayroll />);
+    await open('Ada Expert');
+    await waitFor(() => expect(mockedCheques).toHaveBeenCalledTimes(1));
+
+    mockedRecord.mockResolvedValueOnce(false);
+    await userEvent.type(screen.getByRole('textbox', { name: 'Cheque number for Ada Expert' }), '1001');
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    await screen.findByText('Could not save the cheque.');
+    expect(mockedCheques).toHaveBeenCalledTimes(1);
+
+    mockedCheques.mockResolvedValue({
+      cheques: [...payouts, { _id: 'p4', expertId: 'e1', expertName: 'Ada Expert', expertEmail: 'ada@x.com', year: 2026, month: 10, amountCents: 4000, chequeNumber: '1001', chequeDate: '2026-11-05T00:00:00.000Z' }],
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    expect(await paidOut().findByText('1001')).toBeTruthy();
+    expect(mockedCheques).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the list on screen and says so when a reload fails', async () => {
+    render(<AdminPayroll />);
+    await open('Ada Expert');
+    await paidOut().findByText('88421');
+    mockedCheques.mockResolvedValue(false);
+    await userEvent.type(screen.getByRole('textbox', { name: 'Cheque number for Ada Expert' }), '1001');
+    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    expect(await paidOut().findByText(/Could not load the paid-out list/)).toBeTruthy();
+    expect(paidOut().getByText('88421')).toBeTruthy();
+  });
+
+  it('says when there are no payouts yet, and when the list cannot be loaded', async () => {
+    mockedCheques.mockResolvedValue({ cheques: [] });
+    const { unmount } = render(<AdminPayroll />);
+    expect(await paidOut().findByText('No payouts recorded yet.')).toBeTruthy();
+    unmount();
+
+    mockedCheques.mockResolvedValue(false);
+    render(<AdminPayroll />);
+    expect(await paidOut().findByText(/Could not load the paid-out list/)).toBeTruthy();
+    expect(paidOut().queryByText('No payouts recorded yet.')).toBeNull();
+    expect(await screen.findByText('Ada Expert')).toBeTruthy();
   });
 });
