@@ -3,7 +3,7 @@ const {
     requestClientMeta,
     previewTermsVersion,
     publishTermsVersion,
-    listVersionMetas,
+    listVersionOverview,
     getVersionDocument,
     safeDownloadName,
     listSigners,
@@ -59,6 +59,7 @@ const publishTerms = async (req: any, res: any) => {
             buffer: file.buffer,
             filename: file.originalname,
             publisherId: req.user.userId,
+            notes: req.body?.notes,
         });
         adminAudit.logAdminAction({
             actor: req.user,
@@ -77,8 +78,8 @@ const listTermsVersions = async (req: any, res: any) => {
     try {
         const audience = normalizeAudience(req.params.audience);
         if (!audience) return res.status(400).json({ error: "Unknown agreement audience." });
-        const versions = await listVersionMetas(audience);
-        return res.status(200).json({ audience, versions });
+        const overview = await listVersionOverview(audience);
+        return res.status(200).json(overview);
     } catch (err) {
         return sendTermsError(res, err);
     }

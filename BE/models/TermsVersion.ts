@@ -14,6 +14,8 @@ const termsVersionSchema = new mongoose.Schema(
         docx: { type: Buffer, required: true, select: false },
         docxSha256: { type: String, required: true },
         originalFilename: { type: String, required: true },
+        /** What the admin said changed in this version. Shown to admins only. */
+        notes: { type: String, default: "", maxlength: 500 },
         publisher: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
         publishedAt: { type: Date, required: true },
     },
