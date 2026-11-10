@@ -2,16 +2,37 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
 import FileDropzone from './FileDropzone';
+import TermsHtml from '../../../../components/terms/TermsHtml';
+import { previewTerms } from '../../../../api/termsApi';
 import {
+  API_AUDIENCE,
   FOCUS,
   currentVersion,
   formatCount,
   nextVersionNumber,
   type AgreementContract,
+  type AgreementKey,
 } from './termsModel';
+import { OVERLAY_Z_DIALOG } from '../../../../utils/overlayLayers';
 
 const NOTES_MAX = 500;
-import { OVERLAY_Z_DIALOG } from '../../../../utils/overlayLayers';
+
+const WHO_SIGNS: Record<AgreementKey, string> = {
+  shared: 'Every student and expert',
+  expert: 'Every expert',
+  student: 'Every student',
+};
+
+type Preview =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; html: string }
+  | { status: 'error'; error: string };
+
+function apiError(err: unknown, fallback: string) {
+  const message = (err as { response?: { data?: { error?: unknown } } })?.response?.data?.error;
+  return typeof message === 'string' && message ? message : fallback;
+}
 
 export default function PublishDrawer({
   open,
@@ -33,6 +54,8 @@ export default function PublishDrawer({
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [preview, setPreview] = useState<Preview>({ status: 'idle' });
+  const previewSeq = useRef(0);
   const next = nextVersionNumber(contract);
   const current = currentVersion(contract);
   const submittingRef = useRef(false);
@@ -62,6 +85,20 @@ export default function PublishDrawer({
   }, [open]);
 
   if (!open) return null;
+
+  const runPreview = async (chosen: File) => {
+    const seq = previewSeq.current + 1;
+    previewSeq.current = seq;
+    setPreview({ status: 'loading' });
+    try {
+      const result = await previewTerms(API_AUDIENCE[contract.key], chosen);
+      if (previewSeq.current !== seq) return;
+      setPreview({ status: 'ready', html: result.html || '' });
+    } catch (err) {
+      if (previewSeq.current !== seq) return;
+      setPreview({ status: 'error', error: apiError(err, 'Could not read that document. Try again.') });
+    }
+  };
 
   const summary = [
     { label: 'Agreement', value: `${contract.label} agreement` },
@@ -123,6 +160,7 @@ export default function PublishDrawer({
                 onSelect={nextFile => {
                   setError('');
                   setFile(nextFile);
+                  void runPreview(nextFile);
                 }}
                 onError={message => setError(message)}
                 onClear={() => {
@@ -130,6 +168,35 @@ export default function PublishDrawer({
                   setError('');
                 }}
               />
+              {file && preview.status !== 'idle' ? (
+                <div>
+                  <p className="mb-1 text-sm font-medium text-slate-700">Preview — exactly what signers will read</p>
+                  {preview.status === 'loading' ? (
+                    <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-500" role="status">
+                      Reading the document…
+                    </p>
+                  ) : preview.status === 'error' ? (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-3" role="alert">
+                      <p className="text-sm text-rose-800">{preview.error}</p>
+                      <button
+                        type="button"
+                        onClick={() => void runPreview(file)}
+                        className={`${FOCUS} mt-2 rounded text-sm font-medium text-rose-900 underline underline-offset-2`}
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"
+                      aria-label="Document preview"
+                      role="region"
+                    >
+                      <TermsHtml html={preview.html} />
+                    </div>
+                  )}
+                </div>
+              ) : null}
               <div>
                 <label htmlFor="terms-change-notes" className="mb-1 block text-sm font-medium text-slate-700">
                   What changed (optional)
@@ -158,8 +225,9 @@ export default function PublishDrawer({
               <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                 <p>
-                  Publishing cannot be undone. The new version becomes the one students and experts must
-                  accept. Older versions and their signatures stay on record.
+                  {WHO_SIGNS[contract.key]} will have to sign this {current ? 'new version' : 'agreement'} before
+                  they can keep using WisdomLinked. Publishing cannot be undone; older versions and their
+                  signatures stay on record.
                 </p>
               </div>
               {submitError ? (
@@ -175,7 +243,7 @@ export default function PublishDrawer({
           {step === 1 ? (
             <button
               type="button"
-              disabled={!file}
+              disabled={!file || preview.status !== 'ready'}
               onClick={() => setStep(2)}
               className={`${FOCUS} rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300`}
             >

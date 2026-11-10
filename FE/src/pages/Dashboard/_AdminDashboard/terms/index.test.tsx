@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   downloadTermsDocx: vi.fn(),
   searchTermsUsers: vi.fn(),
   getUserTermsAcceptances: vi.fn(),
+  previewTerms: vi.fn(),
 }));
 
 vi.mock('../../../../api/termsApi', () => api);
@@ -49,6 +50,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   setOverviews();
   api.getTermsOverview.mockImplementation(async (audience: string) => overviews[audience]);
+  api.previewTerms.mockResolvedValue({ html: '<p>Doc preview text</p>', contentHash: 'h' });
 });
 
 async function renderLoaded() {
@@ -175,6 +177,7 @@ describe('TermsAgreementPage — current version', () => {
 
     const file = new File(['terms'], 'student-v2.docx', { type: DOCX_MIME });
     fireEvent.change(screen.getByLabelText('Agreement document'), { target: { files: [file] } });
+    await screen.findByText('Doc preview text');
     await user.type(screen.getByLabelText('What changed (optional)'), 'No-show policy');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(screen.getByText('v1 → v2')).toBeInTheDocument();
@@ -195,6 +198,7 @@ describe('TermsAgreementPage — current version', () => {
     await user.click(screen.getByRole('button', { name: 'New version' }));
     const file = new File(['terms'], 'empty.docx', { type: DOCX_MIME });
     fireEvent.change(screen.getByLabelText('Agreement document'), { target: { files: [file] } });
+    await screen.findByText('Doc preview text');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await user.click(screen.getByRole('button', { name: 'Publish v3' }));
 
@@ -213,9 +217,103 @@ describe('TermsAgreementPage — current version', () => {
     fireEvent.change(screen.getByLabelText('Agreement document'), {
       target: { files: [new File(['t'], 'v1.docx', { type: DOCX_MIME })] },
     });
+    await screen.findByText('Doc preview text');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(screen.getByText('v1 (first version)')).toBeInTheDocument();
     expect(screen.getByText('Must accept')).toBeInTheDocument();
+  });
+});
+
+describe('TermsAgreementPage — publish drawer preview and warning', () => {
+  const docx = (name = 'v.docx') => new File(['terms'], name, { type: DOCX_MIME });
+  async function openDrawerOn(tabName: string) {
+    const user = userEvent.setup();
+    await renderLoaded();
+    await user.click(screen.getByRole('tab', { name: new RegExp(tabName) }));
+    await user.click(screen.getByRole('button', { name: 'New version' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Close publish panel' })).toHaveFocus());
+    return user;
+  }
+
+  it('shows the converted text before publishing, for the right audience, and only then allows Continue', async () => {
+    let finish: (v: unknown) => void = () => {};
+    api.previewTerms.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await openDrawerOn('Student');
+    const file = docx('student-v2.docx');
+    fireEvent.change(screen.getByLabelText('Agreement document'), { target: { files: [file] } });
+    expect(api.previewTerms).toHaveBeenCalledWith('customer', file);
+    expect(screen.getByText('Reading the document…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    finish({ html: '<h1>Student Agreement</h1><p>No-shows are not refunded.</p>', contentHash: 'h' });
+    const region = await screen.findByRole('region', { name: 'Document preview' });
+    expect(within(region).getByRole('heading', { name: 'Student Agreement' })).toBeInTheDocument();
+    expect(within(region).getByText('No-shows are not refunded.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it('refuses an unreadable document straight away, and Try again re-reads it', async () => {
+    api.previewTerms
+      .mockRejectedValueOnce({ response: { data: { error: 'Could not read that document. Upload a .docx file.' } } })
+      .mockResolvedValueOnce({ html: '<p>Readable now</p>', contentHash: 'h' });
+    const user = await openDrawerOn('Shared');
+    const file = docx('broken.docx');
+    fireEvent.change(screen.getByLabelText('Agreement document'), { target: { files: [file] } });
+    expect(await screen.findByText('Could not read that document. Upload a .docx file.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Readable now')).toBeInTheDocument();
+    expect(api.previewTerms).toHaveBeenNthCalledWith(2, 'shared', file);
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it('removing the file clears the preview, and a late preview of an older file never shows', async () => {
+    let finishOld: (v: unknown) => void = () => {};
+    api.previewTerms
+      .mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }))
+      .mockResolvedValueOnce({ html: '<p>Newest file text</p>', contentHash: 'h' });
+    const user = await openDrawerOn('Shared');
+    fireEvent.change(screen.getByLabelText('Agreement document'), { target: { files: [docx('old.docx')] } });
+    await user.click(screen.getByRole('button', { name: 'Remove file' }));
+    expect(screen.queryByText('Reading the document…')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Agreement document'), { target: { files: [docx('new.docx')] } });
+    expect(await screen.findByText('Newest file text')).toBeInTheDocument();
+    finishOld({ html: '<p>Old file text</p>', contentHash: 'h' });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(screen.queryByText('Old file text')).not.toBeInTheDocument();
+    expect(screen.getByText('Newest file text')).toBeInTheDocument();
+  });
+
+  it('a rejected file (not .docx) shows no preview and never reaches the server', async () => {
+    await openDrawerOn('Shared');
+    fireEvent.change(screen.getByLabelText('Agreement document'), {
+      target: { files: [new File(['x'], 'terms.pdf', { type: 'application/pdf' })] },
+    });
+    expect(screen.getByText('Only .docx files are accepted.')).toBeInTheDocument();
+    expect(api.previewTerms).not.toHaveBeenCalled();
+    expect(screen.queryByRole('region', { name: 'Document preview' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['Shared', 'Every student and expert will have to sign this new version'],
+    ['Expert', 'Every expert will have to sign this new version'],
+    ['Student', 'Every student will have to sign this new version'],
+  ])('%s: the warning names who must sign', async (tabName, text) => {
+    const user = await openDrawerOn(tabName);
+    fireEvent.change(screen.getByLabelText('Agreement document'), { target: { files: [docx()] } });
+    await screen.findByText('Doc preview text');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByText(new RegExp(text))).toBeInTheDocument();
+    expect(screen.queryByText(/students and experts must/)).not.toBeInTheDocument();
+  });
+
+  it('first version: the warning says "this agreement"', async () => {
+    overviews.expert = { audience: 'expert', audienceSize: 4, versions: [] };
+    const user = await openDrawerOn('Expert');
+    fireEvent.change(screen.getByLabelText('Agreement document'), { target: { files: [docx()] } });
+    await screen.findByText('Doc preview text');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByText(/Every expert will have to sign this agreement before/)).toBeInTheDocument();
   });
 });
 
