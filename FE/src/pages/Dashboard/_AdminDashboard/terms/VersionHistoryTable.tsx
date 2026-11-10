@@ -27,6 +27,8 @@ export default function VersionHistoryTable({
         </h2>
         <p className="mt-1 text-sm text-slate-500">
           Older versions stay on record with the signatures collected while they were current.
+          Accepted counts students and experts who still have to follow this agreement; blocked or
+          removed accounts are left out, so a version&apos;s Signers list can be longer.
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -63,7 +65,8 @@ export default function VersionHistoryTable({
                     </div>
                   </td>
                   <td className="px-5 py-4 sm:px-6">
-                    <p className="text-slate-700">{formatTermsDate(version.publishedAt)}</p>
+                    <p className="whitespace-nowrap text-slate-700">{formatTermsDate(version.publishedAt)}</p>
+                    <p className="whitespace-nowrap text-sm text-slate-500">by {version.publishedBy}</p>
                     {version.notes ? (
                       <p className="mt-1 text-sm text-slate-500 md:hidden">{version.notes}</p>
                     ) : null}
@@ -74,8 +77,8 @@ export default function VersionHistoryTable({
                   <td className="whitespace-nowrap px-5 py-4 text-right tabular-nums text-slate-900 sm:px-6">
                     {formatCount(version.accepted)}
                   </td>
-                  <td className="px-5 py-4 sm:px-6">
-                    <div className="flex flex-wrap justify-end gap-1">
+                  <td className="w-px whitespace-nowrap px-5 py-4 sm:px-6">
+                    <div className="flex flex-nowrap justify-end gap-1">
                       <IconAction label={`Preview v${version.number}`} onClick={() => actions.onPreview(version)}>
                         <Eye className="h-4 w-4" />
                       </IconAction>

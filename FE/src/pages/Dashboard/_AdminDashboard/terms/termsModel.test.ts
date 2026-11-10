@@ -15,6 +15,8 @@ import {
   roleLabel,
   standingLabel,
   standingTone,
+  signerExclusion,
+  signerExclusionLabel,
   type AgreementContract,
 } from './termsModel';
 import type { TermsUserHit } from '../../../../api/termsApi';
@@ -154,6 +156,21 @@ describe('termsModel', () => {
         expect(standingLabel('student', unknown)).toBe('Student: status unavailable');
       }
     });
+  });
+
+  it('decides whether a signature counts toward Accepted, matching the backend audience', () => {
+    expect(signerExclusion('shared', { role: 'customer', status: 'active' })).toBeNull();
+    expect(signerExclusion('shared', { role: 'expert', status: 'review' })).toBeNull();
+    expect(signerExclusion('student', { role: 'customer', status: '' })).toBeNull();
+    expect(signerExclusion('shared', { role: 'customer', status: 'blocked' })).toBe('blocked');
+    expect(signerExclusion('shared', { role: '', status: '' })).toBe('removed');
+    expect(signerExclusion('shared', {})).toBe('removed');
+    expect(signerExclusion('shared', { role: 'admin', status: 'active' })).toBe('role');
+    expect(signerExclusion('expert', { role: 'customer', status: 'active' })).toBe('role');
+    expect(signerExclusion('student', { role: 'expert', status: 'active' })).toBe('role');
+    expect(signerExclusionLabel('blocked')).toBe('Blocked · not counted');
+    expect(signerExclusionLabel('removed')).toBe('Account removed · not counted');
+    expect(signerExclusionLabel('role', 'customer')).toBe('Now student · not counted');
   });
 
   it('rounds acceptance and builds initials', () => {

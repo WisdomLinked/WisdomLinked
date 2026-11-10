@@ -111,6 +111,8 @@ describe('TermsAgreementPage — current version', () => {
         userId: 'u1',
         name: 'Ada Lovelace',
         email: 'ada@example.com',
+        role: 'customer',
+        status: 'active',
         audience: 'shared',
         version: 2,
         signedAt: '2026-10-24T10:00:00Z',
@@ -136,6 +138,8 @@ describe('TermsAgreementPage — current version', () => {
     expect(api.listVersionSigners).toHaveBeenCalledWith('shared', 2);
     const signers = await screen.findByRole('dialog', { name: 'Signers of Shared v2' });
     expect(await within(signers).findByText('Ada Lovelace')).toBeInTheDocument();
+    expect(within(signers).getByText('1 signature')).toBeInTheDocument();
+    expect(within(signers).queryByText(/not counted/)).not.toBeInTheDocument();
     expect(within(signers).getByText(/IP 203\.0\.113\.9/)).toBeInTheDocument();
     expect(within(signers).getByText('Typed name: Ada L')).toBeInTheDocument();
     await user.keyboard('{Escape}');
@@ -212,6 +216,65 @@ describe('TermsAgreementPage — current version', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(screen.getByText('v1 (first version)')).toBeInTheDocument();
     expect(screen.getByText('Must accept')).toBeInTheDocument();
+  });
+});
+
+describe('TermsAgreementPage — version history', () => {
+  const signer = (userId: string, role: string, status: string) => ({
+    userId, name: '', username: userId, email: `${userId}@example.com`, role, status,
+    audience: 'shared', version: 1, signedAt: '2026-10-24T10:00:00Z', ip: '203.0.113.1', userAgent: 'ua',
+    contentHash: 'hash-1', typedName: '', signaturePng: '',
+  });
+
+  it('shows who published each version, on one line with its date, and actions that never wrap', async () => {
+    overviews.shared.versions[0].publisherName = 'priya';
+    await renderLoaded();
+    const rows = within(screen.getByRole('heading', { name: 'Version history' }).closest('section') as HTMLElement)
+      .getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]).getByText('by khussal')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('by priya')).toBeInTheDocument();
+    expect(within(rows[0]).getByText(/^Oct 23, 2026/).className).toContain('whitespace-nowrap');
+    const actions = within(rows[0]).getByRole('button', { name: 'Signers of v2' }).parentElement as HTMLElement;
+    expect(actions.className).toContain('flex-nowrap');
+    expect(actions.className).not.toMatch(/\bflex-wrap\b/);
+    expect(screen.getByText(/blocked or\s+removed accounts are left out/)).toBeInTheDocument();
+  });
+
+  it('says how many signers are not counted in Accepted, and why', async () => {
+    const user = userEvent.setup();
+    api.listVersionSigners.mockResolvedValue([
+      signer('ann', 'customer', 'active'),
+      signer('bob', 'expert', 'review'),
+      signer('cat', 'customer', 'blocked'),
+      { ...signer('gone', '', ''), username: '', email: '' },
+      signer('root', 'admin', 'active'),
+    ]);
+    await renderLoaded();
+    await user.click(screen.getByRole('button', { name: 'Signers of v1' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Signers of Shared v1' });
+    expect(await within(dialog).findByText('5 signatures · 3 not counted in Accepted')).toBeInTheDocument();
+    const tagFor = (name: string) => within(within(dialog).getByText(name, { exact: true }).closest('li') as HTMLElement)
+      .queryByText(/not counted/)?.textContent;
+    expect(tagFor('ann')).toBeUndefined();
+    expect(tagFor('bob')).toBeUndefined();
+    expect(tagFor('cat')).toBe('Blocked · not counted');
+    expect(tagFor('gone')).toBe('Account removed · not counted');
+    expect(tagFor('root')).toBe('Now admin · not counted');
+  });
+
+  it('judges signers against the agreement being viewed: a student is not counted for the expert agreement', async () => {
+    const user = userEvent.setup();
+    api.listVersionSigners.mockResolvedValue([
+      { ...signer('stu', 'customer', 'active'), audience: 'expert' },
+      { ...signer('exp', 'expert', 'active'), audience: 'expert' },
+    ]);
+    await renderLoaded();
+    await user.click(screen.getByRole('tab', { name: /Expert/ }));
+    await user.click(await screen.findByRole('button', { name: 'Signers of v1' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Signers of Expert v1' });
+    expect(await within(dialog).findByText('2 signatures · 1 not counted in Accepted')).toBeInTheDocument();
+    expect(within(dialog).getByText('Now student · not counted')).toBeInTheDocument();
   });
 });
 

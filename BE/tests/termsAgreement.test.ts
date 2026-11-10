@@ -18,6 +18,7 @@ const {
     gateSignupAgreement,
     listVersionMetas,
     listVersionOverview,
+    listSigners,
     TERMS_NOTES_MAX,
 } = require('../services/termsAgreement');
 const { register } = require('../controllers/auth.controller');
@@ -993,6 +994,38 @@ test('admin search returns status and each user\'s highest signed version per co
         const none = await searchTermsUsers('nobody-matches-this');
         assert.deepEqual(none, []);
         assert.equal(filters.length, 1, 'no signature query when nobody matched');
+    } finally {
+        restoreMemory();
+    }
+});
+
+test('version signers carry each account\'s role and status, and a removed account comes back blank', async () => {
+    installMemory();
+    versions.push({ audience: 'shared', version: 1, contentHash: 'h1', originalFilename: 'v1.docx' });
+    const people = [
+        { _id: 'ok', email: 'ok@example.com', username: 'ok', role: 'customer', status: 'active' },
+        { _id: 'blk', email: 'blk@example.com', username: 'blk', role: 'expert', status: 'blocked' },
+    ];
+    let selected = '';
+    User.find = (filter: any) => {
+        const query = chain(() => people.filter((p) => filter._id.$in.map(String).includes(p._id)));
+        const select = query.select;
+        query.select = (fields: string) => { selected = fields; return select(); };
+        return query;
+    };
+    const signedAt = (minute: number) => new Date(`2026-10-09T10:${String(minute).padStart(2, '0')}:00Z`);
+    acceptances.push(
+        { user: 'ok', audience: 'shared', version: 1, contentHash: 'h1', signedAt: signedAt(1) },
+        { user: 'blk', audience: 'shared', version: 1, contentHash: 'h1', signedAt: signedAt(2) },
+        { user: 'gone', audience: 'shared', version: 1, contentHash: 'h1', signedAt: signedAt(3) },
+    );
+    try {
+        const result = await listSigners('shared', 1);
+        assert.deepEqual(
+            result.acceptances.map((row: any) => [row.userId, row.role, row.status]),
+            [['gone', '', ''], ['blk', 'expert', 'blocked'], ['ok', 'customer', 'active']],
+        );
+        assert.deepEqual(selected.split(/\s+/).sort(), ['email', 'name', 'role', 'status', 'username']);
     } finally {
         restoreMemory();
     }

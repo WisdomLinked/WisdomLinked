@@ -294,7 +294,7 @@ async function listSigners(audience: string, version: number) {
     rows.sort((a: any, b: any) => new Date(b.signedAt).getTime() - new Date(a.signedAt).getTime());
     const ids = rows.map((row: any) => row.user);
     const users = ids.length
-        ? await User.find({ _id: { $in: ids } }).select("email username name role").lean()
+        ? await User.find({ _id: { $in: ids } }).select("email username name role status").lean()
         : [];
     const byId = new Map(users.map((user: any) => [String(user._id), user]));
     return {
@@ -313,6 +313,7 @@ function acceptanceView(row: any, account: any, versionDoc: any) {
         username: account?.username || "",
         name: account?.name || "",
         role: account?.role || "",
+        status: account?.status || "",
         audience: row.audience,
         version: row.version,
         signedAt: row.signedAt,
@@ -380,7 +381,7 @@ async function latestSignaturesFor(userIds: any[]) {
 }
 
 async function listAcceptancesForUser(userId: string) {
-    const user = await User.findById(userId).select("email username name role").lean();
+    const user = await User.findById(userId).select("email username name role status").lean();
     if (!user) throw termsError(404, "Account not found.");
     const rows = await TermsAcceptance.find({ user: userId }).lean();
     rows.sort((a: any, b: any) => new Date(b.signedAt).getTime() - new Date(a.signedAt).getTime());

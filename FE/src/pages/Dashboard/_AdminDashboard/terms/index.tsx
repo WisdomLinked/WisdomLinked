@@ -22,6 +22,8 @@ import {
   contractFromOverview,
   formatTermsDate,
   initialContracts,
+  signerExclusion,
+  signerExclusionLabel,
   type AgreementContract,
   type AgreementKey,
   type AgreementVersion,
@@ -31,7 +33,13 @@ type Notice = { tone: 'success' | 'error'; text: string };
 
 type Dialog =
   | { kind: 'document'; title: string; loading: boolean; error: string; html: string }
-  | { kind: 'signers'; title: string; loading: boolean; error: string; rows: TermsAcceptanceRow[] };
+  | { kind: 'signers'; key: AgreementKey; title: string; loading: boolean; error: string; rows: TermsAcceptanceRow[] };
+
+function signersSubtitle(key: AgreementKey, rows: TermsAcceptanceRow[]) {
+  const total = `${rows.length} ${rows.length === 1 ? 'signature' : 'signatures'}`;
+  const left = rows.filter(row => signerExclusion(key, row)).length;
+  return left ? `${total} · ${left} not counted in Accepted` : total;
+}
 
 function apiError(err: unknown, fallback: string) {
   const message = (err as { response?: { data?: { error?: unknown } } })?.response?.data?.error;
@@ -112,7 +120,7 @@ export default function TermsAgreementPage() {
     },
     onSigners: (version: AgreementVersion) => {
       void openDialog(
-        { kind: 'signers', title: `Signers of ${item.label} v${version.number}`, loading: true, error: '', rows: [] },
+        { kind: 'signers', key: item.key, title: `Signers of ${item.label} v${version.number}`, loading: true, error: '', rows: [] },
         () => listVersionSigners(API_AUDIENCE[item.key], version.number),
         (current, rows) => (current.kind === 'signers' ? { ...current, loading: false, rows } : current),
         'Could not load who signed this version.',
@@ -217,7 +225,7 @@ export default function TermsAgreementPage() {
           title={dialog.title}
           subtitle={
             dialog.kind === 'signers' && !dialog.loading && !dialog.error
-              ? `${dialog.rows.length} ${dialog.rows.length === 1 ? 'signature' : 'signatures'}`
+              ? signersSubtitle(dialog.key, dialog.rows)
               : undefined
           }
           onClose={closeDialog}
@@ -238,9 +246,19 @@ export default function TermsAgreementPage() {
             <ul className="divide-y divide-slate-100">
               {dialog.rows.map(row => (
                 <li key={`${row.userId}-${row.signedAt}`} className="py-3">
-                  <p className="text-sm font-medium text-slate-900">
-                    {row.name || row.username || row.email || row.userId}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium text-slate-900">
+                      {row.name || row.username || row.email || row.userId}
+                    </p>
+                    {(() => {
+                      const reason = signerExclusion(dialog.key, row);
+                      return reason ? (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                          {signerExclusionLabel(reason, row.role)}
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
                   {row.email ? <p className="text-sm text-slate-500">{row.email}</p> : null}
                   <p className="mt-1 text-sm text-slate-500">
                     Signed {formatTermsDate(row.signedAt)}

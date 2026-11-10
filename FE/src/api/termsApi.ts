@@ -64,6 +64,8 @@ export type TermsAcceptanceRow = {
     username?: string;
     name?: string;
     role?: string;
+    /** Account status now; empty when the account no longer exists. */
+    status?: string;
     audience: TermsAudience;
     version: number;
     signedAt: string;

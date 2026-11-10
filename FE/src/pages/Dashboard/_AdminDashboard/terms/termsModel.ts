@@ -111,6 +111,34 @@ export function displayName(user: Pick<TermsUserHit, 'name' | 'username' | 'emai
   return user.name || user.username || user.email || 'Unnamed account';
 }
 
+const AUDIENCE_ROLES: Record<AgreementKey, string[]> = {
+  shared: ['expert', 'customer'],
+  expert: ['expert'],
+  student: ['customer'],
+};
+
+export type SignerExclusion = 'removed' | 'blocked' | 'role';
+
+/**
+ * Why a stored signature is left out of the Accepted count, or null when it counts.
+ * Mirrors the backend's audience: students and/or experts whose account is not blocked.
+ */
+export function signerExclusion(
+  key: AgreementKey,
+  signer: { role?: string; status?: string },
+): SignerExclusion | null {
+  if (!signer.role) return 'removed';
+  if (!AUDIENCE_ROLES[key].includes(signer.role)) return 'role';
+  if (signer.status === 'blocked') return 'blocked';
+  return null;
+}
+
+export function signerExclusionLabel(reason: SignerExclusion, role?: string): string {
+  if (reason === 'removed') return 'Account removed · not counted';
+  if (reason === 'blocked') return 'Blocked · not counted';
+  return `Now ${roleLabel(role || '')} · not counted`;
+}
+
 export type AgreementStanding =
   | { tone: 'current'; signedVersion: number; signedAt: string }
   | { tone: 'outdated'; signedVersion: number; currentVersion: number }
