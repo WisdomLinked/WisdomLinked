@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../../../../api/api', () => ({
@@ -26,9 +26,10 @@ vi.mock('../../../../components/ImpersonationBanner', () => ({ setImpersonationS
 vi.mock('./manageModal', () => ({ default: () => null }));
 vi.mock('./auditModal', () => ({ default: () => null }));
 
-import { doFilterUsers, doGetUserBlockReason, doUpdateProfileByAdmin } from '../../../../api/api';
+import { doFilterUsers, doGetUserBlockReason, doUpdateProfileByAdmin, profileImageFetch } from '../../../../api/api';
 import UserMgmt from './index';
 
+const mockedImage = vi.mocked(profileImageFetch);
 const mockedFilter = vi.mocked(doFilterUsers);
 const mockedUpdate = vi.mocked(doUpdateProfileByAdmin);
 const mockedReason = vi.mocked(doGetUserBlockReason);
@@ -156,6 +157,57 @@ describe('User Management: changing a status', () => {
     await pickStatus(actor, 'In review');
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(mockedUpdate).toHaveBeenCalledWith({ email: 'ann@x.com', status: 'review' });
+  });
+
+  describe('the profile photo survives a status change', () => {
+    const PHOTO = 'data:image/png;base64,AAAA';
+    const WITH_PHOTO = { ...ANN, image: 'IMG_2921.JPG' };
+
+    const photosShown = async () => {
+      await waitFor(() => expect(document.querySelectorAll('img').length).toBeGreaterThan(0));
+      return Array.from(document.querySelectorAll('img')).map((img) => img.getAttribute('src'));
+    };
+
+    beforeEach(() => {
+      mockedImage.mockReset();
+      mockedImage.mockResolvedValue(PHOTO as any);
+    });
+
+    it('after blocking', async () => {
+      mockedFilter.mockResolvedValue({ result: [WITH_PHOTO], totalCount: 1 } as any);
+      mockedUpdate.mockResolvedValue({ result: { ...WITH_PHOTO, status: 'blocked' } } as any);
+      const actor = userEvent.setup();
+      render(<UserMgmt />);
+      expect(new Set(await photosShown())).toEqual(new Set([PHOTO]));
+      await pickStatus(actor, 'Blocked');
+      await actor.type(screen.getByRole('textbox', { name: /reason for blocking/ }), 'Spam');
+      await actor.click(screen.getByRole('button', { name: 'Block user' }));
+      expect(screen.getAllByText('Blocked').length).toBeGreaterThan(0);
+      expect(new Set(await photosShown())).toEqual(new Set([PHOTO]));
+    });
+
+    it('after unblocking', async () => {
+      mockedFilter.mockResolvedValue({ result: [{ ...WITH_PHOTO, status: 'blocked' }], totalCount: 1 } as any);
+      mockedUpdate.mockResolvedValue({ result: WITH_PHOTO } as any);
+      const actor = userEvent.setup();
+      render(<UserMgmt />);
+      expect(new Set(await photosShown())).toEqual(new Set([PHOTO]));
+      await pickStatus(actor, 'Active');
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'View reason for blocking' })).toBeNull());
+      expect(new Set(await photosShown())).toEqual(new Set([PHOTO]));
+    });
+
+    it('after moving to review', async () => {
+      mockedFilter.mockResolvedValue({ result: [WITH_PHOTO], totalCount: 1 } as any);
+      mockedUpdate.mockResolvedValue({ result: { ...WITH_PHOTO, status: 'review' } } as any);
+      const actor = userEvent.setup();
+      render(<UserMgmt />);
+      expect(new Set(await photosShown())).toEqual(new Set([PHOTO]));
+      await pickStatus(actor, 'In review');
+      await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getAllByText(/In review/i).length).toBeGreaterThan(0));
+      expect(new Set(await photosShown())).toEqual(new Set([PHOTO]));
+    });
   });
 
   it('Active applies straight away, with no popup and no reason', async () => {
