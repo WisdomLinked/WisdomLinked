@@ -1,8 +1,7 @@
-import type { TermsAudience, TermsOverview } from '../../../../api/termsApi';
+import type { TermsAudience, TermsOverview, TermsUserHit } from '../../../../api/termsApi';
 
 export type AgreementKey = 'shared' | 'expert' | 'student';
-export type UserRole = 'expert' | 'student';
-export type SignatureTone = 'current' | 'outdated' | 'missing';
+export type SignatureTone = 'current' | 'outdated' | 'missing' | 'neutral';
 
 export type AgreementVersion = {
   number: number;
@@ -25,21 +24,6 @@ export type AgreementContract = {
   status: ContractStatus;
 };
 
-export type UserSignature = {
-  agreement: AgreementKey;
-  version: number;
-  signedAt: string;
-};
-
-export type TermsUser = {
-  id: string;
-  name: string;
-  username: string;
-  email: string;
-  role: UserRole;
-  signatures: UserSignature[];
-};
-
 export const AGREEMENT_KEYS: AgreementKey[] = ['shared', 'expert', 'student'];
 
 export const DOCX_MIME =
@@ -57,47 +41,6 @@ const CONTRACT_DEFINITIONS: Pick<AgreementContract, 'key' | 'label' | 'audienceL
   { key: 'shared', label: 'Shared', audienceLabel: 'Every student and expert' },
   { key: 'expert', label: 'Expert', audienceLabel: 'Experts only' },
   { key: 'student', label: 'Student', audienceLabel: 'Students only' },
-];
-
-export const MOCK_USERS: TermsUser[] = [
-  {
-    id: 'u1',
-    name: 'Maya Chen',
-    username: 'maya.chen',
-    email: 'maya.chen@wisdomlinked.test',
-    role: 'expert',
-    signatures: [
-      { agreement: 'shared', version: 4, signedAt: '2026-10-23T09:12:00-05:00' },
-      { agreement: 'expert', version: 3, signedAt: '2026-10-09T16:04:00-05:00' },
-    ],
-  },
-  {
-    id: 'u2',
-    name: 'Jordan Hale',
-    username: 'jordan.hale',
-    email: 'jordan.hale@wisdomlinked.test',
-    role: 'student',
-    signatures: [
-      { agreement: 'shared', version: 3, signedAt: '2026-07-14T11:27:00-05:00' },
-      { agreement: 'student', version: 2, signedAt: '2026-10-01T08:44:00-05:00' },
-    ],
-  },
-  {
-    id: 'u3',
-    name: 'Priya Shah',
-    username: 'priya.shah',
-    email: 'priya.shah@wisdomlinked.test',
-    role: 'expert',
-    signatures: [{ agreement: 'shared', version: 4, signedAt: '2026-10-24T13:08:00-05:00' }],
-  },
-  {
-    id: 'u4',
-    name: 'Sam Okonkwo',
-    username: 'sam.okonkwo',
-    email: 'sam.okonkwo@wisdomlinked.test',
-    role: 'student',
-    signatures: [],
-  },
 ];
 
 export function initialContracts(): AgreementContract[] {
@@ -140,35 +83,74 @@ export function nextVersionNumber(contract: AgreementContract): number {
   return (currentVersion(contract)?.number ?? 0) + 1;
 }
 
-export function requiredAgreements(role: UserRole): AgreementKey[] {
-  return role === 'expert' ? ['shared', 'expert'] : ['shared', 'student'];
+export const AGREEMENT_LABEL: Record<AgreementKey, string> = {
+  shared: 'Shared',
+  expert: 'Expert',
+  student: 'Student',
+};
+
+export function agreementKeyFromAudience(audience: TermsAudience | string): AgreementKey | null {
+  if (audience === 'shared' || audience === 'expert') return audience;
+  if (audience === 'customer') return 'student';
+  return null;
 }
 
-export function signatureFor(user: TermsUser, key: AgreementKey): UserSignature | undefined {
-  return user.signatures.find(item => item.agreement === key);
+/** Contracts an account must sign. Admins sign none. Mirrors the backend's listRequiredContracts. */
+export function requiredAgreements(role: string): AgreementKey[] {
+  if (role === 'expert') return ['shared', 'expert'];
+  if (role === 'customer') return ['shared', 'student'];
+  return [];
 }
 
-export function signatureTone(
-  user: TermsUser,
-  key: AgreementKey,
-  current: number,
-): SignatureTone {
-  const signed = signatureFor(user, key);
-  if (!signed) return 'missing';
-  if (signed.version === current) return 'current';
-  return 'outdated';
+export function roleLabel(role: string): string {
+  if (role === 'customer') return 'student';
+  return role || 'unknown';
 }
 
-export function searchUsers(query: string, users: TermsUser[] = MOCK_USERS): TermsUser[] {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return [];
-  return users.filter(user => {
-    return (
-      user.name.toLowerCase().includes(needle) ||
-      user.username.toLowerCase().includes(needle) ||
-      user.email.toLowerCase().includes(needle)
-    );
-  });
+export function displayName(user: Pick<TermsUserHit, 'name' | 'username' | 'email'>): string {
+  return user.name || user.username || user.email || 'Unnamed account';
+}
+
+export type AgreementStanding =
+  | { tone: 'current'; signedVersion: number; signedAt: string }
+  | { tone: 'outdated'; signedVersion: number; currentVersion: number }
+  | { tone: 'missing'; currentVersion: number }
+  | { tone: 'unpublished' }
+  | { tone: 'unknown' };
+
+/** Where one account stands on one contract, judged against the version that is current now. */
+export function agreementStanding(user: TermsUserHit, contract: AgreementContract): AgreementStanding {
+  if (contract.status !== 'ready') return { tone: 'unknown' };
+  const current = currentVersion(contract);
+  if (!current) return { tone: 'unpublished' };
+  const signed = (user.signatures || []).find(item => item.audience === API_AUDIENCE[contract.key]);
+  const signedVersion = Number(signed?.version);
+  if (!signed || !Number.isInteger(signedVersion) || signedVersion < 1) {
+    return { tone: 'missing', currentVersion: current.number };
+  }
+  if (signedVersion >= current.number) return { tone: 'current', signedVersion, signedAt: signed.signedAt };
+  return { tone: 'outdated', signedVersion, currentVersion: current.number };
+}
+
+export function standingLabel(key: AgreementKey, standing: AgreementStanding): string {
+  const label = AGREEMENT_LABEL[key];
+  switch (standing.tone) {
+    case 'current':
+      return `${label}: signed v${standing.signedVersion} on ${formatTermsDate(standing.signedAt)}`;
+    case 'outdated':
+      return `${label}: signed v${standing.signedVersion}, needs v${standing.currentVersion}`;
+    case 'missing':
+      return `${label}: not signed`;
+    case 'unpublished':
+      return `${label}: nothing published yet`;
+    default:
+      return `${label}: status unavailable`;
+  }
+}
+
+export function standingTone(standing: AgreementStanding): SignatureTone {
+  if (standing.tone === 'current' || standing.tone === 'outdated' || standing.tone === 'missing') return standing.tone;
+  return 'neutral';
 }
 
 export function formatTermsDate(value: string): string {

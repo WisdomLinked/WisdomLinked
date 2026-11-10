@@ -41,12 +41,21 @@ export type TermsAgreementPayload = {
     signaturePng?: string;
 };
 
+export type TermsUserSignature = {
+    audience: TermsAudience;
+    /** Highest version of this contract the user has signed. */
+    version: number;
+    signedAt: string;
+};
+
 export type TermsUserHit = {
     id: string;
     email: string;
     username: string;
     name: string;
     role: string;
+    status?: string;
+    signatures?: TermsUserSignature[];
 };
 
 export type TermsAcceptanceRow = {

@@ -12,6 +12,7 @@ const {
 
 const TERMS_AUDIENCES = ["shared", "expert", "customer"];
 const TERMS_NOTES_MAX = 500;
+const TERMS_SEARCH_LIMIT = 25;
 
 /** Roles whose accounts must sign each contract. Mirrors listRequiredContracts. */
 const AUDIENCE_ROLES: Record<string, string[]> = {
@@ -342,16 +343,40 @@ async function searchTermsUsers(rawQuery: unknown) {
     if (!term) throw termsError(400, "Enter a name, username, or email.");
     if (term.length > 100) throw termsError(400, "Search is too long.");
     const users = await User.find(termsUserSearchFilter(term))
-        .select("email username name role")
-        .limit(25)
+        .select("email username name role status")
+        .limit(TERMS_SEARCH_LIMIT)
         .lean();
+    const latest = await latestSignaturesFor(users.map((user: any) => user._id));
     return users.map((user: any) => ({
         id: String(user._id),
         email: user.email || "",
         username: user.username || "",
         name: user.name || "",
         role: user.role || "",
+        status: user.status || "",
+        signatures: latest.get(String(user._id)) || [],
     }));
+}
+
+/** Each user's highest signed version per contract, so search results can show where they stand. */
+async function latestSignaturesFor(userIds: any[]) {
+    const byUser = new Map<string, { audience: string; version: number; signedAt: any }[]>();
+    if (!userIds.length) return byUser;
+    const rows = await TermsAcceptance.find({ user: { $in: userIds } })
+        .select("user audience version signedAt")
+        .lean();
+    const best = new Map<string, any>();
+    for (const row of rows) {
+        const key = `${row.user}|${row.audience}`;
+        const seen = best.get(key);
+        if (!seen || Number(row.version) > Number(seen.version)) best.set(key, row);
+    }
+    for (const row of best.values()) {
+        const userId = String(row.user);
+        if (!byUser.has(userId)) byUser.set(userId, []);
+        byUser.get(userId)!.push({ audience: row.audience, version: Number(row.version), signedAt: row.signedAt });
+    }
+    return byUser;
 }
 
 async function listAcceptancesForUser(userId: string) {
@@ -572,6 +597,7 @@ async function getCurrentSharedPublic() {
 module.exports = {
     TERMS_AUDIENCES,
     TERMS_NOTES_MAX,
+    TERMS_SEARCH_LIMIT,
     SIGNUP_TERMS_REQUIRED,
     SIGNUP_TERMS_STALE,
     normalizeAudience,

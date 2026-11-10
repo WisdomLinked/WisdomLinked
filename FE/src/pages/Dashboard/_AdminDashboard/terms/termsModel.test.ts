@@ -9,10 +9,15 @@ import {
   initialsFromName,
   nextVersionNumber,
   requiredAgreements,
-  searchUsers,
-  signatureTone,
-  MOCK_USERS,
+  agreementKeyFromAudience,
+  agreementStanding,
+  displayName,
+  roleLabel,
+  standingLabel,
+  standingTone,
+  type AgreementContract,
 } from './termsModel';
+import type { TermsUserHit } from '../../../../api/termsApi';
 
 describe('termsModel', () => {
   it('maps the student tab to the backend customer audience', () => {
@@ -83,26 +88,72 @@ describe('termsModel', () => {
     expect(formatTermsDate('2026-10-23T00:41:00-05:00')).toMatch(/Oct 23, 2026/);
   });
 
-  it('returns the contracts a role must sign', () => {
+  it('returns the contracts an account must sign; admins sign none', () => {
     expect(requiredAgreements('expert')).toEqual(['shared', 'expert']);
-    expect(requiredAgreements('student')).toEqual(['shared', 'student']);
+    expect(requiredAgreements('customer')).toEqual(['shared', 'student']);
+    expect(requiredAgreements('admin')).toEqual([]);
+    expect(requiredAgreements('')).toEqual([]);
   });
 
-  it('classifies current, outdated and missing signatures', () => {
-    const maya = MOCK_USERS[0];
-    const jordan = MOCK_USERS[1];
-    const sam = MOCK_USERS[3];
-    expect(signatureTone(maya, 'shared', 4)).toBe('current');
-    expect(signatureTone(jordan, 'shared', 4)).toBe('outdated');
-    expect(signatureTone(sam, 'student', 2)).toBe('missing');
+  it('maps backend audiences and roles to the labels admins see', () => {
+    expect(agreementKeyFromAudience('customer')).toBe('student');
+    expect(agreementKeyFromAudience('shared')).toBe('shared');
+    expect(agreementKeyFromAudience('nonsense')).toBeNull();
+    expect(roleLabel('customer')).toBe('student');
+    expect(roleLabel('expert')).toBe('expert');
+    expect(displayName({ name: '', username: 'ada', email: 'a@x.com' })).toBe('ada');
+    expect(displayName({ name: '', username: '', email: 'a@x.com' })).toBe('a@x.com');
   });
 
-  it('searches users by name, username or email', () => {
-    expect(searchUsers('maya').map(user => user.id)).toEqual(['u1']);
-    expect(searchUsers('jordan.hale').map(user => user.id)).toEqual(['u2']);
-    expect(searchUsers('sam.okonkwo@wisdomlinked.test').map(user => user.id)).toEqual(['u4']);
-    expect(searchUsers('no-such-user')).toEqual([]);
-    expect(searchUsers('   ')).toEqual([]);
+  describe('agreementStanding', () => {
+    const contract = (versions: number[], status: AgreementContract['status'] = 'ready'): AgreementContract => ({
+      ...initialContracts()[2],
+      status,
+      versions: versions.map(number => ({
+        number,
+        publishedAt: '2026-10-01T10:00:00Z',
+        publishedBy: 'Admin',
+        accepted: 0,
+        notes: '',
+        originalFilename: '',
+      })),
+    });
+    const user = (signatures: TermsUserHit['signatures']): TermsUserHit => ({
+      id: 'u', email: 'u@x.com', username: 'u', name: '', role: 'customer', signatures,
+    });
+    const student = (version: number) => [{ audience: 'customer' as const, version, signedAt: '2026-10-09T10:00:00Z' }];
+
+    it('is current when the newest version is signed (matched on the customer audience)', () => {
+      const standing = agreementStanding(user(student(2)), contract([2, 1]));
+      expect(standing).toEqual({ tone: 'current', signedVersion: 2, signedAt: '2026-10-09T10:00:00Z' });
+      expect(standingTone(standing)).toBe('current');
+      expect(standingLabel('student', standing)).toMatch(/^Student: signed v2 on Oct 9, 2026/);
+    });
+
+    it('needs an update when only an older version is signed', () => {
+      const standing = agreementStanding(user(student(1)), contract([3, 2, 1]));
+      expect(standing).toEqual({ tone: 'outdated', signedVersion: 1, currentVersion: 3 });
+      expect(standingLabel('student', standing)).toBe('Student: signed v1, needs v3');
+    });
+
+    it('is not signed when there is no signature for that contract', () => {
+      const other = [{ audience: 'shared' as const, version: 2, signedAt: '2026-10-09T10:00:00Z' }];
+      expect(agreementStanding(user(other), contract([2]))).toEqual({ tone: 'missing', currentVersion: 2 });
+      expect(agreementStanding(user(undefined), contract([2])).tone).toBe('missing');
+      expect(standingLabel('student', { tone: 'missing', currentVersion: 2 })).toBe('Student: not signed');
+    });
+
+    it('says nothing is published, or that the status is unavailable, instead of guessing', () => {
+      const unpublished = agreementStanding(user(student(1)), contract([]));
+      expect(unpublished).toEqual({ tone: 'unpublished' });
+      expect(standingTone(unpublished)).toBe('neutral');
+      expect(standingLabel('student', unpublished)).toBe('Student: nothing published yet');
+      for (const status of ['loading', 'error'] as const) {
+        const unknown = agreementStanding(user(student(1)), contract([1], status));
+        expect(unknown).toEqual({ tone: 'unknown' });
+        expect(standingLabel('student', unknown)).toBe('Student: status unavailable');
+      }
+    });
   });
 
   it('rounds acceptance and builds initials', () => {

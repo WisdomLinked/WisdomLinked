@@ -12,6 +12,8 @@ const api = vi.hoisted(() => ({
   getAdminTermsVersion: vi.fn(),
   listVersionSigners: vi.fn(),
   downloadTermsDocx: vi.fn(),
+  searchTermsUsers: vi.fn(),
+  getUserTermsAcceptances: vi.fn(),
 }));
 
 vi.mock('../../../../api/termsApi', () => api);
@@ -213,19 +215,24 @@ describe('TermsAgreementPage — current version', () => {
   });
 });
 
-describe('TermsAgreementPage — signature lookup (still sample data)', () => {
-  it('looks up current, outdated and missing signatures', async () => {
+describe('TermsAgreementPage — signature lookup', () => {
+  it('judges search results against the versions the page loaded', async () => {
     const user = userEvent.setup();
+    api.searchTermsUsers.mockResolvedValue([
+      {
+        id: 'u1', email: 'ada@example.com', username: 'ada', name: '', role: 'expert', status: 'active',
+        signatures: [
+          { audience: 'shared', version: 1, signedAt: '2026-10-09T10:00:00Z' },
+          { audience: 'expert', version: 1, signedAt: '2026-10-09T10:00:00Z' },
+        ],
+      },
+    ]);
     await renderLoaded();
     expect(screen.getByText('Search for a user')).toBeInTheDocument();
-
-    await user.type(screen.getByLabelText('Username, email or name'), 'maya');
+    await user.type(screen.getByLabelText('Username, email or name'), 'ada');
     await user.click(screen.getByRole('button', { name: 'Search' }));
-    expect(screen.getByText('Maya Chen')).toBeInTheDocument();
-
-    await user.clear(screen.getByLabelText('Username, email or name'));
-    await user.type(screen.getByLabelText('Username, email or name'), 'nobody-here');
-    await user.click(screen.getByRole('button', { name: 'Search' }));
-    expect(screen.getByText('No users found')).toBeInTheDocument();
+    expect(api.searchTermsUsers).toHaveBeenCalledWith('ada');
+    expect(await screen.findByText('Shared: signed v1, needs v2')).toBeInTheDocument();
+    expect(screen.getByText(/^Expert: signed v1 on/)).toBeInTheDocument();
   });
 });

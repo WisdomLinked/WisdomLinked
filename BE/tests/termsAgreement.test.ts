@@ -949,3 +949,51 @@ test('docx download sends the original file bytes when the database returns a BS
         TermsVersion.findOne = originalFindOne;
     }
 });
+
+test('admin search returns status and each user\'s highest signed version per contract', async () => {
+    installMemory();
+    const people = [
+        { _id: 'u-exp', email: 'exp@example.com', username: 'expone', role: 'expert', status: 'active' },
+        { _id: 'u-stu', email: 'stu@example.com', username: 'stuone', role: 'customer', status: 'blocked' },
+        { _id: 'u-adm', email: 'adm@example.com', username: 'admin', role: 'admin' },
+    ];
+    User.find = (filter: any) => chain(() => people.filter((person) => (
+        filter.$or.some((clause: any) => {
+            const [field, rx] = Object.entries(clause)[0] as [string, RegExp];
+            return rx.test(String((person as any)[field] ?? ''));
+        })
+    )));
+    const at = (day: number) => new Date(`2026-10-${String(day).padStart(2, '0')}T10:00:00Z`);
+    acceptances.push(
+        { user: 'u-exp', audience: 'shared', version: 1, signedAt: at(1) },
+        { user: 'u-exp', audience: 'shared', version: 3, signedAt: at(9) },
+        { user: 'u-exp', audience: 'shared', version: 2, signedAt: at(5) },
+        { user: 'u-exp', audience: 'expert', version: 1, signedAt: at(2) },
+        { user: 'u-stu', audience: 'shared', version: 2, signedAt: at(6) },
+        { user: 'someone-else', audience: 'shared', version: 9, signedAt: at(20) },
+    );
+    const memoryFind = TermsAcceptance.find;
+    const filters: any[] = [];
+    TermsAcceptance.find = (filter: any) => { filters.push(filter); return memoryFind(filter); };
+    try {
+        const rows = await searchTermsUsers('example.com');
+        assert.deepEqual(filters.map((f) => f.user?.$in?.map(String).sort()), [['u-adm', 'u-exp', 'u-stu']]);
+        const byId = Object.fromEntries(rows.map((row: any) => [row.id, row]));
+        assert.equal(byId['u-exp'].status, 'active');
+        assert.deepEqual(
+            byId['u-exp'].signatures.map((s: any) => [s.audience, s.version]).sort(),
+            [['expert', 1], ['shared', 3]],
+        );
+        assert.equal(byId['u-exp'].signatures.find((s: any) => s.audience === 'shared').signedAt.toISOString(), at(9).toISOString());
+        assert.equal(byId['u-stu'].status, 'blocked');
+        assert.deepEqual(byId['u-stu'].signatures.map((s: any) => [s.audience, s.version]), [['shared', 2]]);
+        assert.equal(byId['u-adm'].status, '');
+        assert.deepEqual(byId['u-adm'].signatures, []);
+
+        const none = await searchTermsUsers('nobody-matches-this');
+        assert.deepEqual(none, []);
+        assert.equal(filters.length, 1, 'no signature query when nobody matched');
+    } finally {
+        restoreMemory();
+    }
+});

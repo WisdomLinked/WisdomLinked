@@ -4,7 +4,8 @@ import type { SignatureTone } from './termsModel';
 const TONE: Record<SignatureTone, { className: string; label: string }> = {
   current: { className: 'bg-emerald-50 text-emerald-800', label: 'Current' },
   outdated: { className: 'bg-amber-50 text-amber-800', label: 'Needs update' },
-  missing: { className: 'bg-red-50 text-red-800', label: 'Not signed' },
+  missing: { className: 'bg-rose-50 text-rose-800', label: 'Not signed' },
+  neutral: { className: 'bg-slate-100 text-slate-600', label: '—' },
 };
 
 export default function StatusBadge({
