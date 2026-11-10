@@ -26,7 +26,7 @@ import Pagination from "../../../../components/Pagination";
 import { SetLoadingStatus } from "../../../../actions/appActions";
 import { actionTypes } from "../../../../actions/types";
 import { setImpersonationSession } from "../../../../components/ImpersonationBanner";
-import { applyUserImage, userImageKey, usersAwaitingImages } from "../../../../utils/adminUserImages";
+import { applyUserImage, mergeSavedUser, userImageKey, usersAwaitingImages } from "../../../../utils/adminUserImages";
 
 const UserMgmt = () => {
     const [searchParams] = useSearchParams();
@@ -251,13 +251,7 @@ const UserMgmt = () => {
             set_totalCount((c) => Math.max(0, c - 1));
             return;
         }
-        const newArr = [...users];
-        const idx = newArr.findIndex(u => u.email === updated.email);
-        if (idx >= 0) {
-            // The saved profile comes back without the sign-in lock, which lives elsewhere; keep it.
-            newArr[idx] = { loginLock: newArr[idx].loginLock, ...updated };
-            set_users(newArr);
-        }
+        set_users((prev) => mergeSavedUser(prev, updated));
     };
 
     const handleUnlock = async (u: any) => {

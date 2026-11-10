@@ -16,6 +16,26 @@ export function usersAwaitingImages<T extends HydratableUser>(
   return users.map((user) => (user && user.image ? { ...user, image: null } : user));
 }
 
+// A saved profile comes back from the server with `image` as the stored filename, which the
+// avatar cannot display, and without the sign-in lock, which lives elsewhere. Keep both from
+// the row already on screen.
+export function mergeSavedUser<T extends HydratableUser & { loginLock?: any }>(
+  users: T[] | null | undefined,
+  saved: T | null | undefined,
+): T[] {
+  if (!Array.isArray(users)) return [];
+  if (!saved?.email) return users;
+
+  let matched = false;
+  const next = users.map((user) => {
+    if (user?.email !== saved.email) return user;
+    matched = true;
+    return { ...saved, loginLock: user.loginLock, image: user.image };
+  });
+
+  return matched ? next : users;
+}
+
 export function applyUserImage<T extends HydratableUser>(
   users: T[] | null | undefined,
   key: string,

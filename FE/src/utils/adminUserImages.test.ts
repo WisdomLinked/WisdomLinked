@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyUserImage, userImageKey, usersAwaitingImages } from './adminUserImages';
+import { applyUserImage, mergeSavedUser, userImageKey, usersAwaitingImages } from './adminUserImages';
 
 const row = (over: Record<string, any> = {}) => ({
   _id: 'u1',
@@ -87,5 +87,49 @@ describe('applyUserImage', () => {
     const before = JSON.stringify(users);
     applyUserImage(users, 'u1', 'data:image/png;base64,CCC');
     expect(JSON.stringify(users)).toBe(before);
+  });
+});
+
+describe('mergeSavedUser', () => {
+  const PHOTO = 'data:image/png;base64,AAAA';
+
+  it('keeps the photo already on screen instead of the saved filename', () => {
+    const [first] = mergeSavedUser([row({ image: PHOTO })], row({ status: 'blocked' }));
+    expect(first.image).toBe(PHOTO);
+    expect((first as any).status).toBe('blocked');
+  });
+
+  it('keeps initials when the photo has not loaded yet, rather than the raw filename', () => {
+    const [first] = mergeSavedUser([row({ image: null })], row({ status: 'review' }));
+    expect(first.image).toBeNull();
+  });
+
+  it('keeps the sign-in lock, which the saved profile does not carry', () => {
+    const lock = { lockedUntil: '2026-11-10' };
+    const [first] = mergeSavedUser([row({ loginLock: lock })], row({ status: 'active' }) as any);
+    expect((first as any).loginLock).toBe(lock);
+  });
+
+  it('takes every other field from the saved profile', () => {
+    const [first] = mergeSavedUser([row({ username: 'Old' })], row({ username: 'New', status: 'blocked' }));
+    expect(first.username).toBe('New');
+  });
+
+  it('leaves other rows untouched', () => {
+    const other = row({ _id: 'u2', email: 'bob@x.com', image: PHOTO });
+    const out = mergeSavedUser([row(), other], row({ status: 'blocked' }));
+    expect(out[1]).toBe(other);
+  });
+
+  it('returns the list unchanged when the saved user is not on screen', () => {
+    const list = [row()];
+    expect(mergeSavedUser(list, row({ email: 'zed@x.com' }))).toBe(list);
+  });
+
+  it('copes with a missing list or saved user', () => {
+    const list = [row()];
+    expect(mergeSavedUser(null, row())).toEqual([]);
+    expect(mergeSavedUser(list, null)).toBe(list);
+    expect(mergeSavedUser(list, { username: 'x' } as any)).toBe(list);
   });
 });
