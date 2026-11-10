@@ -28,8 +28,13 @@ export type PaymentHistoryRow = {
   event?: { start?: string; end?: string; title?: string; status?: string } | string | null;
 };
 
+export type BookingScope = 'all' | 'past' | 'upcoming';
+
 export type HistoryFilters = {
-  email: string;
+  /** Text to find in the description, or an exact user email (anything with an @). */
+  search: string;
+  /** All payments, or only those for sessions that already happened / are still to come. */
+  when: BookingScope;
   mode: string;
   status: string;
   type: string;
@@ -41,7 +46,8 @@ export type HistoryFilters = {
 };
 
 export const EMPTY_FILTERS: HistoryFilters = {
-  email: '',
+  search: '',
+  when: 'all',
   mode: '',
   status: '',
   type: '',
@@ -49,6 +55,28 @@ export const EMPTY_FILTERS: HistoryFilters = {
   startDate: '',
   endDate: '',
 };
+
+function parseBookingScope(raw: string | null): BookingScope {
+  return raw === 'past' || raw === 'upcoming' ? raw : 'all';
+}
+
+/**
+ * Search, booking tab and dates for the list request.
+ * Past bookings: sessions that started inside the range. Upcoming bookings: every session still
+ * to come, whatever the range (as on Overview). All: payments made inside the range.
+ */
+export function historyListParams(
+  filters: HistoryFilters,
+  dateBounds: { dateFrom?: string; dateTo?: string },
+): { email?: string; q?: string; bookingScope?: 'past' | 'upcoming'; dateFrom?: string; dateTo?: string } {
+  const text = filters.search.trim();
+  const byEmail = text.includes('@');
+  return {
+    ...(text ? (byEmail ? { email: text } : { q: text }) : {}),
+    ...(filters.when !== 'all' ? { bookingScope: filters.when } : {}),
+    ...(filters.when === 'upcoming' ? {} : dateBounds),
+  };
+}
 
 /** Only a valid custom range keeps its dates; anything unknown falls back to all time. */
 function parseHistoryRange(search: URLSearchParams): Pick<HistoryFilters, 'range' | 'startDate' | 'endDate'> {
@@ -114,7 +142,9 @@ export function parseHistorySearch(search: URLSearchParams): {
   const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) - 1 : 0;
   return {
     filters: {
-      email: (search.get('email') || '').trim(),
+      // `email` is the old name of the search box; links that still use it keep working.
+      search: (search.get('q') || search.get('email') || '').trim(),
+      when: parseBookingScope(search.get('when')),
       mode: search.get('mode') || '',
       status: search.get('status') || '',
       type: search.get('type') || '',
@@ -131,7 +161,8 @@ export function historySearchFromState(
   pageSize: number,
 ): URLSearchParams {
   const next = new URLSearchParams();
-  if (filters.email) next.set('email', filters.email);
+  if (filters.search) next.set('q', filters.search);
+  if (filters.when !== 'all') next.set('when', filters.when);
   if (filters.mode) next.set('mode', filters.mode);
   if (filters.status) next.set('status', filters.status);
   if (filters.type) next.set('type', filters.type);
@@ -146,8 +177,8 @@ export function historySearchFromState(
 }
 
 export function countActiveFilters(filters: HistoryFilters): number {
-  const fields = (['email', 'mode', 'status', 'type'] as const).filter(key => Boolean(filters[key])).length;
-  return fields + (filters.range !== 'all' ? 1 : 0);
+  const fields = (['search', 'mode', 'status', 'type'] as const).filter(key => Boolean(filters[key])).length;
+  return fields + (filters.range !== 'all' ? 1 : 0) + (filters.when !== 'all' ? 1 : 0);
 }
 
 export function formatAmount(amount?: number, currency?: string): string {
@@ -185,53 +216,6 @@ export function formatPaymentStatusTotals(totals?: PaymentStatusTotals | null): 
   return `Total: Paid ${formatStatusBucket(value.paid)}, Failed ${formatStatusBucket(value.failed)}, Refunded ${formatStatusBucket(value.refunded)}`;
 }
 
-export function shortPaymentIntent(id?: string | null): string {
-  const value = String(id || '').trim();
-  if (!value) return 'N/A';
-  if (value.length <= 12) return value;
-  return `${value.slice(0, 8)}...${value.slice(-4)}`;
-}
-
-export function eventTypeLabel(item: PaymentHistoryRow): string {
-  if (item?.event) return 'Event';
-  const type = item?.groupChat?.type;
-  if (type === 'seminar') return 'Seminar';
-  if (type === 'individual') return '1:1 Session';
-  if (type) return 'Chat';
-  return item?.groupChat ? 'Session' : '—';
-}
-
-export function partyEmails(item: PaymentHistoryRow): string[] {
-  const emails = [item.customer?.email, item.expert?.email].filter(Boolean) as string[];
-  return emails;
-}
-
-export function hasAnyParty(rows: PaymentHistoryRow[]): boolean {
-  return rows.some(row => partyEmails(row).length > 0);
-}
-
-export function formatDateOnly(value?: string): string {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}/${m}/${d}`;
-}
-
-export function formatDateTime(value?: string): string {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  const hh = String(date.getHours()).padStart(2, '0');
-  const mm = String(date.getMinutes()).padStart(2, '0');
-  return `${y}/${m}/${d} ${hh}:${mm}`;
-}
-
 export function typePill(item: PaymentHistoryRow): string {
   const mode = item.stripeMode || 'test';
   const kind = item.paymentType || 'charge';
@@ -259,4 +243,44 @@ export function canRefundPayment(item: PaymentHistoryRow): boolean {
 export function lastPageIndex(totalCount: number, pageSize: number): number {
   if (!totalCount || pageSize <= 0) return 0;
   return Math.max(0, Math.ceil(totalCount / pageSize) - 1);
+}
+
+/** Payments page names for each status (Overview keeps its own wording). */
+export const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  withheld: 'Withheld',
+  pending: 'In Flight',
+  completed: 'Paid',
+  released: 'Released',
+  failed: 'Failed',
+  refunded: 'Refunded',
+  partially_refunded: 'Partially refunded',
+};
+
+export const PAYMENT_STATUS_HINTS: Record<string, string> = {
+  withheld: 'Card authorized, not charged — waiting on the host or expert to decide.',
+  pending: 'A capture is in flight, or the row needs manual reconciliation.',
+  completed: 'Money captured and settled.',
+  released: 'Authorization released. The card was never charged.',
+  failed: 'The payment did not go through.',
+  refunded: 'Money was captured, then returned to the customer.',
+  partially_refunded: 'Part of this payment was returned; the remainder is still paid.',
+};
+
+const PAYMENT_STATUS_TONES: Record<string, 'green' | 'amber' | 'red' | 'grey'> = {
+  completed: 'green',
+  pending: 'amber',
+  withheld: 'amber',
+  failed: 'red',
+  refunded: 'grey',
+  partially_refunded: 'grey',
+  released: 'grey',
+};
+
+export function paymentStatusLabel(status?: string): string {
+  const key = status || 'completed';
+  return PAYMENT_STATUS_LABELS[key] || status || 'Paid';
+}
+
+export function paymentStatusTone(status?: string): 'green' | 'amber' | 'red' | 'grey' {
+  return PAYMENT_STATUS_TONES[status || 'completed'] || 'grey';
 }

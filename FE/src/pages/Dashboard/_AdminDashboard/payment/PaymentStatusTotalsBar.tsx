@@ -17,7 +17,7 @@ const GROUPS: Array<{
   amountClass: string;
 }> = [
   { key: 'paid', label: 'Paid', amountClass: 'text-emerald-800' },
-  { key: 'failed', label: 'Failed', amountClass: 'text-red-700' },
+  { key: 'failed', label: 'Failed', amountClass: 'text-rose-700' },
   { key: 'refunded', label: 'Refunded', amountClass: 'text-slate-600' },
 ];
 

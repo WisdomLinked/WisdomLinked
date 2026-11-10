@@ -15,32 +15,29 @@ import {
   setStripeMode,
 } from '../../../api/api';
 import { SetLoadingStatus } from '../../../actions/appActions';
-import Pagination from '../../../components/Pagination';
 import RetryPaymentModal from '../../../components/RetryPaymentModal';
 import RefundPaymentModal from '../../../components/RefundPaymentModal';
 import AdHocPaymentModal from '../../../components/AdHocPaymentModal';
-import PaymentDetailsDrawer from './payment/PaymentDetailsDrawer';
-import PaymentFilterBar from './payment/PaymentFilterBar';
-import { PaymentHistoryCard, PaymentHistoryRow } from './payment/PaymentHistoryRow';
+import PaymentHistoryList from './payment/PaymentHistoryList';
 import PaymentIntegrityCard from './payment/PaymentIntegrityCard';
 import PaymentSettingRow from './payment/PaymentSettingRow';
 import {
   EMPTY_FILTERS,
   EMPTY_PAYMENT_STATUS_TOTALS,
   countActiveFilters,
-  hasAnyParty,
   historyDateBounds,
+  historyListParams,
   historySearchFromState,
+  lastPageIndex,
   parseHistorySearch,
   type HistoryFilters,
   type PaymentHistoryRow as HistoryRow,
   type PaymentStatusTotals,
 } from './payment/paymentHistoryUtils';
-import PaymentStatusTotalsBar from './payment/PaymentStatusTotalsBar';
 import SnapshotRangeControl from '../../../components/dashboard/SnapshotRangeControl';
 import SnapshotKpiStrip, { paymentKpis } from '../../../components/dashboard/SnapshotKpiStrip';
 import SnapshotMonthlyChart from '../../../components/dashboard/SnapshotMonthlyChart';
-import { type SnapshotCustomRange, type SnapshotRangeKey } from '../../../utils/adminSnapshotRange';
+import { snapshotRangePhrase, type SnapshotCustomRange, type SnapshotRangeKey } from '../../../utils/adminSnapshotRange';
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
 
 const Payment = () => {
@@ -56,7 +53,7 @@ const Payment = () => {
   const currentPage = parsed.page;
   const pageSize = parsed.pageSize;
 
-  const [emailDraft, setEmailDraft] = useState(filters.email);
+  const [searchDraft, setSearchDraft] = useState(filters.search);
   const [stripeMode, setPlatformStripeMode] = useState('test');
   /** Server gate: live = prod (hide mode filter); all = staging (All/Live/Test). null until known. */
   const [paymentsVisibleMode, setPaymentsVisibleMode] = useState<'live' | 'all' | null>(null);
@@ -74,18 +71,16 @@ const Payment = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const listSeq = useRef(0);
   const [isRetryModalOpen, setIsRetryModalOpen] = useState(false);
   const [selectedPaymentItem, setSelectedPaymentItem] = useState<any>(null);
   const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
   const [selectedRefundItem, setSelectedRefundItem] = useState<any>(null);
   const [isAdHocModalOpen, setIsAdHocModalOpen] = useState(false);
-  const [detailsItem, setDetailsItem] = useState<HistoryRow | null>(null);
-  const emailTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeCount = countActiveFilters(filters);
-  const showParty = hasAnyParty(histories);
-  const genuineEmpty = hasLoaded && !loading && totalCount === 0 && activeCount === 0;
-  const filteredEmpty = hasLoaded && !loading && totalCount === 0 && activeCount > 0;
 
   const parsedRef = useRef(parsed);
   parsedRef.current = parsed;
@@ -109,43 +104,54 @@ const Payment = () => {
   );
 
   const clearFilters = useCallback(() => {
-    setEmailDraft('');
+    setSearchDraft('');
     parsedRef.current = { ...parsedRef.current, filters: EMPTY_FILTERS, page: 0 };
     writeParams(EMPTY_FILTERS, 0, parsedRef.current.pageSize);
   }, [writeParams]);
 
   useEffect(() => {
-    setEmailDraft(filters.email);
-  }, [filters.email]);
+    setSearchDraft(filters.search);
+  }, [filters.search]);
 
   useEffect(() => {
-    if (emailTimer.current) clearTimeout(emailTimer.current);
-    if (emailDraft === filters.email) return;
-    emailTimer.current = setTimeout(() => {
-      const next = { ...parsedRef.current.filters, email: emailDraft.trim() };
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (searchDraft.trim() === filters.search) return;
+    searchTimer.current = setTimeout(() => {
+      const next = { ...parsedRef.current.filters, search: searchDraft.trim() };
       parsedRef.current = { ...parsedRef.current, filters: next, page: 0 };
       writeParams(next, 0, parsedRef.current.pageSize);
     }, 300);
     return () => {
-      if (emailTimer.current) clearTimeout(emailTimer.current);
+      if (searchTimer.current) clearTimeout(searchTimer.current);
     };
-  }, [emailDraft, filters.email, writeParams]);
+  }, [searchDraft, filters.search, writeParams]);
 
   const loadHistories = useCallback(async () => {
+    const seq = ++listSeq.current;
     setLoading(true);
     const response = await doFilterPaymentHistories({
       currentPage,
       numPerPage: pageSize,
-      email: filters.email,
       stripeMode: filters.mode,
       paymentType: filters.type,
       status: filters.status,
-      ...dateBounds,
+      ...historyListParams(filters, dateBounds),
       sortBy: 'createdAt',
     });
+    // A slower answer for filters the admin has already changed must not replace the newer list.
+    if (seq !== listSeq.current) return;
+    setLoadError(response === false);
     if (response) {
+      const total = Number(response.totalCount) || 0;
+      const lastPage = lastPageIndex(total, pageSize);
+      // Past the end (a typed link, or rows that left the filter after a refund): go to the last page instead of a blank one.
+      if (currentPage > lastPage) {
+        parsedRef.current = { ...parsedRef.current, page: lastPage };
+        writeParams(parsedRef.current.filters, lastPage, parsedRef.current.pageSize);
+        return;
+      }
       setHistories(Array.isArray(response.result) ? response.result : []);
-      setTotalCount(Number(response.totalCount) || 0);
+      setTotalCount(total);
       setStatusTotals(response.totals || EMPTY_PAYMENT_STATUS_TOTALS);
       if (response.paymentsVisibleMode === 'all' || response.paymentsVisibleMode === 'live') {
         setPaymentsVisibleMode(response.paymentsVisibleMode);
@@ -157,7 +163,8 @@ const Payment = () => {
     }
     setHasLoaded(true);
     setLoading(false);
-  }, [currentPage, pageSize, filters.email, filters.mode, filters.status, filters.type, dateBounds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, pageSize, filters.search, filters.when, filters.mode, filters.status, filters.type, dateBounds, writeParams]);
 
   const [paymentStats, setPaymentStats] = useState<AdminPaymentStatsData | null>(null);
   const [paymentStatsError, setPaymentStatsError] = useState(false);
@@ -382,10 +389,6 @@ const Payment = () => {
     }
   };
 
-  const resultLabel = loading
-    ? 'Loading payment histories…'
-    : `Showing ${histories.length} of ${totalCount} histories`;
-
   return (
     <div className="h-full w-full overflow-y-auto px-[18px] pt-10 pb-10 text-wl-ink">
       <div className="mx-auto w-full max-w-[1500px] space-y-6">
@@ -504,132 +507,46 @@ const Payment = () => {
               </>
             )}
           </div>
-          <PaymentFilterBar
+          <PaymentHistoryList
             filters={filters}
-            emailDraft={emailDraft}
-            activeCount={activeCount}
-            resultLabel={resultLabel}
-            onEmailDraft={setEmailDraft}
+            searchDraft={searchDraft}
+            onSearchDraft={setSearchDraft}
             onChange={patchFilters}
             onClear={clearFilters}
+            activeCount={activeCount}
             showStripeModeFilter={showStripeModeFilter}
-          />
-          <div className="space-y-4 p-4">
-            {loading ? (
-              <div className="space-y-2" data-testid="payment-history-skeleton">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="h-12 animate-pulse rounded-xl bg-wl-pageAlt" />
-                ))}
-              </div>
-            ) : filteredEmpty ? (
-              <div className="rounded-2xl border border-dashed border-wl-line bg-wl-card/60 px-6 py-16 text-center">
-                <p className="text-sm text-wl-muted">No payment history matches these filters</p>
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="mt-3 rounded-full border border-wl-line bg-white px-4 py-1.5 text-sm font-medium text-wl-brand"
-                >
-                  Clear filters
-                </button>
-              </div>
-            ) : genuineEmpty ? (
-              <div className="rounded-2xl border border-dashed border-wl-line bg-wl-card/60 px-6 py-16 text-center text-sm text-wl-muted">
-                No payment history yet.
-              </div>
-            ) : (
-              <>
-                <div className="md:hidden space-y-3" data-testid="payment-history-cards">
-                  {histories.map(item => (
-                    <PaymentHistoryCard
-                      key={item._id}
-                      item={item}
-                      onDetails={() => setDetailsItem(item)}
-                      onRetry={() => {
-                        setSelectedPaymentItem(item);
-                        setIsRetryModalOpen(true);
-                      }}
-                      onRefund={() => {
-                        setSelectedRefundItem(item);
-                        setIsRefundModalOpen(true);
-                      }}
-                    />
-                  ))}
-                  <div
-                    data-testid="payment-history-total-cards"
-                    className="rounded-xl border border-wl-line bg-wl-brandSoft/60 px-4 py-4"
-                  >
-                    <PaymentStatusTotalsBar totals={statusTotals} />
-                  </div>
-                </div>
-                <div className="hidden max-h-[640px] overflow-y-auto md:block" data-testid="payment-history-table">
-                  <table className="hidden w-full table-fixed text-left text-sm md:table">
-                    <thead className="sticky top-0 z-10 bg-wl-brandSoft text-xs uppercase text-wl-brand">
-                      <tr>
-                        <th className="w-12 px-3 py-3 text-center">No</th>
-                        <th className="w-32 px-3 py-3">Date</th>
-                        <th className="w-28 px-3 py-3">Amount</th>
-                        {showParty ? <th className="px-3 py-3">Party</th> : null}
-                        <th className="w-24 px-3 py-3">Event</th>
-                        <th className="hidden px-3 py-3 lg:table-cell">Description</th>
-                        <th className="w-28 px-3 py-3">Type</th>
-                        <th className="w-24 px-3 py-3">Status</th>
-                        <th className="hidden px-3 py-3 lg:table-cell">Intent</th>
-                        <th className="w-12 px-3 py-3">
-                          <span className="sr-only">Actions</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {histories.map((item, index) => (
-                        <PaymentHistoryRow
-                          key={item._id || index}
-                          item={item}
-                          index={pageSize * currentPage + index + 1}
-                          showParty={showParty}
-                          onDetails={() => setDetailsItem(item)}
-                          onRetry={() => {
-                            setSelectedPaymentItem(item);
-                            setIsRetryModalOpen(true);
-                          }}
-                          onRefund={() => {
-                            setSelectedRefundItem(item);
-                            setIsRefundModalOpen(true);
-                          }}
-                        />
-                      ))}
-                    </tbody>
-                    <tfoot className="sticky bottom-0 bg-wl-brandSoft text-sm text-wl-ink">
-                      <tr data-testid="payment-history-total">
-                        <td className="px-3 py-4" colSpan={showParty ? 10 : 9}>
-                          <PaymentStatusTotalsBar totals={statusTotals} />
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </>
+            rangePhrase={snapshotRangePhrase(
+              filters.range,
+              filters.range === 'custom' ? { startDate: filters.startDate, endDate: filters.endDate } : null,
             )}
-
-            <Pagination
-              id="payment-page-size"
-              currentPage={currentPage}
-              totalCount={totalCount}
-              pageSize={pageSize}
-              onPage={page => {
-                parsedRef.current = { ...parsedRef.current, page };
-                writeParams(parsedRef.current.filters, page, parsedRef.current.pageSize);
-              }}
-              onPageSize={size => {
-                parsedRef.current = { ...parsedRef.current, page: 0, pageSize: size };
-                writeParams(parsedRef.current.filters, 0, size);
-              }}
-            />
-          </div>
+            histories={histories}
+            totalCount={totalCount}
+            loading={loading}
+            loadError={loadError}
+            onRetryLoad={() => void loadHistories()}
+            hasLoaded={hasLoaded}
+            statusTotals={statusTotals}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            onPage={page => {
+              parsedRef.current = { ...parsedRef.current, page };
+              writeParams(parsedRef.current.filters, page, parsedRef.current.pageSize);
+            }}
+            onPageSize={size => {
+              parsedRef.current = { ...parsedRef.current, page: 0, pageSize: size };
+              writeParams(parsedRef.current.filters, 0, size);
+            }}
+            onRetryPayment={item => {
+              setSelectedPaymentItem(item);
+              setIsRetryModalOpen(true);
+            }}
+            onRefundPayment={item => {
+              setSelectedRefundItem(item);
+              setIsRefundModalOpen(true);
+            }}
+          />
         </section>
       </div>
-      {detailsItem ? (
-        <PaymentDetailsDrawer item={detailsItem} onClose={() => setDetailsItem(null)} />
-      ) : null}
       <RetryPaymentModal
         paymentItem={selectedPaymentItem}
         isOpen={isRetryModalOpen}

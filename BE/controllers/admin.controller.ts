@@ -392,7 +392,8 @@ const filterPaymentHistories = async (req, res) => {
                 const tb = new Date(
                     startByGc.get(String(b.groupChat)) || startByEv.get(String(b.event)) || 0,
                 ).getTime();
-                return dir * (ta - tb);
+                if (ta !== tb) return dir * (ta - tb);
+                return String(b._id).localeCompare(String(a._id));
             });
             const totalCount = leanRows.length;
             const pageIds = leanRows.slice(pageSize * page, pageSize * page + pageSize).map((row: any) => row._id);
@@ -428,7 +429,8 @@ const filterPaymentHistories = async (req, res) => {
             countQuery.where({ createdAt: { $lt: new Date(dateTo) } })
         }
 
-        query.sort({ createdAt: -1 })
+        // _id breaks ties, so two payments made in the same instant keep one order across pages.
+        query.sort({ createdAt: -1, _id: -1 })
         query.skip(pageSize * page).limit(pageSize)
         const match = query.getFilter();
         const [totalCount, histories, totals] = await Promise.all([

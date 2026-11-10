@@ -29,6 +29,7 @@ import {
   getStripeMode,
   processRefund,
   listPayrollCheques,
+  sendPaymentLinkToUser,
   setSeminarApprovalDeadline,
   setStripeMode,
 } from '../../../api/api';
@@ -186,6 +187,27 @@ function chooseSelect(label: string, optionLabel: string, selector?: string) {
   fireEvent.click(within(root).getByRole('button', { name: optionLabel }));
 }
 
+/** Opens a row (by text on it, e.g. its amount) in the details panel. */
+function openRow(text: string) {
+  const row = within(screen.getByTestId('payment-history-table')).getAllByRole('row').find(r => (r.textContent || '').includes(text));
+  if (!row) throw new Error('no row with ' + text);
+  fireEvent.click(row);
+}
+
+/** The open details panel (the desktop column; the phone sheet holds the same content). */
+const panel = () => screen.getAllByRole('complementary')[0];
+
+/** The count line ("6 payments · all time") and the rows shown on this page. */
+async function findShowing(rowsOnPage: number, total: number) {
+  const line = new RegExp(`^` + total + ` payments?\\b`);
+  await waitFor(() => {
+    expect(screen.getByText(line)).toBeInTheDocument();
+    const table = screen.getByTestId('payment-history-table');
+    expect(within(table).getAllByRole('row').length - 1).toBe(rowsOnPage);
+  });
+  return screen.getByText(line);
+}
+
 function renderPayment(initial = '/user/admindashboard/payment') {
   const store = configureStore({
     reducer: {
@@ -235,17 +257,12 @@ describe('Admin Payment Management', () => {
 
   it('loads histories and says when every paid seat matches', async () => {
     renderPayment();
-    expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
+    expect(await findShowing(5, 6)).toBeInTheDocument();
     expect(screen.getByText(/Nothing to fix/)).toBeInTheDocument();
-    expect(screen.getByTestId('payment-history-table').className).not.toMatch(/overflow-x-auto/);
     expect(screen.getByTestId('payment-history-cards')).toHaveClass('md:hidden');
-    expect(screen.getByTestId('payment-history-table')).toHaveClass('hidden');
-    expect(screen.getByTestId('payment-history-table').querySelector('table')).toHaveClass(
-      'hidden',
-      'md:table',
-      'table-fixed',
-    );
-    expect(screen.getByRole('columnheader', { name: 'Description' })).toHaveClass('lg:table-cell');
+    expect(screen.getByTestId('payment-history-table')).toHaveClass('hidden', 'md:block');
+    const headers = within(screen.getByTestId('payment-history-table')).getAllByRole('columnheader').map(h => h.textContent);
+    expect(headers).toEqual(['User', 'Amount', 'Date', 'Type', 'Status']);
     const totalRow = screen.getByTestId('payment-history-total');
     expect(totalRow).toHaveTextContent(/Total \(filtered\)/);
     expect(totalRow).toHaveTextContent(/Paid/);
@@ -259,19 +276,19 @@ describe('Admin Payment Management', () => {
 
   it('filters by status and updates the result count', async () => {
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
+    await findShowing(5, 6);
     chooseSelect('Status', 'Paid');
     await waitFor(() => {
       expect(doFilterPaymentHistories).toHaveBeenCalledWith(
         expect.objectContaining({ status: 'completed', currentPage: 0 }),
       );
     });
-    expect(await screen.findByText(/Showing 1 of 1 histories/)).toBeInTheDocument();
+    expect(await findShowing(1, 1)).toBeInTheDocument();
   });
 
   it('filters by stripe mode, payment type, and a custom date range together, counting both end days', async () => {
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
+    await findShowing(5, 6);
     chooseSelect('Stripe mode', 'Live');
     chooseSelect('Payment type', 'Charge');
     fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
@@ -292,7 +309,7 @@ describe('Admin Payment Management', () => {
 
   it('has no From/To boxes any more: the date range control replaces them', async () => {
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
+    await findShowing(5, 6);
     expect(screen.queryByLabelText('From')).toBeNull();
     expect(screen.queryByLabelText('To')).toBeNull();
     expect(screen.getByRole('radiogroup', { name: 'Date range' })).toBeInTheDocument();
@@ -300,7 +317,7 @@ describe('Admin Payment Management', () => {
 
   it('starts on All time and asks for every date, for both the list and the summary', async () => {
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
+    await findShowing(5, 6);
     expect(screen.getByRole('radio', { name: 'All time' })).toHaveAttribute('aria-checked', 'true');
     const listCall = vi.mocked(doFilterPaymentHistories).mock.calls.at(-1)?.[0] as any;
     expect(listCall.dateFrom).toBeUndefined();
@@ -348,7 +365,7 @@ describe('Admin Payment Management', () => {
 
   it('summary follows Stripe mode but not email, status or type', async () => {
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
+    await findShowing(5, 6);
     chooseSelect('Stripe mode', 'Test');
     await waitFor(() => expect((vi.mocked(doGetAdminPaymentStats).mock.calls.at(-1)?.[0] as any).stripeMode).toBe('test'));
     const before = vi.mocked(doGetAdminPaymentStats).mock.calls.length;
@@ -369,7 +386,7 @@ describe('Admin Payment Management', () => {
     vi.mocked(doGetAdminPaymentStats).mockResolvedValueOnce(false);
     renderPayment();
     expect(await screen.findByText('Could not load the payment summary.')).toBeInTheDocument();
-    expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
+    expect(await findShowing(5, 6)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     const summary = screen.getByTestId('payment-summary');
     expect((await within(summary).findByText('Collected')).parentElement?.textContent).toContain('$300');
@@ -379,11 +396,10 @@ describe('Admin Payment Management', () => {
   it('refreshes the summary after a refund', async () => {
     vi.mocked(processRefund).mockResolvedValue({ status: 'SUCCESS', message: 'Refund processed successfully.' });
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
+    await findShowing(5, 6);
     const before = vi.mocked(doGetAdminPaymentStats).mock.calls.length;
-    const row = within(screen.getByTestId('payment-history-table')).getAllByRole('row').find(r => (r.textContent || '').includes('Session A')) as HTMLElement;
-    fireEvent.click(within(row).getByRole('button', { name: 'Payment actions' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Refund' }));
+    openRow('$100.00');
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Refund' }));
     fireEvent.change(await screen.findByPlaceholderText('Enter refund amount'), { target: { value: '10' } });
     fireEvent.change(screen.getByPlaceholderText('Please provide a reason for this refund...'), { target: { value: 'test' } });
     fireEvent.click(screen.getByRole('button', { name: 'Process Refund' }));
@@ -393,8 +409,8 @@ describe('Admin Payment Management', () => {
 
   it('debounces email and sends it to the history API', async () => {
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
-    fireEvent.change(screen.getByLabelText('Filter by email'), { target: { value: 'ann@x.com' } });
+    await findShowing(5, 6);
+    fireEvent.change(screen.getByLabelText('Search description or email'), { target: { value: 'ann@x.com' } });
     await waitFor(
       () => {
         expect(doFilterPaymentHistories).toHaveBeenCalledWith(
@@ -403,21 +419,21 @@ describe('Admin Payment Management', () => {
       },
       { timeout: 1500 },
     );
-    expect(await screen.findByText(/Showing 2 of 2 histories/)).toBeInTheDocument();
+    expect(await findShowing(2, 2)).toBeInTheDocument();
   });
 
   it('clears filters and restores the full paginated list', async () => {
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
+    await findShowing(5, 6);
     chooseSelect('Status', 'Refunded');
-    expect(await screen.findByText(/Showing 1 of 1 histories/)).toBeInTheDocument();
+    expect(await findShowing(1, 1)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
-    expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
+    expect(await findShowing(5, 6)).toBeInTheDocument();
   });
 
   it('paginates and disables previous on the first page', async () => {
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
+    await findShowing(5, 6);
     const totalRow = screen.getByTestId('payment-history-total');
     expect(totalRow).toHaveTextContent(/Total \(filtered\).*Paid.*100\.00 USD.*Failed.*30\.00 USD.*Refunded.*20\.00 USD/s);
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
@@ -427,7 +443,7 @@ describe('Admin Payment Management', () => {
         expect.objectContaining({ currentPage: 1, numPerPage: 5 }),
       );
     });
-    expect(await screen.findByText(/Showing 1 of 6 histories/)).toBeInTheDocument();
+    expect(await findShowing(1, 6)).toBeInTheDocument();
     expect(screen.getByTestId('payment-history-total')).toHaveTextContent(
       /Total \(filtered\).*Paid.*100\.00 USD.*Failed.*30\.00 USD.*Refunded.*20\.00 USD/s,
     );
@@ -437,7 +453,27 @@ describe('Admin Payment Management', () => {
         expect.objectContaining({ currentPage: 0, numPerPage: 25 }),
       );
     });
-    expect(await screen.findByText(/Showing 6 of 6 histories/)).toBeInTheDocument();
+    expect(await findShowing(6, 6)).toBeInTheDocument();
+  });
+
+  it('keeps the hidden filter labels anchored to their boxes, so the page does not grow a blank area below', async () => {
+    renderPayment();
+    await findShowing(5, 6);
+    for (const id of ['payment-filter-status', 'payment-filter-type', 'payment-search']) {
+      const label = document.querySelector(`label[for="${id}"]`) as HTMLElement;
+      expect(label).toHaveClass('sr-only');
+      expect(label.parentElement).toHaveClass('relative');
+    }
+  });
+
+  it('a page past the end (typed link, or rows gone after a refund) moves to the last page', async () => {
+    renderPayment('/user/admindashboard/payment?page=9');
+    await waitFor(() => {
+      expect(doFilterPaymentHistories).toHaveBeenCalledWith(expect.objectContaining({ currentPage: 8, numPerPage: 5 }));
+    });
+    expect(await findShowing(1, 6)).toBeInTheDocument();
+    expect(doFilterPaymentHistories).toHaveBeenLastCalledWith(expect.objectContaining({ currentPage: 1, numPerPage: 5 }));
+    expect(screen.getByText('6–6 of 6')).toBeInTheDocument();
   });
 
   it('hides the Stripe mode filter when only live payments are visible', async () => {
@@ -448,14 +484,14 @@ describe('Admin Payment Management', () => {
       paymentWindowHours: 48,
     });
     renderPayment();
-    expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
+    expect(await findShowing(5, 6)).toBeInTheDocument();
     expect(screen.queryByTestId('payment-filter-mode')).not.toBeInTheDocument();
   });
 
   it('switches Stripe to Live only after confirm', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
+    await findShowing(5, 6);
     fireEvent.click(screen.getByRole('button', { name: 'Live' }));
     await waitFor(() => {
       expect(setStripeMode).toHaveBeenCalledWith({ stripeMode: 'live' });
@@ -467,7 +503,7 @@ describe('Admin Payment Management', () => {
   it('labels the toggle Payment mode and styles Live exactly like Test', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
+    await findShowing(5, 6);
     expect(screen.getByText('Payment mode')).toBeInTheDocument();
     const test = screen.getByRole('button', { name: 'Test' });
     const live = screen.getByRole('button', { name: 'Live' });
@@ -487,7 +523,7 @@ describe('Admin Payment Management', () => {
 
   it('enables Settings Save after a change and shows success on save', async () => {
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
+    await findShowing(5, 6);
     const deadline = screen.getByLabelText('Seat-request approval deadline');
     const saves = screen.getAllByRole('button', { name: 'Save' });
     expect(saves[0]).toBeDisabled();
@@ -504,7 +540,7 @@ describe('Admin Payment Management', () => {
 
   it('refreshes the seat list', async () => {
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
+    await findShowing(5, 6);
     expect(screen.getByText(/Nothing to fix/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => {
@@ -532,8 +568,8 @@ describe('Admin Payment Management', () => {
 
   it('shows the filtered empty state', async () => {
     renderPayment();
-    await screen.findByText(/Showing 5 of 6 histories/);
-    fireEvent.change(screen.getByLabelText('Filter by email'), { target: { value: 'nobody@none.test' } });
+    await findShowing(5, 6);
+    fireEvent.change(screen.getByLabelText('Search description or email'), { target: { value: 'nobody@none.test' } });
     expect(await screen.findByText('No payment history matches these filters')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Clear filters' }).length).toBeGreaterThan(0);
   });
@@ -567,12 +603,12 @@ describe('Admin Payment Management', () => {
       expect(doFilterPaymentHistories).toHaveBeenCalled();
     });
     resolveHistories({ result: ALL_ROWS.slice(0, 5), totalCount: 6 });
-    expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
+    expect(await findShowing(5, 6)).toBeInTheDocument();
   });
 
   it('no longer shows or loads the paid-out list, which now lives on the Payroll page', async () => {
     renderPayment();
-    expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
+    expect(await findShowing(5, 6)).toBeInTheDocument();
     expect(screen.queryByTestId('paid-out-cheques')).not.toBeInTheDocument();
     expect(screen.queryByText('Paid out')).not.toBeInTheDocument();
     expect(listPayrollCheques).not.toHaveBeenCalled();
@@ -592,6 +628,139 @@ describe('Admin Payment Management', () => {
     });
   });
 
+  describe('everything the old table did, in the new list and details panel', () => {
+    it('clicking a row shows its full details: user, both emails, type, status, amount, description, date, intent, receipt', async () => {
+      renderPayment();
+      await findShowing(5, 6);
+      openRow('$100.00');
+      const p = within(panel());
+      expect(p.getByText('ann@x.com → eli@x.com', { selector: 'div' })).toBeInTheDocument();
+      expect(p.getByText('Student email').nextElementSibling?.textContent).toBe('ann@x.com');
+      expect(p.getByText('Expert email').nextElementSibling?.textContent).toBe('eli@x.com');
+      expect(p.getByText('test · charge')).toBeInTheDocument();
+      expect(p.getAllByText('Paid').length).toBeGreaterThan(0);
+      expect(p.getByText('Session A')).toBeInTheDocument();
+      expect(p.getByText('pi_3UB4xxxxUfoa')).toBeInTheDocument();
+      expect(p.getByRole('button', { name: 'Copy payment intent' })).toBeInTheDocument();
+      expect(p.getByRole('link', { name: 'Open receipt' })).toHaveAttribute('href', 'https://example.com/r1');
+      expect(p.getByRole('link', { name: 'View receipt' })).toHaveAttribute('href', 'https://example.com/r1');
+    });
+
+    it('tags a live payment as live in the details, like the old Type column', async () => {
+      renderPayment();
+      await findShowing(5, 6);
+      openRow('$50.00');
+      expect(within(panel()).getByText('live · charge')).toBeInTheDocument();
+      expect(within(panel()).getAllByText('In Flight').length).toBeGreaterThan(0);
+    });
+
+    it('offers Retry and Refund only where the old menu did', async () => {
+      renderPayment();
+      await findShowing(5, 6);
+      const buttonsFor = (amount: string) => {
+        openRow(amount);
+        return within(panel()).queryAllByRole('button').map(b => b.textContent?.trim()).filter(t => t === 'Retry' || t === 'Refund');
+      };
+      expect(buttonsFor('$100.00')).toEqual(['Retry', 'Refund']); // paid charge
+      expect(buttonsFor('$20.00')).toEqual([]); // refund row
+      expect(buttonsFor('$50.00')).toEqual(['Retry']); // in flight: retry, nothing to refund yet
+      expect(buttonsFor('$80.00')).toEqual([]); // withheld
+      expect(buttonsFor('$30.00')).toEqual([]); // a retry link itself
+    });
+
+    it('Retry from the panel sends the payment link for that payment', async () => {
+      vi.mocked(sendPaymentLinkToUser).mockResolvedValue({ status: 'SUCCESS' });
+      renderPayment();
+      await findShowing(5, 6);
+      openRow('$100.00');
+      fireEvent.click(within(panel()).getByRole('button', { name: 'Retry' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Send Payment Link' }));
+      await waitFor(() => expect(sendPaymentLinkToUser).toHaveBeenCalledWith(expect.objectContaining({ paymentHistoryId: '1' })));
+    });
+
+    it('keeps the same payment open after a refund reloads the list', async () => {
+      vi.mocked(processRefund).mockResolvedValue({ status: 'SUCCESS', message: 'Refund processed successfully.' });
+      renderPayment();
+      await findShowing(5, 6);
+      openRow('$100.00');
+      const calls = vi.mocked(doFilterPaymentHistories).mock.calls.length;
+      fireEvent.click(within(panel()).getByRole('button', { name: 'Refund' }));
+      fireEvent.change(await screen.findByPlaceholderText('Enter refund amount'), { target: { value: '10' } });
+      fireEvent.change(screen.getByPlaceholderText('Please provide a reason for this refund...'), { target: { value: 'x' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Process Refund' }));
+      await waitFor(() => expect(vi.mocked(doFilterPaymentHistories).mock.calls.length).toBeGreaterThan(calls));
+      await waitFor(() => expect(within(panel()).getByText('Session A')).toBeInTheDocument());
+    });
+
+    it('lists refund rows too, each tagged with its mode and kind, and shows the Payments page status names', async () => {
+      renderPayment();
+      await findShowing(5, 6);
+      const table = screen.getByTestId('payment-history-table');
+      expect(within(table).getByText('test · refund')).toBeInTheDocument();
+      expect(within(table).getAllByText('live · charge')).toHaveLength(2);
+      expect(within(table).getAllByText('Paid').length).toBe(1);
+      expect(within(table).getByText('In Flight')).toBeInTheDocument();
+      expect(within(table).queryByText('Completed')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Send Ad-hoc Payment' })).toBeInTheDocument();
+    });
+
+    it('search: words look in the description, an address looks up that user', async () => {
+      renderPayment();
+      await findShowing(5, 6);
+      fireEvent.change(screen.getByLabelText('Search description or email'), { target: { value: 'Session' } });
+      await waitFor(() => expect(doFilterPaymentHistories).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'Session' })));
+      expect((vi.mocked(doFilterPaymentHistories).mock.calls.at(-1)?.[0] as any).email).toBeUndefined();
+      fireEvent.change(screen.getByLabelText('Search description or email'), { target: { value: 'ann@x.com' } });
+      await waitFor(() => expect(doFilterPaymentHistories).toHaveBeenLastCalledWith(expect.objectContaining({ email: 'ann@x.com' })));
+    });
+
+    it('Past bookings asks for sessions held in the range; Upcoming for every session still to come', async () => {
+      renderPayment('/user/admindashboard/payment?range=3m');
+      await waitFor(() => expect(doFilterPaymentHistories).toHaveBeenCalled());
+      fireEvent.click(screen.getByRole('tab', { name: 'Past bookings' }));
+      await waitFor(() => expect(doFilterPaymentHistories).toHaveBeenLastCalledWith(expect.objectContaining({ bookingScope: 'past', dateFrom: expect.any(String) })));
+      fireEvent.click(screen.getByRole('tab', { name: 'Upcoming bookings' }));
+      await waitFor(() => expect(doFilterPaymentHistories).toHaveBeenLastCalledWith(expect.objectContaining({ bookingScope: 'upcoming' })));
+      expect((vi.mocked(doFilterPaymentHistories).mock.calls.at(-1)?.[0] as any).dateFrom).toBeUndefined();
+      expect(await screen.findByText(/for upcoming sessions · not limited by the date range/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('tab', { name: 'All' }));
+      await waitFor(() => expect((vi.mocked(doFilterPaymentHistories).mock.calls.at(-1)?.[0] as any).bookingScope).toBeUndefined());
+    });
+
+    it('shows an error with Try again when the list cannot load, instead of an empty list', async () => {
+      vi.mocked(doFilterPaymentHistories).mockResolvedValueOnce(false);
+      renderPayment();
+      expect(await screen.findByText('Could not load payment history.')).toBeInTheDocument();
+      expect(screen.queryByText('No payment history yet.')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+      expect(await findShowing(5, 6)).toBeInTheDocument();
+    });
+
+    it('ignores a slower answer for filters the admin has already changed', async () => {
+      let releaseOld: (v: any) => void = () => {};
+      vi.mocked(doFilterPaymentHistories)
+        .mockImplementationOnce(() => new Promise(r => { releaseOld = r; }))
+        .mockImplementation(async filter => applyFilter(filter));
+      renderPayment();
+      await waitFor(() => expect(doFilterPaymentHistories).toHaveBeenCalledTimes(1));
+      chooseSelect('Status', 'Paid');
+      expect(await findShowing(1, 1)).toBeInTheDocument();
+      releaseOld({ result: ALL_ROWS.slice(0, 5), totalCount: 6 });
+      await new Promise(r => setTimeout(r, 30));
+      expect(await findShowing(1, 1)).toBeInTheDocument();
+    });
+
+    it('phones get one card per payment with its amount, type and status', async () => {
+      renderPayment();
+      await findShowing(5, 6);
+      const cards = within(screen.getByTestId('payment-history-cards')).getAllByRole('button');
+      expect(cards).toHaveLength(5);
+      expect(cards[0]).toHaveTextContent('$100.00');
+      expect(cards[0]).toHaveTextContent('test · charge');
+      expect(cards[0]).toHaveTextContent('Paid');
+    });
+  });
+
   describe('Stripe mode filter (staging / paymentsVisibleMode=all)', () => {
     const modeFilterLabel = () => screen.getByLabelText('Stripe mode').textContent;
     const requestedModes = () =>
@@ -603,14 +772,14 @@ describe('Admin Payment Management', () => {
         paymentsVisibleMode: 'all',
       });
       renderPayment();
-      expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
-      expect(modeFilterLabel()).toBe('All');
+      expect(await findShowing(5, 6)).toBeInTheDocument();
+      expect(modeFilterLabel()).toBe('Test and live');
       expect(requestedModes().every(mode => !mode)).toBe(true);
     });
 
     it('keeps a mode already in the URL', async () => {
       renderPayment('/user/admindashboard/payment?mode=live');
-      expect(await screen.findByText(/Showing 2 of 2 histories/)).toBeInTheDocument();
+      expect(await findShowing(2, 2)).toBeInTheDocument();
       await waitFor(() => {
         expect(getStripeMode).toHaveBeenCalled();
       });
@@ -622,15 +791,15 @@ describe('Admin Payment Management', () => {
       vi.mocked(getStripeMode).mockResolvedValue({ status: 'FAIL', error: 'down' });
       renderPayment();
       // Default paymentsVisibleMode state is live until getStripeMode succeeds, so mode filter may hide.
-      expect(await screen.findByText(/Showing 5 of 6 histories/)).toBeInTheDocument();
+      expect(await findShowing(5, 6)).toBeInTheDocument();
     });
 
     it('moves the filter to Live after the switch is confirmed', async () => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
       renderPayment();
-      await screen.findByText(/Showing 5 of 6 histories/);
+      await findShowing(5, 6);
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
-      expect(await screen.findByText(/Showing 2 of 2 histories/)).toBeInTheDocument();
+      expect(await findShowing(2, 2)).toBeInTheDocument();
       expect(setStripeMode).toHaveBeenCalledWith({ stripeMode: 'live' });
       expect(modeFilterLabel()).toBe('Live');
       confirm.mockRestore();
@@ -642,9 +811,9 @@ describe('Admin Payment Management', () => {
         paymentsVisibleMode: 'all',
       });
       renderPayment();
-      await screen.findByText(/Showing 5 of 6 histories/);
+      await findShowing(5, 6);
       fireEvent.click(screen.getByRole('button', { name: 'Test' }));
-      expect(await screen.findByText(/Showing 4 of 4 histories/)).toBeInTheDocument();
+      expect(await findShowing(4, 4)).toBeInTheDocument();
       expect(setStripeMode).toHaveBeenCalledWith({ stripeMode: 'test' });
       expect(modeFilterLabel()).toBe('Test');
     });
@@ -652,10 +821,10 @@ describe('Admin Payment Management', () => {
     it('leaves the filter alone when the Live switch is cancelled', async () => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
       renderPayment();
-      await screen.findByText(/Showing 5 of 6 histories/);
+      await findShowing(5, 6);
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
       expect(setStripeMode).not.toHaveBeenCalled();
-      expect(modeFilterLabel()).toBe('All');
+      expect(modeFilterLabel()).toBe('Test and live');
       expect(requestedModes()).not.toContain('live');
       confirm.mockRestore();
     });
@@ -664,13 +833,13 @@ describe('Admin Payment Management', () => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
       const success = vi.spyOn(notify, 'success');
       renderPayment();
-      await screen.findByText(/Showing 5 of 6 histories/);
+      await findShowing(5, 6);
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
-      expect(await screen.findByText(/Showing 2 of 2 histories/)).toBeInTheDocument();
+      expect(await findShowing(2, 2)).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Test' }));
-      expect(await screen.findByText(/Showing 4 of 4 histories/)).toBeInTheDocument();
+      expect(await findShowing(4, 4)).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
-      expect(await screen.findByText(/Showing 2 of 2 histories/)).toBeInTheDocument();
+      expect(await findShowing(2, 2)).toBeInTheDocument();
       expect(setStripeMode).toHaveBeenCalledTimes(3);
       expect(success).not.toHaveBeenCalled();
       success.mockRestore();
@@ -682,7 +851,7 @@ describe('Admin Payment Management', () => {
       const error = vi.spyOn(notify, 'error');
       vi.mocked(setStripeMode).mockResolvedValue({ status: 'FAIL', error: 'Stripe is unavailable' });
       renderPayment();
-      await screen.findByText(/Showing 5 of 6 histories/);
+      await findShowing(5, 6);
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
       await waitFor(() => {
         expect(error).toHaveBeenCalledWith('Stripe is unavailable');
@@ -695,24 +864,24 @@ describe('Admin Payment Management', () => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
       vi.mocked(setStripeMode).mockResolvedValue({ status: 'FAIL', error: 'Stripe is unavailable' });
       renderPayment();
-      await screen.findByText(/Showing 5 of 6 histories/);
+      await findShowing(5, 6);
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
       await waitFor(() => {
         expect(setStripeMode).toHaveBeenCalledWith({ stripeMode: 'live' });
       });
       expect(screen.getByRole('button', { name: 'Test' })).toHaveAttribute('aria-pressed', 'true');
-      expect(modeFilterLabel()).toBe('All');
+      expect(modeFilterLabel()).toBe('Test and live');
       expect(requestedModes()).not.toContain('live');
       confirm.mockRestore();
     });
 
     it('clicking the selected mode brings a hand-changed filter back', async () => {
       renderPayment();
-      await screen.findByText(/Showing 5 of 6 histories/);
+      await findShowing(5, 6);
       chooseSelect('Stripe mode', 'Live');
-      await screen.findByText(/Showing 2 of 2 histories/);
+      await findShowing(2, 2);
       fireEvent.click(screen.getByRole('button', { name: 'Test' }));
-      expect(await screen.findByText(/Showing 4 of 4 histories/)).toBeInTheDocument();
+      expect(await findShowing(4, 4)).toBeInTheDocument();
       expect(modeFilterLabel()).toBe('Test');
       expect(setStripeMode).not.toHaveBeenCalled();
     });
@@ -720,11 +889,11 @@ describe('Admin Payment Management', () => {
     it('keeps the other filters when the mode switches', async () => {
       const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
       renderPayment();
-      await screen.findByText(/Showing 5 of 6 histories/);
+      await findShowing(5, 6);
       chooseSelect('Status', 'Withheld');
-      await screen.findByText(/Showing 1 of 1 histories/);
+      await findShowing(1, 1);
       fireEvent.click(screen.getByRole('button', { name: 'Live' }));
-      expect(await screen.findByText(/Showing 1 of 1 histories/)).toBeInTheDocument();
+      expect(await findShowing(1, 1)).toBeInTheDocument();
       expect(doFilterPaymentHistories).toHaveBeenLastCalledWith(
         expect.objectContaining({ stripeMode: 'live', status: 'withheld', currentPage: 0 }),
       );
