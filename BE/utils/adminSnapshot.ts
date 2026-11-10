@@ -223,6 +223,24 @@ export function monthsInHalfOpenRange(from: Date, toExclusive: Date): string[] {
 }
 
 /**
+ * Snapshot mini-chart axis for [from, to): last N calendar months ending at the
+ * last instant in range, where N is the month-span of the window (3m → 3 bars).
+ */
+export function chartMonthKeysForBounds(from: Date, toExclusive: Date): string[] {
+    const last = new Date(Math.max(from.getTime(), toExclusive.getTime() - 1));
+    const span =
+        (last.getUTCFullYear() - from.getUTCFullYear()) * 12 +
+        (last.getUTCMonth() - from.getUTCMonth());
+    const count = Math.max(1, span || 1);
+    const keys: string[] = [];
+    const end = new Date(Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), 1));
+    for (let i = count - 1; i >= 0; i -= 1) {
+        keys.push(monthKeyUTC(new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - i, 1))));
+    }
+    return keys;
+}
+
+/**
  * Month keys for an all-time chart: every month from the first month with data to the
  * current month (or a later data month), so empty months show as gaps instead of being skipped.
  */

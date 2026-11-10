@@ -93,7 +93,8 @@ describe('AdminSnapshotMetricView', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByRole('heading', { name: 'Experts' })).toBeInTheDocument();
-    expect(screen.getByText('← Overview')).toBeInTheDocument();
+    expect(screen.getByText('← Analytics')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Payments' })).toBeNull();
     expect(screen.getByText('Everyone offering mentoring on the platform.')).toBeInTheDocument();
     expect(screen.getByText('Awaiting review')).toBeInTheDocument();
     expect(screen.getByText('of 2 total')).toBeInTheDocument();

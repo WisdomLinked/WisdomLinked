@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Users,
   UserCircle,
@@ -13,6 +13,8 @@ import type { AdminDashboardStatsData, AdminSnapshotMonthlyPoint } from '../../a
 import type { SnapshotListType } from './adminSnapshotTypes';
 import SnapshotRangeControl from './SnapshotRangeControl';
 import {
+  alignMonthlyPoints,
+  snapshotChartMonthKeys,
   snapshotRangeDescription,
   type SnapshotCustomRange,
   type SnapshotRangeKey,
@@ -39,7 +41,7 @@ function MiniBars({
   const max = Math.max(0, ...values);
   if (!rows.length) return null;
   return (
-    <div className="mt-3 flex h-8 items-end gap-0.5" aria-hidden>
+    <div className="mt-3 flex h-8 items-end gap-0.5" aria-hidden data-testid="snapshot-mini-bars">
       {rows.map((p, i) => {
         const v = values[i] || 0;
         const h = max > 0 ? Math.max(2, Math.round((v / max) * 100)) : 2;
@@ -141,35 +143,69 @@ function MetricTile({
   );
 }
 
+export type AdminMetricsSections = 'all' | 'analytics' | 'payments';
+
 export default function AdminMetricsPanel({
   stats,
   rangeKey,
   customRange,
   onRangeChange,
   onSelectList,
+  sections = 'all',
+  title = 'Platform snapshot',
 }: {
   stats: AdminDashboardStatsData;
   rangeKey: SnapshotRangeKey;
   customRange?: SnapshotCustomRange | null;
   onRangeChange: (next: SnapshotRangeKey, custom?: SnapshotCustomRange) => void;
   onSelectList: (type: SnapshotListType) => void;
+  /** Which snapshot columns to show. Overview uses payments; Analytics uses people + sessions. */
+  sections?: AdminMetricsSections;
+  title?: string;
 }) {
   const range = stats.range;
   const change = rangeKey === 'all' ? null : stats.change;
   const monthly = stats.monthly;
   const hideChange = rangeKey === 'all';
+  const showPeople = sections === 'all' || sections === 'analytics';
+  const showSessions = sections === 'all' || sections === 'analytics';
+  const showPayments = sections === 'all' || sections === 'payments';
+  const columnCount = [showPeople, showSessions, showPayments].filter(Boolean).length;
+  const gridCols =
+    columnCount >= 3
+      ? 'lg:grid-cols-3'
+      : columnCount === 2
+        ? 'lg:grid-cols-2'
+        : 'lg:grid-cols-1 lg:max-w-xl';
+
+  // One shared month axis for every tile so 3m/6m/1y/all/custom bar counts stay consistent.
+  const chartKeys = useMemo(() => {
+    const dataMonths = [
+      ...(monthly?.experts || []),
+      ...(monthly?.customers || []),
+      ...(monthly?.sessions || []),
+      ...(monthly?.seminars || []),
+      ...(monthly?.payments || []),
+      ...(monthly?.refunds || []),
+    ].map(p => p.month);
+    return snapshotChartMonthKeys(rangeKey, customRange, dataMonths);
+  }, [rangeKey, customRange, monthly]);
+
+  const barsFor = (points: AdminSnapshotMonthlyPoint[] | undefined) =>
+    alignMonthlyPoints(chartKeys, points) as AdminSnapshotMonthlyPoint[];
 
   return (
     <div className="rounded-xl border border-wl-line bg-white p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 text-left">
-          <h3 className="font-sans text-lg font-semibold text-wl-brand">Platform snapshot</h3>
+          <h3 className="font-sans text-lg font-semibold text-wl-brand">{title}</h3>
           <p className="mt-1 text-sm text-wl-muted">{snapshotRangeDescription(rangeKey, customRange)}</p>
         </div>
         <SnapshotRangeControl value={rangeKey} customRange={customRange} onChange={onRangeChange} />
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6">
+      <div className={`mt-4 grid grid-cols-1 gap-4 ${gridCols} lg:gap-6`}>
+        {showPeople ? (
         <div>
           <div className="mb-2 text-left text-xs font-semibold uppercase tracking-wider text-wl-muted">
             People
@@ -181,7 +217,7 @@ export default function AdminMetricsPanel({
               value={stats.expertCount.toLocaleString()}
               note={`${(range?.expertsJoined ?? 0).toLocaleString()} joined in range`}
               changePct={hideChange ? null : change?.expertsJoined}
-              bars={monthly?.experts}
+              bars={barsFor(monthly?.experts)}
               barLabel="experts joined"
               onClick={() => onSelectList('experts')}
             />
@@ -191,14 +227,22 @@ export default function AdminMetricsPanel({
               value={stats.customerCount.toLocaleString()}
               note={`${(range?.customersJoined ?? 0).toLocaleString()} joined in range`}
               changePct={hideChange ? null : change?.customersJoined}
-              bars={monthly?.customers}
+              bars={barsFor(monthly?.customers)}
               barLabel="students joined"
               onClick={() => onSelectList('students')}
             />
           </div>
         </div>
+        ) : null}
 
-        <div className="border-t border-wl-line/60 pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+        {showSessions ? (
+        <div
+          className={
+            showPeople
+              ? 'border-t border-wl-line/60 pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0'
+              : undefined
+          }
+        >
           <div className="mb-2 text-left text-xs font-semibold uppercase tracking-wider text-wl-muted">
             Sessions
           </div>
@@ -214,7 +258,7 @@ export default function AdminMetricsPanel({
                   : undefined
               }
               changePct={hideChange ? null : change?.sessionsHeld}
-              bars={monthly?.sessions}
+              bars={barsFor(monthly?.sessions)}
               barLabel="sessions held"
               onClick={() => onSelectList('sessions')}
             />
@@ -228,14 +272,22 @@ export default function AdminMetricsPanel({
                   : undefined
               }
               changePct={hideChange ? null : change?.seminarsHeld}
-              bars={monthly?.seminars}
+              bars={barsFor(monthly?.seminars)}
               barLabel="seminars held"
               onClick={() => onSelectList('seminars')}
             />
           </div>
         </div>
+        ) : null}
 
-        <div className="border-t border-wl-line/60 pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+        {showPayments ? (
+        <div
+          className={
+            showPeople || showSessions
+              ? 'border-t border-wl-line/60 pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0'
+              : undefined
+          }
+        >
           <div className="mb-2 text-left text-xs font-semibold uppercase tracking-wider text-wl-muted">
             Payments
           </div>
@@ -246,7 +298,7 @@ export default function AdminMetricsPanel({
               value={collectedValue(range?.paymentsAmountByCurrency, range?.paymentsCount ?? 0)}
               note={`${(range?.paymentsCount ?? 0).toLocaleString()} records`}
               changePct={hideChange ? null : change?.paymentsCount}
-              bars={monthly?.payments}
+              bars={barsFor(monthly?.payments)}
               barLabel="payments"
               onClick={() => onSelectList('payments')}
             />
@@ -261,12 +313,13 @@ export default function AdminMetricsPanel({
               }
               changePct={hideChange ? null : change?.refundsCount}
               invertChange
-              bars={monthly?.refunds}
+              bars={barsFor(monthly?.refunds)}
               barLabel="refunds"
               onClick={() => onSelectList('refunds')}
             />
           </div>
         </div>
+        ) : null}
       </div>
     </div>
   );

@@ -1,12 +1,18 @@
 export const buildFallbackChatProfile = (chosenChatDetails: any, myRole: string) => {
   const me = String(myRole || "").toLowerCase();
+  const seedRole = String(chosenChatDetails?.role || "").toLowerCase();
   const inferredOtherRole = me === "expert" ? "customer" : me === "customer" ? "expert" : "member";
+  const role =
+    seedRole === "expert" || seedRole === "customer" || seedRole === "admin"
+      ? seedRole
+      : inferredOtherRole;
   return {
     _id: String(chosenChatDetails?.userId || ""),
     username: String(chosenChatDetails?.username || "Member"),
-    email: "",
+    email: String(chosenChatDetails?.email || ""),
+    title: chosenChatDetails?.title || undefined,
     image: chosenChatDetails?.image || null,
-    role: inferredOtherRole,
+    role,
     country: null,
     keywords: [],
     services: [],

@@ -140,3 +140,71 @@ export function snapshotRangeQuery(
   }
   return `?${params.toString()}`;
 }
+
+/** UTC `YYYY-MM` for a local/UTC date's calendar month. */
+export function monthKeyFromDate(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
+/** Inclusive month keys from `first` through `last` (`YYYY-MM`). */
+export function monthKeysInclusive(first: string, last: string): string[] {
+  if (!/^\d{4}-\d{2}$/.test(first) || !/^\d{4}-\d{2}$/.test(last) || first > last) return [];
+  const keys: string[] = [];
+  const [fy, fm] = first.split('-').map(Number);
+  const [ly, lm] = last.split('-').map(Number);
+  const cursor = new Date(Date.UTC(fy, fm - 1, 1));
+  const end = new Date(Date.UTC(ly, lm - 1, 1));
+  while (cursor.getTime() <= end.getTime()) {
+    keys.push(monthKeyFromDate(cursor));
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return keys;
+}
+
+/** Last `count` calendar months ending at `now`'s month (e.g. 3 → Sep, Oct, Nov). */
+export function trailingMonthKeys(count: number, now: Date = new Date()): string[] {
+  const n = Math.max(0, Math.floor(count));
+  if (!n) return [];
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - (n - 1), 1));
+  return monthKeysInclusive(monthKeyFromDate(start), monthKeyFromDate(end));
+}
+
+/**
+ * Shared month axis for snapshot mini-charts so every tile shows the same bar count:
+ * 3m → 3, 6m → 6, 1y → 12, custom → months in range, all → earliest data month through now.
+ */
+export function snapshotChartMonthKeys(
+  key: SnapshotRangeKey,
+  custom?: SnapshotCustomRange | null,
+  dataMonths: string[] = [],
+  now: Date = new Date(),
+): string[] {
+  if (key === '3m') return trailingMonthKeys(3, now);
+  if (key === '6m') return trailingMonthKeys(6, now);
+  if (key === '1y') return trailingMonthKeys(12, now);
+  if (key === 'custom' && custom && snapshotCustomRangeValid(custom.startDate, custom.endDate)) {
+    const startMonth = custom.startDate.slice(0, 7);
+    const endMonth = custom.endDate.slice(0, 7);
+    return monthKeysInclusive(startMonth, endMonth);
+  }
+  const valid = dataMonths.filter(m => /^\d{4}-\d{2}$/.test(m)).sort();
+  const current = monthKeyFromDate(now);
+  if (!valid.length) return [current];
+  const first = valid[0];
+  const last = valid[valid.length - 1] > current ? valid[valid.length - 1] : current;
+  return monthKeysInclusive(first, last);
+}
+
+export function alignMonthlyPoints<T extends { month: string; count: number }>(
+  keys: string[],
+  points: T[] | undefined,
+): Array<T | { month: string; count: number }> {
+  const byMonth = new Map((points || []).map(p => [p.month, p]));
+  return keys.map(month => {
+    const hit = byMonth.get(month);
+    return hit || { month, count: 0 };
+  });
+}

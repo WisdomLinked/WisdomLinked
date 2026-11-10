@@ -128,4 +128,65 @@ describe('AdminMetricsPanel', () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it('keeps the same mini-bar count on every tile for the selected range', () => {
+    const { rerender } = render(
+      <AdminMetricsPanel
+        stats={stats}
+        rangeKey="3m"
+        onRangeChange={vi.fn()}
+        onSelectList={vi.fn()}
+        sections="analytics"
+      />,
+    );
+    const bars3 = screen.getAllByTestId('snapshot-mini-bars');
+    expect(bars3).toHaveLength(4);
+    bars3.forEach(el => expect(el.children).toHaveLength(3));
+
+    rerender(
+      <AdminMetricsPanel
+        stats={stats}
+        rangeKey="6m"
+        onRangeChange={vi.fn()}
+        onSelectList={vi.fn()}
+        sections="analytics"
+      />,
+    );
+    const bars6 = screen.getAllByTestId('snapshot-mini-bars');
+    expect(bars6).toHaveLength(4);
+    bars6.forEach(el => expect(el.children).toHaveLength(6));
+  });
+
+  it('can show only analytics or only payments columns', () => {
+    const { rerender } = render(
+      <AdminMetricsPanel
+        stats={stats}
+        rangeKey="6m"
+        onRangeChange={vi.fn()}
+        onSelectList={vi.fn()}
+        sections="analytics"
+        title="Activity snapshot"
+      />,
+    );
+    expect(screen.getByText('Activity snapshot')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /experts/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /1:1 sessions/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^payments$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^refunds$/i })).toBeNull();
+
+    rerender(
+      <AdminMetricsPanel
+        stats={stats}
+        rangeKey="6m"
+        onRangeChange={vi.fn()}
+        onSelectList={vi.fn()}
+        sections="payments"
+        title="Payments snapshot"
+      />,
+    );
+    expect(screen.getByText('Payments snapshot')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^payments$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^refunds$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /experts/i })).toBeNull();
+  });
 });

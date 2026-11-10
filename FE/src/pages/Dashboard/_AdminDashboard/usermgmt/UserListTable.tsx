@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { ChevronRight, MessageSquare } from 'lucide-react';
+import React from 'react';
+import { MessageSquare } from 'lucide-react';
 import Avatar from '../../../../components/Avatar';
-import { resolveResumePublicUrl } from '../../../../utils/resumeUrl';
+import { usePeerProfileModal } from '../../../../hooks/usePeerProfileModal';
 import UserActionsMenu from './UserActionsMenu';
 import { isLoginLocked, userStatusOption, type UserLoginLock, type UserStatus } from './userStatus';
 
@@ -79,46 +79,6 @@ function UserStatusText({
   );
 }
 
-function UserDetailGrid({ user }: { user: AdminUserRow }) {
-  const resumeHref = resolveResumePublicUrl(user.resume);
-  const fields = [
-    { label: 'Title', value: dash(user.title) },
-    { label: 'Country', value: dash(user.country?.name) },
-    { label: 'State', value: dash(user.state?.name) },
-    { label: 'City', value: dash(user.city?.name) },
-    { label: 'Phone', value: dash(user.phoneNumber) },
-  ];
-
-  return (
-    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-      {fields.map(field => (
-        <div key={field.label}>
-          <dt className="text-[11px] font-semibold uppercase tracking-wide text-wl-muted">{field.label}</dt>
-          <dd className="mt-0.5 text-sm text-wl-ink">{field.value}</dd>
-        </div>
-      ))}
-      <div>
-        <dt className="text-[11px] font-semibold uppercase tracking-wide text-wl-muted">Resume</dt>
-        <dd className="mt-0.5 text-sm">
-          {resumeHref ? (
-            <a
-              href={resumeHref}
-              target="_blank"
-              rel="noreferrer"
-              className="font-medium text-wl-brand underline hover:brightness-95"
-              onClick={e => e.stopPropagation()}
-            >
-              resume
-            </a>
-          ) : (
-            <span className="text-wl-ink">—</span>
-          )}
-        </dd>
-      </div>
-    </dl>
-  );
-}
-
 export default function UserListTable({
   users,
   emptyMessage,
@@ -138,10 +98,19 @@ export default function UserListTable({
   onImpersonate: (user: AdminUserRow) => void;
   onAudit: (user: AdminUserRow) => void;
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { openPeerProfile, peerProfileModal } = usePeerProfileModal('admin');
 
-  const toggle = (id: string) => {
-    setExpandedId(current => (current === id ? null : id));
+  const openProfile = (user: AdminUserRow) => {
+    const userId = String(user._id || '').trim();
+    if (!userId) return;
+    void openPeerProfile({
+      userId,
+      username: user.username,
+      image: user.image,
+      role: user.role,
+      email: user.email,
+      title: user.title,
+    });
   };
 
   if (users.length === 0) {
@@ -153,32 +122,27 @@ export default function UserListTable({
       <div className="space-y-3 md:hidden">
         {users.map((u, idx) => {
           const id = userKey(u, idx);
-          const expanded = expandedId === id;
-          const detailsId = `user-details-mobile-${id}`;
           return (
             <article key={id} className="rounded-xl border border-wl-line bg-white p-3 shadow-sm">
               <div className="flex items-start gap-3">
                 <button
                   type="button"
-                  aria-expanded={expanded}
-                  aria-controls={detailsId}
-                  onClick={() => toggle(id)}
-                  className="mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-wl-muted hover:bg-wl-pageAlt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/40"
+                  onClick={() => openProfile(u)}
+                  aria-label={`View profile for ${u.username || u.email || 'user'}`}
+                  className="mt-0.5 shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/40"
                 >
-                  <ChevronRight
-                    size={18}
-                    className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
-                    aria-hidden
-                  />
-                  <span className="sr-only">{expanded ? 'Hide details' : 'Show details'}</span>
+                  <Avatar username={u.username || ''} image={u.image} />
                 </button>
-                <Avatar username={u.username || ''} image={u.image} />
-                <div className="min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={() => openProfile(u)}
+                  className="min-w-0 flex-1 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/40"
+                >
                   <UserIdentity user={u} />
                   <span className={`mt-1 inline-block text-[11px] font-semibold uppercase ${roleClass(u.role)}`}>
                     {dash(u.role)}
                   </span>
-                </div>
+                </button>
                 <UserActionsMenu
                   user={u}
                   onStatusChange={status => onStatusChange(u, status)}
@@ -188,14 +152,9 @@ export default function UserListTable({
                   onUnlock={() => onUnlock(u)}
                 />
               </div>
-              <div className="mt-3 pl-11">
+              <div className="mt-3 pl-14">
                 <UserStatusText user={u} onViewBlockReason={onViewBlockReason} />
               </div>
-              {expanded ? (
-                <div id={detailsId} className="mt-3 border-t border-wl-line pt-3">
-                  <UserDetailGrid user={u} />
-                </div>
-              ) : null}
             </article>
           );
         })}
@@ -204,9 +163,6 @@ export default function UserListTable({
       <table className="hidden w-full table-fixed text-sm text-left md:table">
         <thead className="bg-wl-brandSoft text-xs uppercase text-wl-brand">
           <tr>
-            <th className="w-10 px-2 py-3">
-              <span className="sr-only">Details</span>
-            </th>
             <th className="w-14 px-2 py-3">
               <span className="sr-only">Avatar</span>
             </th>
@@ -221,66 +177,38 @@ export default function UserListTable({
         <tbody>
           {users.map((u, idx) => {
             const id = userKey(u, idx);
-            const expanded = expandedId === id;
-            const detailsId = `user-details-desktop-${id}`;
             return (
-              <React.Fragment key={id}>
-                <tr
-                  className="cursor-pointer border-b border-wl-line text-wl-ink hover:bg-wl-pageAlt"
-                  onClick={() => toggle(id)}
-                >
-                  <td className="px-1 py-2">
-                    <button
-                      type="button"
-                      aria-expanded={expanded}
-                      aria-controls={detailsId}
-                      onClick={e => {
-                        e.stopPropagation();
-                        toggle(id);
-                      }}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-wl-muted hover:bg-wl-brandSoft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/40"
-                    >
-                      <ChevronRight
-                        size={18}
-                        className={`transition-transform ${expanded ? 'rotate-90' : ''}`}
-                        aria-hidden
-                      />
-                      <span className="sr-only">{expanded ? 'Hide details' : 'Show details'}</span>
-                    </button>
-                  </td>
-                  <td className="px-2 py-2">
-                    <Avatar username={u.username || ''} image={u.image} />
-                  </td>
-                  <td className="px-3 py-2">
-                    <UserIdentity user={u} />
-                  </td>
-                  <td className={`px-3 py-2 text-sm uppercase ${roleClass(u.role)}`}>{dash(u.role)}</td>
-                  <td className="px-3 py-2">
-                    <UserStatusText user={u} onViewBlockReason={onViewBlockReason} />
-                  </td>
-                  <td className="px-2 py-2 text-right">
-                    <UserActionsMenu
-                      user={u}
-                      onStatusChange={status => onStatusChange(u, status)}
-                      onManage={() => onManage(u)}
-                      onImpersonate={() => onImpersonate(u)}
-                      onAudit={() => onAudit(u)}
-                      onUnlock={() => onUnlock(u)}
-                    />
-                  </td>
-                </tr>
-                {expanded ? (
-                  <tr className="border-b border-wl-line bg-wl-pageAlt/60">
-                    <td colSpan={6} className="px-4 py-3" id={detailsId}>
-                      <UserDetailGrid user={u} />
-                    </td>
-                  </tr>
-                ) : null}
-              </React.Fragment>
+              <tr
+                key={id}
+                className="cursor-pointer border-b border-wl-line text-wl-ink hover:bg-wl-pageAlt"
+                onClick={() => openProfile(u)}
+              >
+                <td className="px-2 py-2">
+                  <Avatar username={u.username || ''} image={u.image} />
+                </td>
+                <td className="px-3 py-2">
+                  <UserIdentity user={u} />
+                </td>
+                <td className={`px-3 py-2 text-sm uppercase ${roleClass(u.role)}`}>{dash(u.role)}</td>
+                <td className="px-3 py-2">
+                  <UserStatusText user={u} onViewBlockReason={onViewBlockReason} />
+                </td>
+                <td className="px-2 py-2 text-right" onClick={e => e.stopPropagation()}>
+                  <UserActionsMenu
+                    user={u}
+                    onStatusChange={status => onStatusChange(u, status)}
+                    onManage={() => onManage(u)}
+                    onImpersonate={() => onImpersonate(u)}
+                    onAudit={() => onAudit(u)}
+                    onUnlock={() => onUnlock(u)}
+                  />
+                </td>
+              </tr>
             );
           })}
         </tbody>
       </table>
+      {peerProfileModal}
     </div>
   );
 }

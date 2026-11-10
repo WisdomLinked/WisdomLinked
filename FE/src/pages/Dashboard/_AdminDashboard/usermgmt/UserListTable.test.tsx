@@ -1,6 +1,17 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
+const openPeerProfile = vi.fn();
+
+vi.mock('../../../../hooks/usePeerProfileModal', () => ({
+  usePeerProfileModal: () => ({
+    openPeerProfile,
+    closePeerProfile: vi.fn(),
+    peerProfileModal: null,
+  }),
+}));
+
 import UserListTable from './UserListTable';
 
 const user = {
@@ -17,7 +28,11 @@ const user = {
 };
 
 describe('UserListTable', () => {
-  it('keeps secondary fields hidden until a row is expanded', async () => {
+  beforeEach(() => {
+    openPeerProfile.mockClear();
+  });
+
+  it('opens the shared profile card when a desktop row is clicked', async () => {
     const actor = userEvent.setup();
     render(
       <UserListTable
@@ -32,25 +47,26 @@ describe('UserListTable', () => {
       />,
     );
 
-    expect(screen.getAllByText('Ann').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('ann@x.com').length).toBeGreaterThan(0);
     expect(screen.queryByText('Advisor')).toBeNull();
     expect(screen.queryByText('USA')).toBeNull();
 
-    await actor.click(screen.getAllByRole('button', { name: 'Show details' })[0]);
-    expect(screen.getAllByText('Advisor').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('USA').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('CA').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('LA').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('555-0100').length).toBeGreaterThan(0);
+    await actor.click(screen.getAllByText('Ann')[0]);
+    expect(openPeerProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'u1',
+        username: 'Ann',
+        role: 'expert',
+        email: 'ann@x.com',
+        title: 'Advisor',
+      }),
+    );
   });
 
-  it('opens a stored Spaces resume without prefixing the API host', async () => {
+  it('opens the profile card from the mobile identity control', async () => {
     const actor = userEvent.setup();
-    const spacesUrl = 'https://wisdomlinked-store.nyc3.digitaloceanspaces.com/resumes/1791253557640_Resume_v9.pdf';
     render(
       <UserListTable
-        users={[{ ...user, resume: spacesUrl }]}
+        users={[user]}
         emptyMessage="None"
         onStatusChange={vi.fn()}
         onManage={vi.fn()}
@@ -61,10 +77,10 @@ describe('UserListTable', () => {
       />,
     );
 
-    await actor.click(screen.getAllByRole('button', { name: 'Show details' })[0]);
-    const links = screen.getAllByRole('link', { name: 'resume' });
-    expect(links.length).toBeGreaterThan(0);
-    links.forEach(link => expect(link).toHaveAttribute('href', spacesUrl));
+    await actor.click(screen.getByRole('button', { name: 'View profile for Ann' }));
+    expect(openPeerProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'u1', username: 'Ann' }),
+    );
   });
 
   it('shows status as plain text, with no dropdown, in both the mobile card and the desktop row', () => {
@@ -165,7 +181,7 @@ describe('UserListTable', () => {
   it.each([
     ['mobile card', 0],
     ['desktop row', 1],
-  ])('opens the reason from the %s without expanding it, and keeps the row closed', async (_where, index) => {
+  ])('opens the reason from the %s without opening the profile card', async (_where, index) => {
     const actor = userEvent.setup();
     const onViewBlockReason = vi.fn();
     const blocked = { ...user, status: 'blocked' };
@@ -186,7 +202,7 @@ describe('UserListTable', () => {
     await actor.click(icons[index]);
     expect(onViewBlockReason).toHaveBeenCalledTimes(1);
     expect(onViewBlockReason).toHaveBeenCalledWith(blocked);
-    expect(screen.queryByText('555-0100')).toBeNull();
+    expect(openPeerProfile).not.toHaveBeenCalled();
   });
 
   it('a blocked and locked user shows both the "(locked)" tag and the reason icon', () => {

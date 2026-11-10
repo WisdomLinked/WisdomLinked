@@ -1163,17 +1163,22 @@ export const getChatUserProfile = async (req: any, res: Response) => {
         }
 
         const me = await User.findById(userId).select('role').lean();
+        const viewerRole = String(me?.role || '').toLowerCase();
+        const viewerIsAdmin = viewerRole === 'admin';
         const viewerMaySeeExpertResume =
-            String(me?.role || '').toLowerCase() === 'customer';
+            viewerRole === 'customer' || viewerIsAdmin;
 
-        const doc = await User.findOne({
+        const match: Record<string, unknown> = {
             _id: targetId,
             role: { $in: ['expert', 'customer'] },
-            status: { $ne: 'blocked' },
-        })
+        };
+        // Admins may open blocked accounts from User management; others may not.
+        if (!viewerIsAdmin) match.status = { $ne: 'blocked' };
+
+        const doc = await User.findOne(match)
             .select(
                 '_id username email image role status title country keywords customKeywords services specialNote description resume ' +
-                    'followers feedbacks rating price bookingNoticeHours createdAt ' +
+                    'followers feedbacks rating price bookingNoticeHours createdAt phoneNumber ' +
                     'currentUniversity gpa degreeSought intendedIntake rankingPercentile targetUniversities',
             )
             .populate({ path: 'keywords', select: 'value label approved' })
