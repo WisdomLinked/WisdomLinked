@@ -3,17 +3,13 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle,
   Calendar,
-  Check,
   ChevronRight,
-  Copy,
-  MousePointer2,
   Presentation,
   Search,
   Undo2,
   UserCircle,
   Users,
   Wallet,
-  X,
 } from 'lucide-react';
 import {
   doFilterPaymentHistories,
@@ -45,24 +41,19 @@ import {
   formatMoney,
   formatMoneyByCurrency,
   formatSnapshotDateParts,
-  initialsFromName,
   isValidRecordDate,
-  paymentBookingStart,
-  statusLabel,
-  statusPillClass,
-  statusTone,
   stripRefundPrefix,
 } from '../../utils/adminSnapshotDisplay';
 import { formatProfileLocation } from '../../utils/profileLocation';
 import { isLoginLocked } from '../../pages/Dashboard/_AdminDashboard/usermgmt/userStatus';
-import { OVERLAY_Z_DIALOG } from '../../utils/overlayLayers';
 import SnapshotKpiStrip, { paymentKpis, type KpiItem } from './SnapshotKpiStrip';
 import SnapshotMonthlyChart from './SnapshotMonthlyChart';
+import { AvatarMark, DateCell, Field, FOCUS, Section, StatusPill, UserCell } from './records/RecordAtoms';
+import RecordDetailPanel from './records/RecordDetailPanel';
+import { PaymentDetailFields, paymentHeader, toPaymentRow, type PaymentRow } from './records/paymentRecord';
 
 const AUTH_BASE = process.env.REACT_APP_AUTH_URL || '/user/';
 const PAGE_SIZE = 50;
-const FOCUS =
-  'focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/50';
 
 const META: Record<
   SnapshotListType,
@@ -193,119 +184,10 @@ type EventRow = {
   raw: AdminPlatformEventItem;
 };
 
-type PaymentRow = {
-  kind: 'payment';
-  id: string;
-  userLabel: string;
-  userMissing: boolean;
-  amount?: number;
-  currency?: string;
-  createdAt?: string;
-  status?: string;
-  description?: string;
-  paymentType?: string;
-  bookingStart?: unknown;
-  groupName?: string;
-  groupType?: string;
-  groupStatus?: string;
-  eventTitle?: string;
-  raw: PaymentHistoryRow;
-};
-
 type ListRow = PersonRow | EventRow | PaymentRow;
 
 function personName(user: { username?: string; email?: string } | null | undefined) {
   return user?.username || user?.email || '';
-}
-
-function paymentUser(row: PaymentHistoryRow): { label: string; missing: boolean; email?: string } {
-  const customerName = row.customer?.username || row.customer?.email;
-  const expertName = row.expert?.username || row.expert?.email;
-  const email = row.customer?.email || row.expert?.email || undefined;
-  if (customerName && expertName) {
-    return { label: `${customerName} → ${expertName}`, missing: false, email };
-  }
-  if (customerName || expertName) {
-    return { label: customerName || expertName || '', missing: false, email };
-  }
-  return { label: 'Unknown user', missing: true };
-}
-
-function StatusPill({ status, locked = false }: { status?: string; locked?: boolean }) {
-  if (!status) return null;
-  const tone = statusTone(status);
-  return (
-    <span className={`inline-flex items-baseline rounded-full px-2.5 py-0.5 text-xs font-medium ${statusPillClass(tone)}`}>
-      {statusLabel(status)}
-      {locked ? (
-        <span data-testid="snapshot-locked-tag" className="ml-1 text-[10px] font-normal text-rose-600">
-          (locked)
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
-function DateCell({ value }: { value: unknown }) {
-  const parts = formatSnapshotDateParts(value);
-  if (parts.missing) {
-    return (
-      <span className="inline-flex items-center gap-1 text-amber-800">
-        <AlertTriangle size={14} aria-hidden />
-        No date set
-      </span>
-    );
-  }
-  return (
-    <span className="block min-w-0">
-      <span className="block tabular-nums text-ink">{parts.date}</span>
-      <span className="block text-xs text-muted">
-        {parts.time} · {parts.relative}
-      </span>
-    </span>
-  );
-}
-
-function UserCell({ label, missing }: { label: string; missing: boolean }) {
-  if (missing) {
-    return (
-      <span className="inline-flex items-center gap-1 text-amber-800">
-        <AlertTriangle size={14} aria-hidden />
-        Unknown user
-      </span>
-    );
-  }
-  return <span className="break-words">{label}</span>;
-}
-
-function AvatarMark({
-  name,
-  image,
-  size = 36,
-}: {
-  name: string;
-  image?: string;
-  size?: number;
-}) {
-  const dim = `${size}px`;
-  if (image) {
-    return (
-      <img
-        src={image}
-        alt=""
-        className="shrink-0 rounded-full object-cover"
-        style={{ width: dim, height: dim }}
-      />
-    );
-  }
-  return (
-    <span
-      className="inline-flex shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-wl-brand"
-      style={{ width: dim, height: dim }}
-    >
-      {initialsFromName(name)}
-    </span>
-  );
 }
 
 function ofTotalHint(count: number | undefined): string | undefined {
@@ -536,90 +418,9 @@ async function fetchPage(
       ? all.filter(row => row.paymentType === 'refund')
       : all.filter(row => row.paymentType !== 'refund' && row.status !== 'refunded');
   return {
-    rows: filtered.map(row => {
-      const user = paymentUser(row);
-      const event = row.event && typeof row.event === 'object' ? row.event : null;
-      return {
-        kind: 'payment' as const,
-        id: String(row._id || ''),
-        userLabel: user.label,
-        userMissing: user.missing,
-        amount: row.amount,
-        currency: row.currency,
-        createdAt: row.createdAt,
-        status: row.status,
-        description: row.description,
-        paymentType: row.paymentType,
-        bookingStart: paymentBookingStart(row),
-        groupName: row.groupChat?.name,
-        groupType: row.groupChat?.type,
-        groupStatus: row.groupChat?.status,
-        eventTitle: event?.title,
-        raw: row,
-      };
-    }),
+    rows: filtered.map(toPaymentRow),
     total: Number(res?.totalCount ?? filtered.length),
   };
-}
-
-function Field({
-  label,
-  value,
-  wide,
-}: {
-  label: string;
-  value: React.ReactNode;
-  wide?: boolean;
-}) {
-  if (value == null || value === false || value === '') return null;
-  if (wide) {
-    return (
-      <div className="min-w-0 bg-surface px-3 py-2.5">
-        <dt className="text-xs text-muted">{label}</dt>
-        <dd className="mt-1 whitespace-pre-line break-words text-sm font-medium text-ink">{value}</dd>
-      </div>
-    );
-  }
-  return (
-    <div className="flex min-w-0 items-start justify-between gap-3 bg-surface px-3 py-2.5">
-      <dt className="shrink-0 text-xs text-muted">{label}</dt>
-      <dd className="min-w-0 break-words text-right text-sm font-medium text-ink">{value}</dd>
-    </div>
-  );
-}
-
-function CopyIntent({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
-      <code className="min-w-0 truncate font-mono text-xs text-ink">{value}</code>
-      <button
-        type="button"
-        aria-label={copied ? 'Copied' : 'Copy payment intent'}
-        className={`shrink-0 rounded p-0.5 text-muted hover:text-ink ${FOCUS}`}
-        onClick={async e => {
-          e.stopPropagation();
-          if (!navigator.clipboard?.writeText) return;
-          await navigator.clipboard.writeText(value);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1500);
-        }}
-      >
-        {copied ? <Check size={14} /> : <Copy size={14} />}
-      </button>
-    </span>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const items = React.Children.toArray(children).filter(Boolean);
-  if (!items.length) return null;
-  return (
-    <section className="min-w-0">
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">{title}</h4>
-      <dl className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">{items}</dl>
-    </section>
-  );
 }
 
 function headerCopy(row: ListRow, listType: SnapshotListType) {
@@ -634,20 +435,7 @@ function headerCopy(row: ListRow, listType: SnapshotListType) {
   if (row.kind === 'event') {
     return { title: row.title, subtitle: row.expertName, image: undefined, unknownUser: false };
   }
-  if (row.userMissing) {
-    return {
-      title: 'Unknown user',
-      subtitle: formatMoney(row.amount, row.currency) || undefined,
-      image: undefined,
-      unknownUser: true,
-    };
-  }
-  return {
-    title: row.userLabel,
-    subtitle: formatMoney(row.amount, row.currency) || undefined,
-    image: undefined,
-    unknownUser: false,
-  };
+  return paymentHeader(row);
 }
 
 function DetailFields({ row, listType }: { row: ListRow; listType: SnapshotListType }) {
@@ -722,86 +510,7 @@ function DetailFields({ row, listType }: { row: ListRow; listType: SnapshotListT
     );
   }
 
-  const reason = stripRefundPrefix(row.description);
-  const hasBooking =
-    listType !== 'refunds' && Boolean(row.groupName || row.eventTitle || row.bookingStart);
-  const intent = String(row.raw.paymentIntent || '').trim();
-  const receiptUrl = String(row.raw.receiptUrl || '').trim();
-  const partyEmail = row.raw.customer?.email || row.raw.expert?.email || '';
-  const stripeMode = String(row.raw.stripeMode || '').toLowerCase();
-  return (
-    <div className="space-y-5">
-      {listType === 'refunds' && row.userMissing ? (
-        <div className="flex gap-2 rounded-lg bg-warn-soft p-3 text-sm text-warn">
-          <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden />
-          <p>
-            No account is linked to this refund. It was recorded from Stripe without a matching user.
-            Check the charge in Stripe using the payment intent below.
-          </p>
-        </div>
-      ) : row.userMissing ? (
-        <p className="text-xs text-amber-800">No account is linked to this record.</p>
-      ) : null}
-      <Section title={listType === 'refunds' ? 'Refund' : 'Charge'}>
-        {!row.userMissing ? <Field label="User" value={row.userLabel} /> : null}
-        {partyEmail ? <Field label="Email" value={partyEmail} /> : null}
-        {row.paymentType ? (
-          <Field
-            label="Type"
-            value={
-              <span className="inline-flex items-center gap-2">
-                {statusLabel(row.paymentType)}
-                {stripeMode === 'test' ? (
-                  <span className="rounded-full bg-wl-brandSoft px-2 py-0.5 text-[11px] font-medium text-wl-brand">
-                    test · {row.paymentType || 'charge'}
-                  </span>
-                ) : null}
-              </span>
-            }
-          />
-        ) : null}
-        {row.status ? <Field label="Status" value={<StatusPill status={row.status} />} /> : null}
-        <Field label="Amount" value={formatMoney(row.amount, row.currency) || '—'} />
-        {reason ? (
-          <Field label={listType === 'refunds' ? 'Reason' : 'Description'} value={reason} wide />
-        ) : null}
-        <Field
-          label={listType === 'refunds' ? 'Refunded' : 'Date'}
-          value={<DateCell value={row.createdAt} />}
-        />
-        {intent ? <Field label="Payment intent" value={<CopyIntent value={intent} />} /> : null}
-        {receiptUrl ? (
-          <Field
-            label="Receipt"
-            value={
-              <a
-                href={receiptUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-wl-brand hover:underline"
-              >
-                Open receipt
-              </a>
-            }
-          />
-        ) : null}
-      </Section>
-      {!isValidRecordDate(row.createdAt) ? (
-        <p className="text-xs text-amber-800">No date is set for this record.</p>
-      ) : null}
-      {hasBooking ? (
-        <Section title="Booking">
-          {row.groupName ? <Field label="Session" value={row.groupName} /> : null}
-          {row.groupType ? <Field label="Kind" value={statusLabel(row.groupType)} /> : null}
-          {row.groupStatus ? (
-            <Field label="Session status" value={<StatusPill status={row.groupStatus} />} />
-          ) : null}
-          {row.eventTitle ? <Field label="Event" value={row.eventTitle} /> : null}
-          {row.bookingStart ? <Field label="Booking start" value={<DateCell value={row.bookingStart} />} /> : null}
-        </Section>
-      ) : null}
-    </div>
-  );
+  return <PaymentDetailFields row={row} variant={listType === 'refunds' ? 'refund' : 'payment'} />;
 }
 
 function DetailPanel({
@@ -815,88 +524,15 @@ function DetailPanel({
   onClose: () => void;
   variant: 'column' | 'sheet';
 }) {
-  useEffect(() => {
-    if (!row) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [row, onClose]);
-
   const header = row ? headerCopy(row, listType) : null;
-  const body = (
-    <div className="flex h-full min-h-0 min-w-0 flex-col">
-      {row && header ? (
-        <>
-          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line p-4">
-            <div className="flex min-w-0 items-start gap-3">
-              {header.unknownUser ? (
-                <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-warn-soft text-warn">
-                  <AlertTriangle size={22} aria-hidden />
-                </span>
-              ) : (
-                <AvatarMark name={header.title} image={header.image} size={48} />
-              )}
-              <div className="min-w-0">
-                <div className="break-words text-lg font-semibold text-ink">{header.title}</div>
-                {header.subtitle ? (
-                  <div className="mt-0.5 break-words text-sm text-muted">{header.subtitle}</div>
-                ) : null}
-                {listType !== 'refunds' && !header.unknownUser ? (
-                  <div className="mt-1.5">
-                    <StatusPill status={row.status} locked={row.kind === 'person' && row.locked} />
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className={`rounded-md p-1 text-muted hover:bg-sunken hover:text-ink ${FOCUS}`}
-              aria-label="Close details"
-            >
-              <X size={18} />
-            </button>
-          </div>
-          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4">
-            <DetailFields row={row} listType={listType} />
-          </div>
-        </>
-      ) : (
-        <div className="flex h-full min-w-0 flex-col items-center justify-center px-6 text-center">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-sunken text-muted">
-            <MousePointer2 size={20} aria-hidden />
-          </div>
-          <p className="font-medium text-ink">Nothing selected</p>
-          <p className="mt-1 text-sm text-muted">Select a row to see details.</p>
-        </div>
-      )}
-    </div>
-  );
-
-  if (variant === 'column') {
-    return (
-      <aside className="hidden min-h-0 min-w-0 flex-col border-l border-line bg-surface lg:flex">
-        {body}
-      </aside>
-    );
-  }
-
-  if (!row) return null;
+  const status =
+    row && header && listType !== 'refunds' && !header.unknownUser ? (
+      <StatusPill status={row.status} locked={row.kind === 'person' && row.locked} />
+    ) : undefined;
   return (
-    <div
-      className="fixed inset-0 lg:hidden"
-      style={{ zIndex: OVERLAY_Z_DIALOG }}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Record details"
-    >
-      <button type="button" className="absolute inset-0 bg-slate-900/40" aria-label="Close details" onClick={onClose} />
-      <div className="absolute inset-x-0 bottom-0 max-h-[85vh] overflow-hidden rounded-t-xl bg-surface shadow-[0_-8px_32px_rgba(35,76,106,0.16)]">
-        <div className="h-[min(85vh,640px)]">{body}</div>
-      </div>
-    </div>
+    <RecordDetailPanel header={header} status={status} onClose={onClose} variant={variant}>
+      {row ? <DetailFields row={row} listType={listType} /> : null}
+    </RecordDetailPanel>
   );
 }
 
