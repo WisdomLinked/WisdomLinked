@@ -5,20 +5,75 @@ import {
   CARD,
   FOCUS,
   acceptanceRate,
+  currentVersion,
   formatCount,
   formatTermsDate,
-  termsUrls,
   type AgreementContract,
+  type AgreementVersion,
 } from './termsModel';
 
 const ACTION =
-  `inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 ${FOCUS}`;
+  `inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 ${FOCUS}`;
 
-export default function CurrentVersionCard({ contract }: { contract: AgreementContract }) {
-  const current = contract.versions[0];
+export type VersionActions = {
+  onPreview: (version: AgreementVersion) => void;
+  onDownload: (version: AgreementVersion) => void;
+  onSigners: (version: AgreementVersion) => void;
+  downloadingVersion?: number | null;
+};
+
+export default function CurrentVersionCard({
+  contract,
+  actions,
+  onRetry,
+}: {
+  contract: AgreementContract;
+  actions: VersionActions;
+  onRetry: () => void;
+}) {
+  if (contract.status === 'loading') {
+    return (
+      <section className={`${CARD} p-5 sm:p-6`} aria-busy="true">
+        <p className="text-sm text-slate-500" role="status">
+          Loading the {contract.label.toLowerCase()} agreement…
+        </p>
+      </section>
+    );
+  }
+
+  if (contract.status === 'error') {
+    return (
+      <section className={`${CARD} p-5 sm:p-6`}>
+        <p className="text-sm text-slate-700" role="alert">
+          Could not load the {contract.label.toLowerCase()} agreement.
+        </p>
+        <button type="button" onClick={onRetry} className={`${ACTION} mt-3`}>
+          Try again
+        </button>
+      </section>
+    );
+  }
+
+  const current = currentVersion(contract);
+  if (!current) {
+    return (
+      <section className={`${CARD} p-5 sm:p-6`} aria-labelledby="terms-current-heading">
+        <h2 id="terms-current-heading" className="text-base font-semibold text-slate-900">
+          {contract.label} agreement
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">Audience: {contract.audienceLabel}</p>
+        <p className="mt-4 text-sm font-medium text-slate-900">No version published yet</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Nobody is asked to sign this agreement until a version is published. Use New version to publish
+          the first one.
+        </p>
+      </section>
+    );
+  }
+
   const pending = Math.max(0, contract.audience - current.accepted);
   const rate = acceptanceRate(current.accepted, contract.audience);
-  const urls = termsUrls(contract.key, current.number);
+  const downloading = actions.downloadingVersion === current.number;
 
   return (
     <section className={`${CARD} p-5 sm:p-6`} aria-labelledby="terms-current-heading">
@@ -34,21 +89,26 @@ export default function CurrentVersionCard({ contract }: { contract: AgreementCo
             Audience: {contract.audienceLabel} · Published {formatTermsDate(current.publishedAt)} by{' '}
             {current.publishedBy}
           </p>
-          <p className="text-sm text-slate-700">{current.notes}</p>
+          {current.notes ? <p className="text-sm text-slate-700">{current.notes}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          <a className={ACTION} href={urls.html} target="_blank" rel="noreferrer">
+          <button type="button" className={ACTION} onClick={() => actions.onPreview(current)}>
             <Eye className="h-4 w-4" aria-hidden />
             Preview
-          </a>
-          <a className={ACTION} href={urls.docx} download={`terms-${contract.key}-v${current.number}.docx`}>
+          </button>
+          <button
+            type="button"
+            className={ACTION}
+            disabled={downloading}
+            onClick={() => actions.onDownload(current)}
+          >
             <Download className="h-4 w-4" aria-hidden />
-            Download .docx
-          </a>
-          <a className={ACTION} href={urls.signers} target="_blank" rel="noreferrer">
+            {downloading ? 'Downloading…' : 'Download .docx'}
+          </button>
+          <button type="button" className={ACTION} onClick={() => actions.onSigners(current)}>
             <Users className="h-4 w-4" aria-hidden />
             Signers
-          </a>
+          </button>
         </div>
       </div>
 

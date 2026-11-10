@@ -11,6 +11,27 @@ const {
 } = require("../utils/termsHtml");
 
 const TERMS_AUDIENCES = ["shared", "expert", "customer"];
+const TERMS_NOTES_MAX = 500;
+
+/** Roles whose accounts must sign each contract. Mirrors listRequiredContracts. */
+const AUDIENCE_ROLES: Record<string, string[]> = {
+    shared: ["expert", "customer"],
+    expert: ["expert"],
+    customer: ["customer"],
+};
+
+/** Blocked accounts cannot sign in, so they are never asked to sign. */
+function audienceMemberFilter(audience: string) {
+    return { role: { $in: AUDIENCE_ROLES[audience] || [] }, status: { $ne: "blocked" } };
+}
+
+function readNotes(value: unknown): string {
+    const notes = String(value ?? "").trim();
+    if (notes.length > TERMS_NOTES_MAX) {
+        throw termsError(400, `Keep the change notes to ${TERMS_NOTES_MAX} characters or fewer.`);
+    }
+    return notes;
+}
 
 const SIGNUP_TERMS_REQUIRED = "Sign the current Terms and Agreement before creating an account.";
 const SIGNUP_TERMS_STALE = "The terms you signed are out of date. Reload the page and sign the current agreement.";
@@ -124,6 +145,7 @@ function versionMeta(doc: any) {
         contentHash: doc.contentHash,
         docxSha256: doc.docxSha256,
         originalFilename: doc.originalFilename || "",
+        notes: doc.notes || "",
         publishedAt: doc.publishedAt,
         ...publisherFields(doc),
     };
@@ -144,12 +166,15 @@ async function publishTermsVersion({
     buffer,
     filename,
     publisherId,
+    notes: rawNotes,
 }: {
     audience: string;
     buffer: Buffer;
     filename: string;
     publisherId: string;
+    notes?: unknown;
 }) {
+    const notes = readNotes(rawNotes);
     const html = await convertDocxToSanitizedHtml(buffer);
     const contentHash = sha256Text(html);
     const docxSha256 = sha256Buffer(buffer);
@@ -168,6 +193,7 @@ async function publishTermsVersion({
                 docx: buffer,
                 docxSha256,
                 originalFilename,
+                notes,
                 publisher: publisherId,
                 publishedAt,
             });
@@ -194,12 +220,62 @@ async function listVersionMetas(audience: string) {
     return rows.map(versionMeta);
 }
 
+/**
+ * Versions plus how many people the contract applies to and how many of them
+ * signed each version. Signatures from accounts that are no longer in the
+ * audience (deleted, blocked, role changed) are not counted, so accepted can
+ * never exceed the audience and pending never goes negative.
+ */
+async function listVersionOverview(audience: string) {
+    const versions = await listVersionMetas(audience);
+    const members = await User.find(audienceMemberFilter(audience)).select("_id").lean();
+    const memberIds = members.map((member: any) => member._id);
+    const signersByVersion = new Map<number, Set<string>>();
+    if (memberIds.length && versions.length) {
+        const rows = await TermsAcceptance.find({ audience, user: { $in: memberIds } })
+            .select("user version")
+            .lean();
+        for (const row of rows) {
+            const version = Number(row.version);
+            if (!signersByVersion.has(version)) signersByVersion.set(version, new Set());
+            signersByVersion.get(version)!.add(String(row.user));
+        }
+    }
+    return {
+        audience,
+        audienceSize: memberIds.length,
+        versions: versions.map((meta: any) => ({
+            ...meta,
+            accepted: signersByVersion.get(Number(meta.version))?.size || 0,
+        })),
+    };
+}
+
 async function getVersionDocument(audience: string, version: number, withDocx = false) {
     let query = TermsVersion.findOne({ audience, version: Number(version) });
     query = withDocx ? query.select("+docx") : query.select("-docx");
     const doc = await query.lean();
     if (!doc) throw termsError(404, "That agreement version was not found.");
+    if (withDocx) {
+        const bytes = docxBytes(doc.docx);
+        if (!bytes) throw termsError(404, "That agreement file was not found.");
+        doc.docx = bytes;
+    }
     return doc;
+}
+
+/**
+ * .lean() returns stored files as a BSON Binary, not a Buffer. Express would
+ * send a Binary as JSON (a quoted base64 string), which is not a .docx.
+ */
+function docxBytes(value: any): Buffer | null {
+    if (Buffer.isBuffer(value)) return value;
+    if (value?.buffer instanceof Uint8Array) {
+        const end = typeof value.position === "number" ? value.position : value.buffer.length;
+        return Buffer.from(value.buffer.subarray(0, end));
+    }
+    if (value instanceof Uint8Array) return Buffer.from(value);
+    return null;
 }
 
 function safeDownloadName(name: string, audience: string, version: number) {
@@ -495,6 +571,7 @@ async function getCurrentSharedPublic() {
 
 module.exports = {
     TERMS_AUDIENCES,
+    TERMS_NOTES_MAX,
     SIGNUP_TERMS_REQUIRED,
     SIGNUP_TERMS_STALE,
     normalizeAudience,
@@ -504,6 +581,7 @@ module.exports = {
     previewTermsVersion,
     publishTermsVersion,
     listVersionMetas,
+    listVersionOverview,
     getVersionDocument,
     safeDownloadName,
     listSigners,

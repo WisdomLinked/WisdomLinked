@@ -16,8 +16,14 @@ const {
     getVisibleCurrent,
     searchTermsUsers,
     gateSignupAgreement,
+    listVersionMetas,
+    listVersionOverview,
+    TERMS_NOTES_MAX,
 } = require('../services/termsAgreement');
 const { register } = require('../controllers/auth.controller');
+const { listTermsVersions, publishTerms, downloadTermsDocx } = require('../controllers/terms.controller');
+const { Binary } = require('mongoose').mongo;
+const adminAudit = require('../utils/adminAudit');
 
 const versions: any[] = [];
 const acceptances: any[] = [];
@@ -755,5 +761,191 @@ test('verifyRegistration does not attach a pending signature to a different acco
         User.findById = originalFindById;
         PendingUser.findOne = originalPendingFindOne;
         restoreMemory();
+    }
+});
+
+test('publishing stores trimmed change notes and lists them with the version', async () => {
+    installMemory();
+    try {
+        const published = await publishTermsVersion({
+            audience: 'shared',
+            buffer: docx('terms-v1.docx'),
+            filename: 'shared-v1.docx',
+            publisherId: 'admin1',
+            notes: '  Clarified refund window  ',
+        });
+        assert.equal(published.notes, 'Clarified refund window');
+        assert.equal(versions[0].notes, 'Clarified refund window');
+
+        await publishTermsVersion({
+            audience: 'shared',
+            buffer: docx('terms-v2.docx'),
+            filename: 'shared-v2.docx',
+            publisherId: 'admin1',
+        });
+        assert.equal(versions[1].notes, '');
+
+        const listed = await listVersionMetas('shared');
+        assert.deepEqual(listed.map((row: any) => row.notes), ['Clarified refund window', '']);
+    } finally {
+        restoreMemory();
+    }
+});
+
+test('publishing refuses change notes over the limit and creates nothing', async () => {
+    installMemory();
+    try {
+        await assert.rejects(
+            publishTermsVersion({
+                audience: 'shared',
+                buffer: docx('terms-v1.docx'),
+                filename: 'shared-v1.docx',
+                publisherId: 'admin1',
+                notes: 'x'.repeat(TERMS_NOTES_MAX + 1),
+            }),
+            (err: any) => err.status === 400,
+        );
+        assert.equal(versions.length, 0);
+
+        const atLimit = await publishTermsVersion({
+            audience: 'shared',
+            buffer: docx('terms-v1.docx'),
+            filename: 'shared-v1.docx',
+            publisherId: 'admin1',
+            notes: 'x'.repeat(TERMS_NOTES_MAX),
+        });
+        assert.equal(atLimit.notes.length, TERMS_NOTES_MAX);
+    } finally {
+        restoreMemory();
+    }
+});
+
+function installAudience() {
+    const people = [
+        { _id: 'exp-active', role: 'expert', status: 'active' },
+        { _id: 'exp-blocked', role: 'expert', status: 'blocked' },
+        { _id: 'cus-review', role: 'customer', status: 'review' },
+        { _id: 'cus-active', role: 'customer', status: 'active' },
+        { _id: 'admin-1', role: 'admin', status: 'active' },
+    ];
+    User.find = (filter: any) => chain(() => people.filter((person) => (
+        filter.role.$in.includes(person.role) && person.status !== filter.status.$ne
+    )));
+    versions.push(
+        { audience: 'shared', version: 1, contentHash: 'h1', originalFilename: 'v1.docx', notes: 'first' },
+        { audience: 'shared', version: 2, contentHash: 'h2', originalFilename: 'v2.docx', notes: 'second' },
+        { audience: 'expert', version: 1, contentHash: 'e1', originalFilename: 'e1.docx' },
+    );
+    const sign = (user: string, audience: string, version: number) =>
+        acceptances.push({ user, audience, version, contentHash: 'x', signedAt: new Date() });
+    sign('exp-active', 'shared', 1);
+    sign('cus-review', 'shared', 1);
+    sign('exp-active', 'shared', 2);
+    sign('exp-blocked', 'shared', 2);
+    sign('admin-1', 'shared', 2);
+    sign('gone-user', 'shared', 2);
+    sign('exp-blocked', 'expert', 1);
+}
+
+test('overview counts the audience and signers per version, ignoring blocked, admin and missing accounts', async () => {
+    installMemory();
+    installAudience();
+    try {
+        const shared = await listVersionOverview('shared');
+        assert.equal(shared.audienceSize, 3);
+        assert.deepEqual(shared.versions.map((row: any) => [row.version, row.accepted, row.notes]), [
+            [1, 2, 'first'],
+            [2, 1, 'second'],
+        ]);
+
+        const expert = await listVersionOverview('expert');
+        assert.equal(expert.audienceSize, 1);
+        assert.deepEqual(expert.versions.map((row: any) => row.accepted), [0]);
+
+        const customer = await listVersionOverview('customer');
+        assert.equal(customer.audienceSize, 2);
+        assert.deepEqual(customer.versions, []);
+    } finally {
+        restoreMemory();
+    }
+});
+
+test('admin versions endpoint returns the audience size with each version accepted count', async () => {
+    installMemory();
+    installAudience();
+    try {
+        const res = createRes();
+        await listTermsVersions({ params: { audience: 'shared' } } as any, res);
+        assert.equal(res.statusCode, 200);
+        assert.equal(res.body.audience, 'shared');
+        assert.equal(res.body.audienceSize, 3);
+        assert.deepEqual(res.body.versions.map((row: any) => row.accepted), [2, 1]);
+
+        const bad = createRes();
+        await listTermsVersions({ params: { audience: 'student' } } as any, bad);
+        assert.equal(bad.statusCode, 400);
+    } finally {
+        restoreMemory();
+    }
+});
+
+test('admin publish endpoint saves the change notes sent with the upload', async () => {
+    installMemory();
+    const originalLog = adminAudit.logAdminAction;
+    adminAudit.logAdminAction = () => {};
+    try {
+        const res = createRes();
+        await publishTerms({
+            user: { userId: 'admin1', role: 'admin' },
+            params: { audience: 'shared' },
+            body: { notes: 'Clarified refund window' },
+            file: { buffer: docx('terms-v1.docx'), originalname: 'shared-v1.docx' },
+        } as any, res);
+        assert.equal(res.statusCode, 201);
+        assert.equal(res.body.notes, 'Clarified refund window');
+        assert.equal(versions[0].notes, 'Clarified refund window');
+
+        const tooLong = createRes();
+        await publishTerms({
+            user: { userId: 'admin1', role: 'admin' },
+            params: { audience: 'shared' },
+            body: { notes: 'x'.repeat(TERMS_NOTES_MAX + 1) },
+            file: { buffer: docx('terms-v2.docx'), originalname: 'shared-v2.docx' },
+        } as any, tooLong);
+        assert.equal(tooLong.statusCode, 400);
+        assert.equal(versions.length, 1);
+    } finally {
+        adminAudit.logAdminAction = originalLog;
+        restoreMemory();
+    }
+});
+
+test('docx download sends the original file bytes when the database returns a BSON Binary', async () => {
+    const original = docx('terms-v2.docx');
+    const stored: Record<string, any> = {
+        binary: { audience: 'shared', version: 2, originalFilename: 'terms-v2.docx', docx: new Binary(original) },
+        buffer: { audience: 'shared', version: 3, originalFilename: 'terms-v3.docx', docx: Buffer.from(original) },
+        missing: { audience: 'shared', version: 4, originalFilename: 'terms-v4.docx' },
+    };
+    const byVersion: Record<number, any> = { 2: stored.binary, 3: stored.buffer, 4: stored.missing };
+    const originalFindOne = TermsVersion.findOne;
+    TermsVersion.findOne = (filter: any) => chain(() => ({ ...byVersion[filter.version] }));
+    try {
+        for (const version of [2, 3]) {
+            const headers: Record<string, string> = {};
+            const res = createRes();
+            res.setHeader = (name: string, value: string) => { headers[name] = value; };
+            await downloadTermsDocx({ params: { audience: 'shared', version: String(version) } } as any, res);
+            assert.equal(res.statusCode, 200);
+            assert.equal(Buffer.isBuffer(res.body), true);
+            assert.equal(Buffer.compare(res.body, original), 0);
+            assert.match(headers['Content-Disposition'], new RegExp(`terms-v${version}\\.docx`));
+        }
+        const missing = createRes();
+        missing.setHeader = () => {};
+        await downloadTermsDocx({ params: { audience: 'shared', version: '4' } } as any, missing);
+        assert.equal(missing.statusCode, 404);
+    } finally {
+        TermsVersion.findOne = originalFindOne;
     }
 });

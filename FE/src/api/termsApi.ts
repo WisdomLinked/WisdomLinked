@@ -17,9 +17,19 @@ export type TermsVersionMeta = {
     contentHash: string;
     docxSha256?: string;
     originalFilename: string;
+    notes?: string;
     publishedAt: string;
     publisherId?: string;
     publisherName?: string;
+    /** Signers of this version who are still in its audience. */
+    accepted?: number;
+};
+
+export type TermsOverview = {
+    audience: TermsAudience;
+    /** Accounts that must sign this contract (blocked accounts excluded). */
+    audienceSize: number;
+    versions: TermsVersionMeta[];
 };
 
 export type TermsAgreementPayload = {
@@ -96,6 +106,16 @@ export async function listTermsVersions(audience: TermsAudience): Promise<TermsV
     return Array.isArray(res.data?.versions) ? res.data.versions : [];
 }
 
+export async function getTermsOverview(audience: TermsAudience): Promise<TermsOverview> {
+    const res = await apiClient.get(`admin/terms/${audience}/versions`);
+    const audienceSize = Number(res.data?.audienceSize);
+    return {
+        audience,
+        audienceSize: Number.isFinite(audienceSize) && audienceSize > 0 ? audienceSize : 0,
+        versions: Array.isArray(res.data?.versions) ? res.data.versions : [],
+    };
+}
+
 export async function previewTerms(audience: TermsAudience, file: File) {
     const form = new FormData();
     form.append('media', file);
@@ -103,8 +123,9 @@ export async function previewTerms(audience: TermsAudience, file: File) {
     return res.data as { html: string; contentHash: string };
 }
 
-export async function publishTerms(audience: TermsAudience, file: File) {
+export async function publishTerms(audience: TermsAudience, file: File, notes?: string) {
     const form = new FormData();
+    if (notes) form.append('notes', notes);
     form.append('media', file);
     const res = await apiClient.post(`admin/terms/${audience}/publish`, form, { headers: await csrfHeaders() });
     return res.data as TermsVersionMeta & { html: string };

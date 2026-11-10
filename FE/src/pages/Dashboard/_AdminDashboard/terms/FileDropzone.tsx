@@ -110,7 +110,7 @@ export default function FileDropzone({
         </div>
       )}
       {error ? (
-        <p className="mt-2 text-sm text-red-700" role="alert">
+        <p className="mt-2 text-sm text-rose-700" role="alert">
           {error}
         </p>
       ) : null}

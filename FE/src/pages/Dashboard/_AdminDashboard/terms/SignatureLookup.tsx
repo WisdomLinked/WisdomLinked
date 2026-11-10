@@ -20,7 +20,7 @@ export default function SignatureLookup({ contracts }: { contracts: AgreementCon
   const [submitted, setSubmitted] = useState('');
   const results = submitted ? searchUsers(submitted) : null;
   const currentByKey = Object.fromEntries(
-    contracts.map(contract => [contract.key, contract.versions[0].number]),
+    contracts.map(contract => [contract.key, contract.versions[0]?.number ?? 0]),
   ) as Record<AgreementKey, number>;
 
   const runSearch = (event: React.FormEvent) => {

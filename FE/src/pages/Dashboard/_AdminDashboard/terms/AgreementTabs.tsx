@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import {
   AGREEMENT_KEYS,
   FOCUS,
+  currentVersion,
   type AgreementContract,
   type AgreementKey,
 } from './termsModel';
@@ -39,7 +40,7 @@ export default function AgreementTabs({
     >
       {contracts.map(contract => {
         const active = contract.key === selected;
-        const current = contract.versions[0];
+        const current = currentVersion(contract);
         return (
           <button
             key={contract.key}
@@ -60,9 +61,11 @@ export default function AgreementTabs({
             }`}
           >
             {contract.label}
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-              v{current.number}
-            </span>
+            {current ? (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                v{current.number}
+              </span>
+            ) : null}
           </button>
         );
       })}
