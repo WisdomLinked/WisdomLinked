@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  alignMonthlyPoints,
   DEFAULT_SNAPSHOT_RANGE,
   parseSnapshotRangeKey,
   resolveSnapshotSelection,
+  snapshotChartMonthKeys,
   snapshotCustomRangeValid,
   snapshotRangeBounds,
   snapshotRangeDescription,
   snapshotRangePhrase,
   snapshotRangeQuery,
+  trailingMonthKeys,
 } from './adminSnapshotRange';
 
 describe('adminSnapshotRange', () => {
@@ -61,5 +64,23 @@ describe('adminSnapshotRange', () => {
       rangeKey: 'custom',
       customRange: { startDate: '2026-01-01', endDate: '2026-03-31' },
     });
+  });
+
+  it('chart month keys match the selected range length for every tile', () => {
+    const now = new Date(Date.UTC(2026, 10, 9)); // Nov 9, 2026
+    expect(trailingMonthKeys(3, now)).toEqual(['2026-09', '2026-10', '2026-11']);
+    expect(snapshotChartMonthKeys('3m', null, [], now)).toHaveLength(3);
+    expect(snapshotChartMonthKeys('6m', null, [], now)).toHaveLength(6);
+    expect(snapshotChartMonthKeys('1y', null, [], now)).toHaveLength(12);
+    expect(
+      snapshotChartMonthKeys('custom', { startDate: '2026-01-15', endDate: '2026-03-02' }, [], now),
+    ).toEqual(['2026-01', '2026-02', '2026-03']);
+    expect(
+      snapshotChartMonthKeys('all', null, ['2026-08', '2026-10'], now),
+    ).toEqual(['2026-08', '2026-09', '2026-10', '2026-11']);
+    expect(alignMonthlyPoints(['2026-09', '2026-10'], [{ month: '2026-10', count: 4 }])).toEqual([
+      { month: '2026-09', count: 0 },
+      { month: '2026-10', count: 4 },
+    ]);
   });
 });

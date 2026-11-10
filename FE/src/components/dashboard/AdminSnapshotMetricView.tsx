@@ -24,12 +24,15 @@ import {
 import type { PaymentHistoryRow } from '../../pages/Dashboard/_AdminDashboard/payment/paymentHistoryUtils';
 import SnapshotRangeControl from './SnapshotRangeControl';
 import {
+  isAnalyticsSnapshotType,
   isSnapshotListType,
-  SNAPSHOT_LIST_TYPES,
+  snapshotTabTypes,
   type SnapshotListType,
 } from './adminSnapshotTypes';
 import {
+  alignMonthlyPoints,
   resolveSnapshotSelection,
+  snapshotChartMonthKeys,
   snapshotRangeBounds,
   snapshotRangePhrase,
   snapshotRangeQuery,
@@ -262,15 +265,40 @@ function kpisFor(type: SnapshotListType, stats: AdminDashboardStatsData | null):
   ];
 }
 
-function monthlyFor(type: SnapshotListType, stats: AdminDashboardStatsData | null) {
+function monthlySeriesFor(
+  type: SnapshotListType,
+  stats: AdminDashboardStatsData | null,
+  rangeKey: SnapshotRangeKey,
+  customRange?: SnapshotCustomRange | null,
+) {
   const monthly = stats?.monthly;
   if (!monthly) return { points: undefined as AdminSnapshotMonthlyPoint[] | undefined, useAmount: false };
-  if (type === 'experts') return { points: monthly.experts, useAmount: false };
-  if (type === 'students') return { points: monthly.customers, useAmount: false };
-  if (type === 'sessions') return { points: monthly.sessions, useAmount: false };
-  if (type === 'seminars') return { points: monthly.seminars, useAmount: false };
-  if (type === 'payments') return { points: monthly.payments, useAmount: true };
-  return { points: monthly.refunds, useAmount: false };
+  const raw =
+    type === 'experts'
+      ? monthly.experts
+      : type === 'students'
+        ? monthly.customers
+        : type === 'sessions'
+          ? monthly.sessions
+          : type === 'seminars'
+            ? monthly.seminars
+            : type === 'payments'
+              ? monthly.payments
+              : monthly.refunds;
+  const useAmount = type === 'payments';
+  const dataMonths = [
+    ...(monthly.experts || []),
+    ...(monthly.customers || []),
+    ...(monthly.sessions || []),
+    ...(monthly.seminars || []),
+    ...(monthly.payments || []),
+    ...(monthly.refunds || []),
+  ].map(p => p.month);
+  const keys = snapshotChartMonthKeys(rangeKey, customRange, dataMonths);
+  return {
+    points: alignMonthlyPoints(keys, raw) as AdminSnapshotMonthlyPoint[],
+    useAmount,
+  };
 }
 
 function countLabel(n: number, singular: string, plural: string) {
@@ -675,7 +703,7 @@ export default function AdminSnapshotMetricView() {
     (visible as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest' });
   }, [selected]);
 
-  const chart = monthlyFor(listType, stats);
+  const chart = monthlySeriesFor(listType, stats, rangeKey, customRange);
   const kpis = kpisFor(listType, stats);
   const showWhen = hasWhenToggle(listType);
   const showStatusFilter = STATUS_OPTIONS[listType].length > 0;
@@ -695,10 +723,14 @@ export default function AdminSnapshotMetricView() {
         <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <Link
-              to={`${AUTH_BASE}admindashboard${snapshotRangeQuery(rangeKey, customRange)}`}
+              to={
+                isAnalyticsSnapshotType(listType)
+                  ? `${AUTH_BASE}admindashboard/analytics${snapshotRangeQuery(rangeKey, customRange)}`
+                  : `${AUTH_BASE}admindashboard${snapshotRangeQuery(rangeKey, customRange)}`
+              }
               className={`text-sm text-wl-brand hover:underline ${FOCUS}`}
             >
-              ← Overview
+              {isAnalyticsSnapshotType(listType) ? '← Analytics' : '← Overview'}
             </Link>
             <div className="mt-2 flex items-start gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-soft text-wl-brand" aria-hidden>
@@ -716,7 +748,7 @@ export default function AdminSnapshotMetricView() {
         </div>
 
         <div className="flex min-w-0 flex-wrap gap-2">
-          {SNAPSHOT_LIST_TYPES.map(type => (
+          {snapshotTabTypes(listType).map(type => (
             <button
               key={type}
               type="button"

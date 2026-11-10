@@ -373,6 +373,7 @@ test("computeMonthlyBreakdown fills every month in the range", async () => {
         // The range ends at 00:00 on June 1 (exclusive), so June is not one of its months.
         assert.deepEqual(monthly.experts.map((p) => p.month), ["2026-04", "2026-05"]);
         assert.deepEqual(monthly.experts.map((p) => p.count), [0, 3]);
+        assert.deepEqual(monthly.customers.map((p) => p.month), ["2026-04", "2026-05"]);
         assert.equal(monthly.payments[0].amountsByCurrency?.usd, 500);
     } finally {
         if (prevMode === undefined) delete process.env.PAYMENTS_VISIBLE_MODE;
@@ -505,9 +506,10 @@ test("all-time monthly series fill the gaps between months that have data", asyn
     assert.deepEqual(pay.monthly.map((p) => [p.month, p.count]), [["2026-07", 1], ["2026-08", 0], ["2026-09", 0], ["2026-10", 1], ["2026-11", 0]]);
     const User = { countDocuments: async () => 0, aggregate: async () => [{ _id: "2026-08", count: 2 }, { _id: "2026-10", count: 1 }] };
     const monthly = await computeMonthlyBreakdown({ User, Event: none, GroupChat: none, PaymentHistory }, null, null, now);
+    // All series share the earliest→now axis (payments start in July), so empty months stay as gaps.
     assert.deepEqual(monthly.payments, pay.monthly);
-    assert.deepEqual(monthly.experts.map((p) => [p.month, p.count]), [["2026-08", 2], ["2026-09", 0], ["2026-10", 1], ["2026-11", 0]]);
-    assert.deepEqual(monthly.sessions, [], "a chart with no data at all stays empty");
+    assert.deepEqual(monthly.experts.map((p) => [p.month, p.count]), [["2026-07", 0], ["2026-08", 2], ["2026-09", 0], ["2026-10", 1], ["2026-11", 0]]);
+    assert.deepEqual(monthly.sessions.map((p) => [p.month, p.count]), [["2026-07", 0], ["2026-08", 0], ["2026-09", 0], ["2026-10", 0], ["2026-11", 0]]);
 });
 
 test("computePaymentSnapshot with a start and no end is open-ended, and its months run to now or a later data month", async () => {

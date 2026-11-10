@@ -1722,23 +1722,23 @@ export default function StudentDashboard() {
           ) : activeItem === 'history' ? (
             <StudentPaymentHistory />
           ) : (
-            <div className="px-6 pb-24 pt-4">
-              <AccountReviewBanner className="mb-6" />
-              <header className="mb-6">
+            <div className="px-6 pt-4 pb-7">
+              <AccountReviewBanner className="mb-4" />
+              <header className="mb-5">
                 <h1 className={DASHBOARD_PAGE_TITLE}>
                   {greeting}, {studentName.split(' ')[0]}!
                 </h1>
-                <p className="mt-1 max-w-xl font-sans text-sm text-slate-500">
+                <p className="mt-1 max-w-xl font-sans text-[13px] text-slate-500">
                   Here&apos;s what&apos;s happening with your WisdomLinked sessions today.
                 </p>
               </header>
 
-              <div className="mb-6">
+              <div className="mb-5">
                 <StudentProfileCompletionCard onOpenSection={openProfileSection} />
               </div>
 
-              <div className="grid items-stretch gap-6 lg:grid-cols-3 xl:grid-cols-1">
-                <section className="min-w-0 lg:col-span-2">
+              <div className="grid items-stretch gap-5 lg:grid-cols-[1fr_380px]">
+                <section className="min-w-0">
                   <StatsGrid cards={cards} fill />
                 </section>
                 <div className="min-w-0">
@@ -1746,7 +1746,6 @@ export default function StudentDashboard() {
                     nextSeminar={nextSeminar}
                     nextOneToOne={nextOneToOne}
                     onOpenDetails={setCountdownDetail}
-                    onFindExperts={() => setActiveItem('experts')}
                     onJoinSeminar={() => openSeminarChat(nextSeminar?.id)}
                     onJoinOneToOne={() => {
                       if (nextOneToOne?.id) openAppointmentChat(

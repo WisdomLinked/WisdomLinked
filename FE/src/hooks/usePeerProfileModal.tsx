@@ -7,6 +7,10 @@ export interface PeerProfileSeed {
   userId: string;
   username?: string;
   image?: string | null;
+  /** When known (e.g. admin User management), seed the card with the correct layout immediately. */
+  role?: string;
+  email?: string;
+  title?: string;
 }
 
 /**
@@ -27,7 +31,14 @@ export function usePeerProfileModal(viewerRole?: string) {
       const peerId = String(seed?.userId || "");
       if (!peerId) return;
       const fallback = buildFallbackChatProfile(
-        { userId: peerId, username: seed.username, image: seed.image ?? null },
+        {
+          userId: peerId,
+          username: seed.username,
+          image: seed.image ?? null,
+          role: seed.role,
+          email: seed.email,
+          title: seed.title,
+        },
         String(viewerRole || ""),
       );
       setPeerProfile(fallback);

@@ -212,7 +212,9 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     const phoneDisplay = toE164(person?.phoneNumber) || String(person?.phoneNumber ?? "").trim();
     const showPhone = Boolean(phoneDisplay) && (isExpert ? viewerRoleLc === "admin" : viewerCanSeeStudentPrivate);
     const hasResume = hasResumeForPreview(person?.resume);
-    const showResume = hasResume && (!isExpert || viewerIsStudent || !viewerRole);
+    // Students see expert résumés; admins see everyone’s; experts do not see peer expert résumés.
+    const showResume =
+        hasResume && (!isExpert || viewerIsStudent || viewerRoleLc === "admin" || !viewerRole);
 
     // Student-specific fields (some are not yet captured at registration —
     // rendered here with placeholders until the profile/registration form adds them).

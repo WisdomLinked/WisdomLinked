@@ -18,6 +18,7 @@ import {
   Settings,
   CircleDollarSign,
   Banknote,
+  ChartColumn,
 } from 'lucide-react';
 
 import Sidebar from '../components/layout/Sidebar';
@@ -25,8 +26,12 @@ import TopBar from '../components/layout/TopBar';
 import type { TopBarNotificationItem } from '../components/layout/TopBar';
 import StatCard from '../components/ui/StatCard';
 import AdminMetricsPanel from '../components/dashboard/AdminMetricsPanel';
+import AdminAnalytics from '../components/dashboard/AdminAnalytics';
 import AdminSnapshotMetricView from '../components/dashboard/AdminSnapshotMetricView';
-import type { SnapshotListType } from '../components/dashboard/adminSnapshotTypes';
+import {
+  isAnalyticsSnapshotType,
+  type SnapshotListType,
+} from '../components/dashboard/adminSnapshotTypes';
 import { doGetAdminDashboardStats, type AdminDashboardStatsData } from '../api/api';
 import {
   DEFAULT_SNAPSHOT_RANGE,
@@ -93,13 +98,20 @@ const adminNavItems = [
   { id: 'auditLog', label: 'Audit log', icon: ScrollText },
   { id: 'chatBotQA', label: 'HelpBot Q&A', icon: Bot },
   { id: 'termsAgreement', label: 'Terms & Agreement', icon: FileText },
+  { id: 'analytics', label: 'Analytics', icon: ChartColumn },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
 function pathToSection(pathname: string): string {
   const m = pathname.match(/\/admindashboard\/?(.*)$/);
   const rest = (m?.[1] || '').replace(/\/$/, '');
-  if (!rest || rest.startsWith('snapshot')) return 'dashboard';
+  if (!rest) return 'dashboard';
+  if (rest.startsWith('snapshot/')) {
+    const listType = rest.split('/')[1] || '';
+    return isAnalyticsSnapshotType(listType) ? 'analytics' : 'dashboard';
+  }
+  if (rest.startsWith('snapshot')) return 'dashboard';
+  if (rest.startsWith('analytics')) return 'analytics';
   return rest;
 }
 
@@ -551,6 +563,8 @@ export default function AdminDashboard() {
                             ? 'Featured experts'
                           : section === 'auditLog'
                             ? 'Audit log'
+                          : section === 'analytics'
+                            ? 'Analytics'
                           : section === 'settings'
                             ? 'Settings'
                           : 'Admin Dashboard';
@@ -584,6 +598,7 @@ export default function AdminDashboard() {
     <div className="h-[calc(100vh-56px)] overflow-y-auto bg-wl-page">
       <Routes>
         <Route index element={<AdminOverview go={goToSection} />} />
+        <Route path="analytics" element={<AdminAnalytics go={goToSection} />} />
         <Route path="snapshot/:listType" element={<AdminSnapshotMetricView />} />
         <Route path="usermgmt" element={<UserMgmt />} />
         <Route path="payment" element={<Payment />} />

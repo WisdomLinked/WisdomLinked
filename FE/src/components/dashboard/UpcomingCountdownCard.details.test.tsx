@@ -56,21 +56,12 @@ describe('UpcomingCountdownCard session details', () => {
     expect(screen.queryByRole('button', { name: 'Weekly Dev Catchup' })).toBeNull();
   });
 
-  it('shows a live pill only after the session has started', () => {
-    render(
-      <UpcomingCountdownCard
-        nextSeminar={{
-          title: 'Weekly Dev Catchup',
-          startAt: Date.now() - 60_000,
-          durationMinutes: 45,
-        }}
-      />,
-    );
+  it('shows the Live status pill on the panel', () => {
+    render(<UpcomingCountdownCard nextSeminar={seminar} />);
     expect(screen.getByText('Live')).toBeInTheDocument();
-    expect(screen.getByText('In progress')).toBeInTheDocument();
   });
 
-  it('keeps a future session from looking live', () => {
+  it('shows an HH:MM:SS starts-in countdown for future sessions', () => {
     render(
       <UpcomingCountdownCard
         nextSeminar={{
@@ -80,18 +71,15 @@ describe('UpcomingCountdownCard session details', () => {
         }}
       />,
     );
-    expect(screen.queryByText('Live')).toBeNull();
-    expect(screen.getByText(/Starts in/)).toBeInTheDocument();
+    expect(screen.getByText(/Starts in/i)).toBeInTheDocument();
+    expect(screen.getByText(/\d{2}:\d{2}:\d{2}/)).toBeInTheDocument();
   });
 
-  it('shows an empty state with a find-experts action', async () => {
-    const actor = userEvent.setup();
-    const onFindExperts = vi.fn();
-    render(<UpcomingCountdownCard onFindExperts={onFindExperts} />);
-    expect(screen.getByText('No upcoming sessions')).toBeInTheDocument();
-    expect(screen.queryByText('Next seminar')).toBeNull();
-    await actor.click(screen.getByRole('button', { name: 'Find experts' }));
-    expect(onFindExperts).toHaveBeenCalledTimes(1);
+  it('keeps empty seminar and 1:1 rows when nothing is booked', () => {
+    render(<UpcomingCountdownCard />);
+    expect(screen.getByText('No upcoming seminar')).toBeInTheDocument();
+    expect(screen.getByText('No upcoming 1:1 session')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Find experts' })).toBeNull();
   });
 
   it('keeps the join buttons working beside a clickable title', async () => {

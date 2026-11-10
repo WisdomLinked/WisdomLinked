@@ -167,7 +167,7 @@ export async function computeMonthlyBreakdown(
     const held = heldStartFilter(from, to, now);
     const seminarHeld = { ...seminarBaseFilter(), ...held };
     const sessionHeld = heldSessionFilter(from, to, now);
-    const keys = from && to ? monthsInHalfOpenRange(from, to) : null;
+    const rangedKeys = from && to ? monthsInHalfOpenRange(from, to) : null;
     const charges = paymentCompletedMatch(createdAt, mode);
     const refunds = refundMatch(createdAt, mode);
 
@@ -184,20 +184,35 @@ export async function computeMonthlyBreakdown(
             models.PaymentHistory.aggregate(monthPaymentPipeline(refunds)),
         ]);
 
-    const mapCounts = (rows: any[], withAmounts: boolean): SnapshotMonthly["experts"] => {
-        const points = monthlyFromAgg(rows, withAmounts);
-        return fillMonthlySeries(keys || allTimeMonthKeys(points, now), points);
-    };
-
+    const expertPoints = monthlyFromAgg(experts, false);
+    const customerPoints = monthlyFromAgg(customers, false);
+    const sessionPoints = monthlyFromAgg(sumMonthCountRows(legacySessions, groupSessions), false);
+    const seminarPoints = monthlyFromAgg(seminars, false);
     const paymentPoints = monthlyFromAgg(paymentRows, true);
+    const refundPoints = monthlyFromAgg(refundRows, true);
+
+    // Shared month axis so every tile pads the same gaps (FE still applies 3/6/12 trailing for presets).
+    const keys =
+        rangedKeys ||
+        allTimeMonthKeys(
+            [
+                ...expertPoints,
+                ...customerPoints,
+                ...sessionPoints,
+                ...seminarPoints,
+                ...paymentPoints,
+                ...refundPoints,
+            ],
+            now,
+        );
 
     return {
-        experts: mapCounts(experts, false),
-        customers: mapCounts(customers, false),
-        sessions: mapCounts(sumMonthCountRows(legacySessions, groupSessions), false),
-        seminars: mapCounts(seminars, false),
-        payments: fillMonthlySeries(keys || allTimeMonthKeys(paymentPoints, now), paymentPoints),
-        refunds: mapCounts(refundRows, true),
+        experts: fillMonthlySeries(keys, expertPoints),
+        customers: fillMonthlySeries(keys, customerPoints),
+        sessions: fillMonthlySeries(keys, sessionPoints),
+        seminars: fillMonthlySeries(keys, seminarPoints),
+        payments: fillMonthlySeries(keys, paymentPoints),
+        refunds: fillMonthlySeries(keys, refundPoints),
     };
 }
 
