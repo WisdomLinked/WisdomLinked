@@ -3,6 +3,8 @@ import {
   formatCountdown,
   isAttemptLimitReply,
   isBlockedAccountReply,
+  blockReasonFromReply,
+  splitContactAdminText,
   lockCountdownText,
   lockAfterStatusCheck,
   lockFromReply,
@@ -105,5 +107,25 @@ describe('lockAfterStatusCheck', () => {
     ['a reply with no locked flag', { status: 'SUCCESS' }],
   ])('keeps the current lock on %s', (_label, response) => {
     expect(lockAfterStatusCheck(lock, response, NOW)).toBe(lock);
+  });
+
+  it('blockReasonFromReply returns the trimmed reason only for a blocked reply that has one', () => {
+    const blocked = { status: 'FAIL', code: 'USER_BLOCKED' };
+    expect(blockReasonFromReply({ ...blocked, blockReason: '  Repeated no-shows  ' })).toBe('Repeated no-shows');
+    expect(blockReasonFromReply({ ...blocked })).toBeNull();
+    expect(blockReasonFromReply({ ...blocked, blockReason: '   ' })).toBeNull();
+    expect(blockReasonFromReply({ ...blocked, blockReason: 42 })).toBeNull();
+    expect(blockReasonFromReply({ status: 'FAIL', attemptsLeft: 4, blockReason: 'x' })).toBeNull();
+    expect(blockReasonFromReply(false)).toBeNull();
+  });
+
+  it('splitContactAdminText cuts the blocked message around its contact sentence', () => {
+    expect(splitContactAdminText('Your profile is blocked. Contact admin for more details.')).toEqual({
+      before: 'Your profile is blocked. ',
+      link: 'Contact admin for more details.',
+      after: '',
+    });
+    expect(splitContactAdminText('Blocked. Contact admin for more details. Thanks')?.after).toBe(' Thanks');
+    expect(splitContactAdminText('Incorrect email or password.')).toBeNull();
   });
 });

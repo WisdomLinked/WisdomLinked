@@ -12,6 +12,7 @@ auth.getFullUserData = async (email: string) => users.get(String(email).toLowerC
 const controller = require("../controllers/auth.controller");
 const LoginAttempt = require("../models/LoginAttempt");
 const PendingLogin = require("../models/PendingLogin");
+const AdminAuditLog = require("../models/AdminAuditLog");
 const PendingPasswordReset = require("../models/PendingPasswordReset");
 const utils = require("../services/utils");
 
@@ -348,12 +349,63 @@ test("a blocked user with the right password is told so, and no code is emailed"
     assert.equal(sent.length, 0);
 });
 
-test("a blocked user with a wrong password gets the normal reply, so blocked accounts cannot be discovered", async t => {
+test("a blocked user with a wrong password is also told the profile is blocked", async t => {
+    const { sent } = installFakes(t);
+    users.get(EMAIL).status = "blocked";
+    assert.deepEqual(await signIn(EMAIL, "wrong"), BLOCKED_REPLY);
+    assert.equal(sent.length, 0);
+});
+
+const mockBlockReason = (t: any, meta: any) => {
+    users.get(EMAIL)._id = "user-1";
+    const lookups: any[] = [];
+    t.mock.method(AdminAuditLog, "findOne", (filter: any) => {
+        lookups.push(filter);
+        return { sort: () => ({ lean: async () => (meta === undefined ? null : { meta }) }) };
+    });
+    return lookups;
+};
+
+test("a blocked reply carries the reason the admin gave, for a right or a wrong password", async t => {
     installFakes(t);
     users.get(EMAIL).status = "blocked";
-    const reply = await signIn(EMAIL, "wrong");
-    assert.equal(reply.error, "Incorrect email or password. You have 4 attempts left.");
-    assert.equal(reply.code, undefined);
+    const lookups = mockBlockReason(t, { to: "blocked", reason: "  Repeated no-shows  " });
+    for (const password of [PASSWORD, "wrong"]) {
+        assert.deepEqual(await signIn(EMAIL, password), { ...BLOCKED_REPLY, blockReason: "Repeated no-shows" });
+    }
+    assert.deepEqual(lookups[0], { action: "user_status_change", targetId: "user-1", "meta.to": "blocked" });
+});
+
+test("a blocked reply has no blockReason when the admin recorded none", async t => {
+    installFakes(t);
+    users.get(EMAIL).status = "blocked";
+    mockBlockReason(t, { to: "blocked" });
+    assert.deepEqual(await signIn(EMAIL, "wrong"), BLOCKED_REPLY);
+});
+
+test("a blocked reply still works when the reason cannot be read", async t => {
+    installFakes(t);
+    users.get(EMAIL).status = "blocked";
+    users.get(EMAIL)._id = "user-1";
+    t.mock.method(AdminAuditLog, "findOne", () => { throw new Error("db down"); });
+    t.mock.method(console, "error", () => undefined);
+    assert.deepEqual(await signIn(EMAIL, "wrong"), BLOCKED_REPLY);
+});
+
+test("a very long block reason is cut to 1000 characters", async t => {
+    installFakes(t);
+    users.get(EMAIL).status = "blocked";
+    mockBlockReason(t, { to: "blocked", reason: "x".repeat(5000) });
+    assert.equal((await signIn(EMAIL, "wrong")).blockReason.length, 1000);
+});
+
+test("a blocked reply at the code step carries the reason too", async t => {
+    const { pending } = installFakes(t);
+    assert.equal((await signIn(EMAIL, PASSWORD)).status, "SUCCESS");
+    users.get(EMAIL).status = "blocked";
+    mockBlockReason(t, { to: "blocked", reason: "Policy breach" });
+    assert.deepEqual(await enterCode("123456"), { ...BLOCKED_REPLY, blockReason: "Policy breach" });
+    assert.equal(pending.has(EMAIL), true);
 });
 
 test("a user blocked after the password step is refused at the code step", async t => {

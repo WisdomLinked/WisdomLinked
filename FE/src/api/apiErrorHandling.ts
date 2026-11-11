@@ -11,6 +11,8 @@ export type AuthApiFailBody = {
     status: 'FAIL';
     error: string;
     code?: 'USER_BLOCKED';
+    /** Why an admin blocked the account; shown only after the user asks to see it. */
+    blockReason?: string;
     /** Sign-in attempt limits (utils/loginAttemptNotice.ts). */
     attemptsLeft?: number;
     lockedStep?: 'password' | 'otp';

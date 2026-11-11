@@ -13,12 +13,16 @@ import { actionTypes } from '../actions/types';
 import SocialAuthBlock from '../components/SocialAuthBlock';
 import SignupModal from '../components/SignupModal';
 import BrandWordmark from '../components/BrandWordmark';
+import BlockReasonToggle from '../components/BlockReasonToggle';
+import ContactFormModal from '../components/ContactFormModal';
 import {
     type LoginLock,
     type LoginStep,
     LOCK_STATUS_POLL_MS,
     isAttemptLimitReply,
     isBlockedAccountReply,
+    blockReasonFromReply,
+    splitContactAdminText,
     lockAfterStatusCheck,
     lockCountdownText,
     lockFromReply,
@@ -60,7 +64,8 @@ export default function WLLogin() {
     const timerRef = useRef<NodeJS.Timeout | null>(null);
 
     // Attempt limits: "N attempts left" under the field, and a countdown while a step is locked.
-    const [attemptNotice, setAttemptNotice] = useState<{ step: LoginStep; text: string } | null>(null);
+    const [attemptNotice, setAttemptNotice] = useState<{ step: LoginStep; text: string; blocked?: boolean; blockReason?: string | null } | null>(null);
+    const [showContactAdmin, setShowContactAdmin] = useState(false);
     const [lock, setLock] = useState<LoginLock | null>(null);
     const [nowMs, setNowMs] = useState(() => Date.now());
     const lockMs = lockRemainingMs(lock, form.email, nowMs);
@@ -132,7 +137,7 @@ export default function WLLogin() {
             return true;
         }
         if (isAttemptLimitReply(response) || isBlockedAccountReply(response)) {
-            setAttemptNotice({ step, text: String(response.error || '') });
+            setAttemptNotice({ step, text: String(response.error || ''), blocked: isBlockedAccountReply(response), blockReason: blockReasonFromReply(response) });
             return true;
         }
         return false;
@@ -406,10 +411,30 @@ export default function WLLogin() {
     const renderAttemptLimitText = (step: LoginStep) => {
         const text = attemptLimitText(step);
         if (!text) return null;
+        const showingNotice = !isLocked && attemptNotice?.step === step;
+        const blockReason = showingNotice ? attemptNotice.blockReason : null;
+        const contactParts = showingNotice && attemptNotice.blocked ? splitContactAdminText(text) : null;
         return (
-            <p role="alert" data-testid={`login-attempts-${step}`} className="mt-1.5 text-xs font-medium text-rose-600 flex items-start gap-1">
-                <AlertCircle size={12} className="mt-px shrink-0" />{text}
-            </p>
+            <>
+                <p role="alert" data-testid={`login-attempts-${step}`} className="mt-1.5 text-xs font-medium text-rose-600 flex items-start gap-1">
+                    <AlertCircle size={12} className="mt-px shrink-0" />
+                    {contactParts ? (
+                        <span>
+                            {contactParts.before}
+                            <button
+                                type="button"
+                                data-testid="contact-admin-link"
+                                onClick={() => setShowContactAdmin(true)}
+                                className="font-bold underline underline-offset-2 text-rose-600 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-600/40 rounded-sm"
+                            >
+                                {contactParts.link}
+                            </button>
+                            {contactParts.after}
+                        </span>
+                    ) : text}
+                </p>
+                {blockReason ? <BlockReasonToggle key={blockReason} reason={blockReason} /> : null}
+            </>
         );
     };
 
@@ -615,8 +640,11 @@ export default function WLLogin() {
             {showSignupModal && (
                 <SignupModal 
                     onClose={() => setShowSignupModal(false)} 
-                    onGoLogin={() => setShowSignupModal(false)} 
+                    onGoLogin={() => setShowSignupModal(false)}
                 />
+            )}
+            {showContactAdmin && (
+                <ContactFormModal initialEmail={form.email.trim()} onClose={() => setShowContactAdmin(false)} />
             )}
         </div>
     );

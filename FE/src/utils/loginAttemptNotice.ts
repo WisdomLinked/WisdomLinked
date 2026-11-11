@@ -17,6 +17,26 @@ export const isAttemptLimitReply = (response: any): boolean =>
 export const isBlockedAccountReply = (response: any): boolean =>
   response?.status === 'FAIL' && response?.code === 'USER_BLOCKED';
 
+/** The reason an admin gave for blocking the account, when the blocked reply carries one. */
+export const blockReasonFromReply = (response: any): string | null => {
+  if (!isBlockedAccountReply(response)) return null;
+  const reason = typeof response?.blockReason === 'string' ? response.blockReason.trim() : '';
+  return reason || null;
+};
+
+export const CONTACT_ADMIN_LINK_TEXT = 'Contact admin for more details.';
+
+/** Splits the blocked message around its "Contact admin" sentence, so that sentence can be a link; null when it is absent. */
+export const splitContactAdminText = (text: string): { before: string; link: string; after: string } | null => {
+  const at = text.indexOf(CONTACT_ADMIN_LINK_TEXT);
+  if (at < 0) return null;
+  return {
+    before: text.slice(0, at),
+    link: CONTACT_ADMIN_LINK_TEXT,
+    after: text.slice(at + CONTACT_ADMIN_LINK_TEXT.length),
+  };
+};
+
 export const lockFromReply = (response: any, email: unknown, nowMs: number): LoginLock | null => {
   const seconds = Number(response?.lockedForSeconds);
   if (response?.status !== 'FAIL' || !Number.isFinite(seconds) || seconds <= 0) return null;
