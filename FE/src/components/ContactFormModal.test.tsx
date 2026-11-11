@@ -46,3 +46,20 @@ describe('ContactFormModal phone', () => {
     );
   });
 });
+
+describe('ContactFormModal initial email', () => {
+  it('starts with an empty email by default', () => {
+    render(<ContactFormModal onClose={() => {}} />);
+    expect(screen.getByPlaceholderText('you@example.com')).toHaveValue('');
+  });
+
+  it('fills in the email it is given, and the user can still change it', async () => {
+    const user = userEvent.setup();
+    render(<ContactFormModal onClose={() => {}} initialEmail="blocked@example.com" />);
+    const email = screen.getByPlaceholderText('you@example.com');
+    expect(email).toHaveValue('blocked@example.com');
+    await user.clear(email);
+    await user.type(email, 'other@example.com');
+    expect(email).toHaveValue('other@example.com');
+  });
+});

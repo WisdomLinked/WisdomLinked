@@ -8,8 +8,8 @@ import PhoneField from './ui/PhoneField';
 
 const CONTACT_MESSAGE_MAX_LENGTH = 100;
 
-export default function ContactFormModal({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = useState({ name: '', email: '', phone: '', subject: '', description: '' });
+export default function ContactFormModal({ onClose, initialEmail = '' }: { onClose: () => void; initialEmail?: string }) {
+  const [form, setForm] = useState({ name: '', email: initialEmail, phone: '', subject: '', description: '' });
   const [phoneCountry, setPhoneCountry] = useState('US');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);

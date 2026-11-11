@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 const User = require("../models/User");
+const { latestBlockReason } = require('../services/blockReason');
 const {
     renderEmail: renderAuthEmail,
     paragraph: authParagraph,
@@ -596,9 +597,16 @@ const loginFailureReply = async (res: Response, email: unknown, kind: 'password'
     return res.status(200).json({ status: 'FAIL', error: `${lead} ${attemptsLeftSentence(left)}`, attemptsLeft: left });
 };
 
-/** Sent only after the right password, so the reply never reveals which accounts are blocked. */
-const loginBlockedReply = (res: Response) =>
-    res.status(200).json({ status: 'FAIL', error: AUTH_ACCOUNT_BLOCKED, code: 'USER_BLOCKED' });
+/** Sent to a blocked account at the password step, whatever password was typed. */
+const loginBlockedReply = async (res: Response, user: any) => {
+    const blockReason = await latestBlockReason(user?._id);
+    return res.status(200).json({
+        status: 'FAIL',
+        error: AUTH_ACCOUNT_BLOCKED,
+        code: 'USER_BLOCKED',
+        ...(blockReason ? { blockReason } : {}),
+    });
+};
 
 /**
  * Whether sign-in is still locked for this email. The login page asks while its countdown runs, so an
@@ -636,6 +644,8 @@ const login = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: AUTH_OAUTH_LOGIN_REQUIRED(provider) });
         }
 
+        if (user && user.status === 'blocked') return loginBlockedReply(res, user);
+
         // Counted whether or not the account exists, so the replies never reveal which emails are real.
         const passwordTry = await claimLoginAttempt(email, 'password');
         if (!passwordTry.allowed) return loginLockedReply(res, 'password', passwordTry.lockedForMs);
@@ -645,8 +655,6 @@ const login = async (req: Request, res: Response) => {
         }
 
         await clearLoginFailures(email, ['password']);
-
-        if (user.status === 'blocked') return loginBlockedReply(res);
 
         const code = issueAuthOtpCode();
 
@@ -727,7 +735,7 @@ const confirmLoginByCode = async (req: Request, res: Response) => {
             return res.status(200).json({ status: 'FAIL', error: AUTH_INVALID_CREDENTIALS });
         }
 
-        if (user.status === 'blocked') return loginBlockedReply(res);
+        if (user.status === 'blocked') return loginBlockedReply(res, user);
 
         await loginRequest.deleteOne()
         await clearLoginFailures(email);
