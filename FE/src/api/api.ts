@@ -1856,6 +1856,45 @@ export const doGetAdminDashboardStats = async (params?: {
     }
 };
 
+export type AdminDemographicsLocation = {
+    country: string;
+    experts: number;
+    students: number;
+};
+
+export type AdminDemographicsService = {
+    key: string;
+    label: string;
+    students: number;
+};
+
+export type AdminDemographicsData = {
+    totals: { experts: number; students: number };
+    locations: AdminDemographicsLocation[];
+    locationMissing: { experts: number; students: number };
+    services: AdminDemographicsService[];
+    servicesMissing: number;
+};
+
+export const doGetAdminDemographics = async (params?: {
+    dateFrom?: string;
+    dateTo?: string;
+}): Promise<{
+    status: string;
+    data?: AdminDemographicsData;
+} | null> => {
+    try {
+        const search = new URLSearchParams();
+        if (params?.dateFrom) search.set('dateFrom', params.dateFrom);
+        if (params?.dateTo) search.set('dateTo', params.dateTo);
+        const q = search.toString();
+        const res = await api.get(`admin/demographics${q ? `?${q}` : ''}`);
+        return res.data;
+    } catch (err: any) {
+        return checkForAuthorization(err);
+    }
+};
+
 export const doGetAdminPlatformEvents = async (params: {
     scope?: "today" | "upcoming" | "past" | "all";
     types?: string[];

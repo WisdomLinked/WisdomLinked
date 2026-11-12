@@ -63,3 +63,15 @@ describe('ContactFormModal initial email', () => {
     expect(email).toHaveValue('other@example.com');
   });
 });
+
+describe('ContactFormModal validation color', () => {
+  it('shows field errors in the theme red token', async () => {
+    const user = userEvent.setup();
+    render(<ContactFormModal onClose={() => {}} />);
+    await user.type(screen.getByPlaceholderText('you@example.com'), 'not-an-email');
+    await user.click(screen.getByRole('button', { name: /Send/ }));
+    const emailError = screen.getByText('Enter a valid email');
+    expect(emailError.className).toMatch(/(^|\s)text-red(\s|$)/);
+    expect(emailError.className).not.toMatch(/text-red-\d/);
+  });
+});

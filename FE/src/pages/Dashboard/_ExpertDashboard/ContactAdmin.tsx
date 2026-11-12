@@ -95,7 +95,7 @@ export default function ContactAdmin() {
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-[#234C6A] focus:ring-2 focus:ring-[#234C6A]/20"
               />
               <div className="mt-1 text-right">
-                <span className={`text-xs ${message.length >= MAX_CONTACT_MESSAGE_LENGTH ? 'text-red-500' : 'text-slate-500'}`}>
+                <span className={`text-xs ${message.length >= MAX_CONTACT_MESSAGE_LENGTH ? 'text-red' : 'text-slate-500'}`}>
                   {message.length} / {MAX_CONTACT_MESSAGE_LENGTH}
                 </span>
               </div>

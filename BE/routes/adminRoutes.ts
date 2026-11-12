@@ -29,6 +29,7 @@ const {
     sendEmailToUser,
     sendWelcomeEmail,
     getDashboardStats,
+    getAdminDemographics,
     getPaymentStats,
     getAdminPlatformEvents,
     getPendingLogins,
@@ -107,6 +108,7 @@ router.post("/sendPaymentLinkToUser", adminAuth, sendPaymentLinkToUser)
 router.post("/processRefund", adminAuth, processRefund)
 router.post("/sendAdHocPaymentLink", adminAuth, sendAdHocPaymentLink)
 router.get("/dashboardStats", adminAuth, getDashboardStats)
+router.get("/demographics", adminAuth, getAdminDemographics)
 router.get("/paymentStats", adminAuth, getPaymentStats)
 router.get("/platformEvents", adminAuth, getAdminPlatformEvents)
 router.post("/filterUsers", adminAuth, filterUsers)

@@ -22,6 +22,7 @@ import {
     computePeriodSnapshot,
     computeSnapshotExtras,
 } from '../utils/adminSnapshotStats';
+import { computeAdminDemographics } from '../utils/adminDemographics';
 import {
     checkSeat,
     markRefundedCharges,
@@ -1202,6 +1203,21 @@ const getDashboardStats = async (req: Request, res: Response) => {
     } catch (err: any) {
         console.error(err);
         return res.status(500).json({ status: "FAILED", message: safeErrorMessage(err) });
+    }
+};
+
+/** Analytics Demographics: countries + student services for users who joined in range. */
+const getAdminDemographics = async (req: Request, res: Response) => {
+    try {
+        const data = await computeAdminDemographics(
+            { User, Service },
+            req.query.dateFrom,
+            req.query.dateTo,
+        );
+        return res.status(200).json({ status: 'SUCCESS', data });
+    } catch (err: any) {
+        console.error(err);
+        return res.status(500).json({ status: 'FAILED', message: safeErrorMessage(err) });
     }
 };
 
@@ -2431,6 +2447,7 @@ module.exports = {
     sendEmailToUser,
     sendWelcomeEmail,
     getDashboardStats,
+    getAdminDemographics,
     getPaymentStats,
     getAdminPlatformEvents,
     getPendingUsers,

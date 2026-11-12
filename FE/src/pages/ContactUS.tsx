@@ -232,7 +232,7 @@ The WisdomLinked.com Team
                         show={issueError || (showError && issue.trim().length === 0)}
                         label={issue.trim().length > CONTACT_MESSAGE_MAX_LENGTH ? `Main message must be ${CONTACT_MESSAGE_MAX_LENGTH} characters or less.` : "Main message is required."}
                     />
-                    <span className={`text-[12px] ml-auto ${issue.length >= CONTACT_MESSAGE_MAX_LENGTH ? "text-red-500" : "text-lightgrey"}`}>{issue.length} / {CONTACT_MESSAGE_MAX_LENGTH}</span>
+                    <span className={`text-[12px] ml-auto ${issue.length >= CONTACT_MESSAGE_MAX_LENGTH ? "text-red" : "text-lightgrey"}`}>{issue.length} / {CONTACT_MESSAGE_MAX_LENGTH}</span>
                 </div>
 
                 {/* Send Button */}

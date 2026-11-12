@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import AdminMetricsPanel from './AdminMetricsPanel';
+import DemographicsSection from './demographics/DemographicsSection';
 import type { SnapshotListType } from './adminSnapshotTypes';
 import { doGetAdminDashboardStats, type AdminDashboardStatsData } from '../../api/api';
 import {
@@ -99,6 +100,8 @@ export default function AdminAnalytics({
             />
           )}
         </div>
+
+        <DemographicsSection rangeKey={rangeKey} customRange={customRange} />
       </div>
     </div>
   );
