@@ -11,6 +11,7 @@ import {
     parseDateParam,
     periodChange,
     resolveSnapshotRange,
+    resolveTimeZone,
     seminarBaseFilter,
     startInRangeFilter,
     statusListFilter,
@@ -21,6 +22,7 @@ import {
     computePaymentSnapshot,
     computePeriodSnapshot,
     computeSnapshotExtras,
+    inZoneOrUtc,
 } from '../utils/adminSnapshotStats';
 import { computeAdminDemographics } from '../utils/adminDemographics';
 import {
@@ -1172,7 +1174,9 @@ const getDashboardStats = async (req: Request, res: Response) => {
                     snapshotRange.previousTo,
                     now,
                 ),
-            computeMonthlyBreakdown(models, snapshotRange.from, snapshotRange.to, now),
+            inZoneOrUtc(resolveTimeZone(req.query.tz), (tz) =>
+                computeMonthlyBreakdown(models, snapshotRange.from, snapshotRange.to, now, undefined, tz),
+            ),
             computeSnapshotExtras(models, now),
         ]);
 
@@ -1225,11 +1229,15 @@ const getAdminDemographics = async (req: Request, res: Response) => {
 const getPaymentStats = async (req: Request, res: Response) => {
     try {
         // Same bounds as the Payment History list: a missing end is open, not "now".
-        const data = await computePaymentSnapshot(
-            { PaymentHistory },
-            parseDateParam(req.query.dateFrom),
-            parseDateParam(req.query.dateTo),
-            req.query.stripeMode,
+        const data = await inZoneOrUtc(resolveTimeZone(req.query.tz), (tz) =>
+            computePaymentSnapshot(
+                { PaymentHistory },
+                parseDateParam(req.query.dateFrom),
+                parseDateParam(req.query.dateTo),
+                req.query.stripeMode,
+                new Date(),
+                tz,
+            ),
         );
         return res.status(200).json({ status: "SUCCESS", data });
     } catch (err: any) {

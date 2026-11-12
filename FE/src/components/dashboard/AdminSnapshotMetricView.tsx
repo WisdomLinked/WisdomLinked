@@ -586,12 +586,21 @@ function whenTabs(listType: SnapshotListType): { id: WhenMode; label: string }[]
   ];
 }
 
-export default function AdminSnapshotMetricView() {
-  const { listType: listTypeParam } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const listType: SnapshotListType = isSnapshotListType(listTypeParam) ? listTypeParam : 'experts';
-  const { rangeKey, customRange } = resolveSnapshotSelection(searchParams);
+/**
+ * Cards, chart, list and details for one metric. Shared by the Overview drill-down and the
+ * Payments page's Refunds tab, so both read the same numbers from the same requests.
+ * Renders the in-flow content plus the phone details sheet; mount it in a plain wrapper,
+ * not directly inside a `space-y-*` parent, or the fixed sheet picks up a top margin.
+ */
+export function SnapshotMetricBody({
+  listType,
+  rangeKey,
+  customRange,
+}: {
+  listType: SnapshotListType;
+  rangeKey: SnapshotRangeKey;
+  customRange: SnapshotCustomRange | null;
+}) {
   const meta = META[listType];
 
   const [stats, setStats] = useState<AdminDashboardStatsData | null>(null);
@@ -609,19 +618,6 @@ export default function AdminSnapshotMetricView() {
   const [listError, setListError] = useState<string | null>(null);
   const [selected, setSelected] = useState<ListRow | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
-
-  const setRangeKey = (next: SnapshotRangeKey, custom?: SnapshotCustomRange) => {
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set('range', next);
-    if (next === 'custom' && custom) {
-      nextParams.set('startDate', custom.startDate);
-      nextParams.set('endDate', custom.endDate);
-    } else {
-      nextParams.delete('startDate');
-      nextParams.delete('endDate');
-    }
-    setSearchParams(nextParams, { replace: true });
-  };
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
@@ -711,58 +707,11 @@ export default function AdminSnapshotMetricView() {
     row => row.kind === 'payment' && isValidRecordDate(row.bookingStart),
   );
 
-  const goMetric = (type: SnapshotListType) => {
-    navigate(`${AUTH_BASE}admindashboard/snapshot/${type}${snapshotRangeQuery(rangeKey, customRange)}`);
-  };
-
   const people = listType === 'experts' || listType === 'students';
 
   return (
-    <div className="px-4 py-7 sm:px-6">
-      <div className="mx-auto max-w-[1400px] space-y-6">
-        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <Link
-              to={
-                isAnalyticsSnapshotType(listType)
-                  ? `${AUTH_BASE}admindashboard/analytics${snapshotRangeQuery(rangeKey, customRange)}`
-                  : `${AUTH_BASE}admindashboard${snapshotRangeQuery(rangeKey, customRange)}`
-              }
-              className={`text-sm text-wl-brand hover:underline ${FOCUS}`}
-            >
-              {isAnalyticsSnapshotType(listType) ? '← Analytics' : '← Overview'}
-            </Link>
-            <div className="mt-2 flex items-start gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-soft text-wl-brand" aria-hidden>
-                <MetricIcon type={listType} />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-lg font-semibold text-ink">{meta.title}</h2>
-                <p className="text-sm text-muted">{meta.description}</p>
-              </div>
-            </div>
-          </div>
-          <div className="min-w-0">
-            <SnapshotRangeControl value={rangeKey} customRange={customRange} onChange={setRangeKey} />
-          </div>
-        </div>
-
-        <div className="flex min-w-0 flex-wrap gap-2">
-          {snapshotTabTypes(listType).map(type => (
-            <button
-              key={type}
-              type="button"
-              aria-current={type === listType ? 'page' : undefined}
-              onClick={() => goMetric(type)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium ${FOCUS} ${
-                type === listType ? 'bg-wl-brand text-white' : 'bg-surface text-muted ring-1 ring-line'
-              }`}
-            >
-              {META[type].title}
-            </button>
-          ))}
-        </div>
-
+    <>
+      <div className="space-y-6">
         <SnapshotKpiStrip kpis={kpis} />
 
         <SnapshotMonthlyChart
@@ -1090,6 +1039,85 @@ export default function AdminSnapshotMetricView() {
         onClose={() => setSelected(null)}
         variant="sheet"
       />
+    </>
+  );
+}
+
+export default function AdminSnapshotMetricView() {
+  const { listType: listTypeParam } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const listType: SnapshotListType = isSnapshotListType(listTypeParam) ? listTypeParam : 'experts';
+  const { rangeKey, customRange } = resolveSnapshotSelection(searchParams);
+  const meta = META[listType];
+
+  const setRangeKey = (next: SnapshotRangeKey, custom?: SnapshotCustomRange) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('range', next);
+    if (next === 'custom' && custom) {
+      nextParams.set('startDate', custom.startDate);
+      nextParams.set('endDate', custom.endDate);
+    } else {
+      nextParams.delete('startDate');
+      nextParams.delete('endDate');
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const goMetric = (type: SnapshotListType) => {
+    navigate(`${AUTH_BASE}admindashboard/snapshot/${type}${snapshotRangeQuery(rangeKey, customRange)}`);
+  };
+
+  return (
+    <div className="px-4 py-7 sm:px-6">
+      <div className="mx-auto max-w-[1400px] space-y-6">
+        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <Link
+              to={
+                isAnalyticsSnapshotType(listType)
+                  ? `${AUTH_BASE}admindashboard/analytics${snapshotRangeQuery(rangeKey, customRange)}`
+                  : `${AUTH_BASE}admindashboard${snapshotRangeQuery(rangeKey, customRange)}`
+              }
+              className={`text-sm text-wl-brand hover:underline ${FOCUS}`}
+            >
+              {isAnalyticsSnapshotType(listType) ? '← Analytics' : '← Overview'}
+            </Link>
+            <div className="mt-2 flex items-start gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-soft text-wl-brand" aria-hidden>
+                <MetricIcon type={listType} />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold text-ink">{meta.title}</h2>
+                <p className="text-sm text-muted">{meta.description}</p>
+              </div>
+            </div>
+          </div>
+          <div className="min-w-0">
+            <SnapshotRangeControl value={rangeKey} customRange={customRange} onChange={setRangeKey} />
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-wrap gap-2">
+          {snapshotTabTypes(listType).map(type => (
+            <button
+              key={type}
+              type="button"
+              aria-current={type === listType ? 'page' : undefined}
+              onClick={() => goMetric(type)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium ${FOCUS} ${
+                type === listType ? 'bg-wl-brand text-white' : 'bg-surface text-muted ring-1 ring-line'
+              }`}
+            >
+              {META[type].title}
+            </button>
+          ))}
+        </div>
+
+        <div>
+          <SnapshotMetricBody listType={listType} rangeKey={rangeKey} customRange={customRange} />
+        </div>
+      </div>
     </div>
   );
 }

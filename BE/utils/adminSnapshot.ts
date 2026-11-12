@@ -205,21 +205,55 @@ export function monthKeyUTC(d: Date): string {
     return `${y}-${m}`;
 }
 
-/** First-of-month UTC keys covering [from, to). */
-export function monthsInRange(from: Date, to: Date): string[] {
+/**
+ * The admin's IANA time zone (e.g. "America/Chicago") from a query value, so monthly charts
+ * group by the same calendar months the admin's date range uses. Anything unknown is UTC.
+ */
+export function resolveTimeZone(raw: unknown): string {
+    const tz = typeof raw === "string" ? raw.trim() : "";
+    if (!tz || tz.length > 64) return "UTC";
+    try {
+        new Intl.DateTimeFormat("en-US", { timeZone: tz });
+        return tz;
+    } catch {
+        return "UTC";
+    }
+}
+
+/** `YYYY-MM` of the calendar month `d` falls in, in time zone `tz`. */
+export function monthKeyInZone(d: Date, tz: string = "UTC"): string {
+    if (tz === "UTC") return monthKeyUTC(d);
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit" }).formatToParts(d);
+    const y = parts.find((p) => p.type === "year")?.value;
+    const m = parts.find((p) => p.type === "month")?.value;
+    return y && m ? `${y}-${m}` : monthKeyUTC(d);
+}
+
+/** Every `YYYY-MM` from `first` through `last`, inclusive. */
+export function monthKeysBetween(first: string, last: string): string[] {
+    if (!/^\d{4}-\d{2}$/.test(first) || !/^\d{4}-\d{2}$/.test(last) || first > last) return [];
     const keys: string[] = [];
-    const cursor = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
-    const end = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
-    while (cursor.getTime() <= end.getTime()) {
-        keys.push(monthKeyUTC(cursor));
-        cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    let [y, m] = first.split("-").map(Number);
+    const [ly, lm] = last.split("-").map(Number);
+    while (y < ly || (y === ly && m <= lm)) {
+        keys.push(`${y}-${String(m).padStart(2, "0")}`);
+        m += 1;
+        if (m > 12) {
+            m = 1;
+            y += 1;
+        }
     }
     return keys;
 }
 
+/** Calendar-month keys covering [from, to], in time zone `tz` (UTC by default). */
+export function monthsInRange(from: Date, to: Date, tz: string = "UTC"): string[] {
+    return monthKeysBetween(monthKeyInZone(from, tz), monthKeyInZone(to, tz));
+}
+
 /** Month keys for a range whose end is exclusive: a range ending at 00:00 on Aug 1 does not include August. */
-export function monthsInHalfOpenRange(from: Date, toExclusive: Date): string[] {
-    return monthsInRange(from, new Date(Math.max(from.getTime(), toExclusive.getTime() - 1)));
+export function monthsInHalfOpenRange(from: Date, toExclusive: Date, tz: string = "UTC"): string[] {
+    return monthsInRange(from, new Date(Math.max(from.getTime(), toExclusive.getTime() - 1)), tz);
 }
 
 /**
@@ -244,14 +278,12 @@ export function chartMonthKeysForBounds(from: Date, toExclusive: Date): string[]
  * Month keys for an all-time chart: every month from the first month with data to the
  * current month (or a later data month), so empty months show as gaps instead of being skipped.
  */
-export function allTimeMonthKeys(points: { month: string }[], now: Date): string[] {
+export function allTimeMonthKeys(points: { month: string }[], now: Date, tz: string = "UTC"): string[] {
     const months = points.map((p) => p.month).filter((m) => /^\d{4}-\d{2}$/.test(m)).sort();
     if (!months.length) return [];
     const first = months[0];
-    const last = [months[months.length - 1], monthKeyUTC(now)].sort()[1];
-    const [fy, fm] = first.split("-").map(Number);
-    const [ly, lm] = last.split("-").map(Number);
-    return monthsInRange(new Date(Date.UTC(fy, fm - 1, 1)), new Date(Date.UTC(ly, lm - 1, 1)));
+    const last = [months[months.length - 1], monthKeyInZone(now, tz)].sort()[1];
+    return monthKeysBetween(first, last);
 }
 
 export function fillMonthlySeries(
@@ -427,6 +459,13 @@ export const MONTH_GROUP_CREATED = {
 export const MONTH_GROUP_START = {
     $dateToString: { format: "%Y-%m", date: "$start" },
 };
+
+/** `$dateToString` month bucket for `field`, in time zone `tz`; UTC is the plain bucket above. */
+export function monthGroup(field: "createdAt" | "start", tz: string = "UTC"): Record<string, unknown> {
+    const base = field === "createdAt" ? MONTH_GROUP_CREATED : MONTH_GROUP_START;
+    if (tz === "UTC") return base;
+    return { $dateToString: { ...base.$dateToString, timezone: tz } };
+}
 
 /** Successful charge rows that still count toward COLLECTED / COUNT (excludes refund ledger rows). */
 export const SUCCESSFUL_CHARGE_STATUSES = ["completed", "partially_refunded"] as const;

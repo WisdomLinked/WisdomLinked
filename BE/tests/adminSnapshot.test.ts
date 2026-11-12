@@ -29,12 +29,17 @@ import {
     upcomingStartFilter,
     clampPage,
     clampPageSize,
+    monthGroup,
+    monthKeyInZone,
+    monthKeysBetween,
+    resolveTimeZone,
 } from "../utils/adminSnapshot";
 import {
     computeMonthlyBreakdown,
     computePaymentSnapshot,
     computePeriodSnapshot,
     computeSnapshotExtras,
+    inZoneOrUtc,
 } from "../utils/adminSnapshotStats";
 import { keptChargesPipeline } from "../utils/adminSnapshot";
 
@@ -535,4 +540,87 @@ test("computePaymentSnapshot with a start and no end is open-ended, and its mont
         if (prevMode === undefined) delete process.env.PAYMENTS_VISIBLE_MODE;
         else process.env.PAYMENTS_VISIBLE_MODE = prevMode;
     }
+});
+
+test("resolveTimeZone keeps a real IANA zone and turns anything else into UTC", () => {
+    assert.equal(resolveTimeZone("America/Chicago"), "America/Chicago");
+    assert.equal(resolveTimeZone("Asia/Kolkata"), "Asia/Kolkata");
+    assert.equal(resolveTimeZone("UTC"), "UTC");
+    for (const bad of [undefined, null, "", "   ", "Not/AZone", "x".repeat(65), ["America/Chicago"], { $ne: 1 }, 42]) {
+        assert.equal(resolveTimeZone(bad), "UTC", String(bad));
+    }
+});
+
+test("monthKeyInZone reads the calendar month where the admin is", () => {
+    // 2026-10-01T03:00Z is still Sep 30, 10 PM in Chicago, and already Oct 1 in India.
+    const d = new Date("2026-10-01T03:00:00.000Z");
+    assert.equal(monthKeyInZone(d, "UTC"), "2026-10");
+    assert.equal(monthKeyInZone(d, "America/Chicago"), "2026-09");
+    assert.equal(monthKeyInZone(new Date("2026-11-30T21:30:00.000Z"), "Asia/Kolkata"), "2026-12");
+    assert.equal(monthKeyInZone(new Date("2027-01-01T02:00:00.000Z"), "America/Los_Angeles"), "2026-12");
+});
+
+test("monthKeysBetween walks months across a year boundary", () => {
+    assert.deepEqual(monthKeysBetween("2026-11", "2027-02"), ["2026-11", "2026-12", "2027-01", "2027-02"]);
+    assert.deepEqual(monthKeysBetween("2026-05", "2026-05"), ["2026-05"]);
+    assert.deepEqual(monthKeysBetween("2026-06", "2026-05"), []);
+    assert.deepEqual(monthKeysBetween("junk", "2026-05"), []);
+});
+
+test("month lists follow the admin zone, so a bar is never dropped at a month edge", () => {
+    // India, 3 AM on Dec 1 local = Nov 30 UTC: the axis must already include December.
+    const now = new Date("2026-11-30T21:30:00.000Z");
+    const from = new Date("2026-09-30T18:30:00.000Z"); // Oct 1, 00:00 in India
+    assert.deepEqual(monthsInHalfOpenRange(from, now, "Asia/Kolkata"), ["2026-10", "2026-11", "2026-12"]);
+    assert.deepEqual(allTimeMonthKeys([{ month: "2026-10" }], now, "Asia/Kolkata"), ["2026-10", "2026-11", "2026-12"]);
+    // Chicago, local Sep 1 00:00 (05:00 UTC) through a moment that is still Nov 30 locally.
+    assert.deepEqual(
+        monthsInHalfOpenRange(new Date("2026-09-01T05:00:00.000Z"), new Date("2026-12-01T02:00:00.000Z"), "America/Chicago"),
+        ["2026-09", "2026-10", "2026-11"],
+    );
+});
+
+test("monthGroup adds the time zone to the Mongo month bucket, and UTC keeps the old bucket exactly", () => {
+    assert.deepEqual(monthGroup("createdAt"), { $dateToString: { format: "%Y-%m", date: "$createdAt" } });
+    assert.deepEqual(monthGroup("start", "UTC"), { $dateToString: { format: "%Y-%m", date: "$start" } });
+    assert.deepEqual(monthGroup("createdAt", "Asia/Kolkata"), {
+        $dateToString: { format: "%Y-%m", date: "$createdAt", timezone: "Asia/Kolkata" },
+    });
+});
+
+test("computePaymentSnapshot and computeMonthlyBreakdown group bars in the admin zone", async () => {
+    const groups: any[] = [];
+    const tap = (rows: any[]) => ({
+        countDocuments: async () => 1,
+        aggregate: async (pipeline: any[]) => {
+            const g = pipeline.find((stage: any) => stage.$group)?.$group._id;
+            if (g) groups.push(g);
+            return typeof g === "object" && g?.month ? rows : [];
+        },
+    });
+    // Chicago: a payment on Sep 30 at 10 PM local (Oct 1 03:00 UTC) belongs to September.
+    const rows = [{ _id: { month: "2026-09", currency: "usd" }, count: 1, amount: 8100 }];
+    const from = new Date("2026-09-01T05:00:00.000Z");
+    const to = new Date("2026-10-01T05:00:00.000Z");
+    const pay = await computePaymentSnapshot({ PaymentHistory: tap(rows) }, from, to, "", new Date("2026-11-12T12:00:00Z"), "America/Chicago");
+    assert.deepEqual(pay.monthly.map((p) => [p.month, p.count]), [["2026-09", 1]]);
+    const none = tap([]);
+    await computeMonthlyBreakdown({ User: none, Event: none, GroupChat: none, PaymentHistory: none }, from, to, new Date(), undefined, "America/Chicago");
+    const zones = groups.map((g) => (g.month || g).$dateToString?.timezone).filter(Boolean);
+    assert.ok(zones.length >= 7, "every monthly pipeline is grouped in the zone");
+    assert.ok(zones.every((z) => z === "America/Chicago"));
+});
+
+test("inZoneOrUtc falls back to UTC when the database rejects a zone, and never retries for UTC", async () => {
+    const seen: string[] = [];
+    const out = await inZoneOrUtc("Asia/Calcutta", async (zone) => {
+        seen.push(zone);
+        if (zone !== "UTC") throw new Error("unrecognized time zone identifier");
+        return "utc-result";
+    });
+    assert.equal(out, "utc-result");
+    assert.deepEqual(seen, ["Asia/Calcutta", "UTC"]);
+    const ok = await inZoneOrUtc("America/Chicago", async (zone) => zone);
+    assert.equal(ok, "America/Chicago");
+    await assert.rejects(inZoneOrUtc("UTC", async () => { throw new Error("db down"); }), /db down/);
 });

@@ -1819,6 +1819,15 @@ export type AdminPaymentStatsData = {
 };
 
 /** Payments page summary: COLLECTED, COUNT and the monthly series for a date range and Stripe mode. */
+/** The admin browser time zone, so the server groups chart months the way the date range is picked. */
+function browserTimeZone(): string {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    } catch {
+        return "UTC";
+    }
+}
+
 export const doGetAdminPaymentStats = async (params: {
     dateFrom?: string;
     dateTo?: string;
@@ -1829,6 +1838,7 @@ export const doGetAdminPaymentStats = async (params: {
         if (params.dateFrom) search.set("dateFrom", params.dateFrom);
         if (params.dateTo) search.set("dateTo", params.dateTo);
         if (params.stripeMode) search.set("stripeMode", params.stripeMode);
+        search.set("tz", browserTimeZone());
         const q = search.toString();
         const res = await api.get(`admin/paymentStats${q ? `?${q}` : ""}`);
         return res.data;
@@ -1848,6 +1858,7 @@ export const doGetAdminDashboardStats = async (params?: {
         const search = new URLSearchParams();
         if (params?.dateFrom) search.set("dateFrom", params.dateFrom);
         if (params?.dateTo) search.set("dateTo", params.dateTo);
+        search.set("tz", browserTimeZone());
         const q = search.toString();
         const res = await api.get(`admin/dashboardStats${q ? `?${q}` : ""}`);
         return res.data;
