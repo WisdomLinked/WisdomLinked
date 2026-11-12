@@ -56,7 +56,9 @@ export default function ContactFormModal({ onClose, initialEmail = '' }: { onClo
 
   const inputBase = "w-full rounded-xl border bg-white px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400";
   const inputNormal = `${inputBase} border-slate-200`;
-  const inputError = `${inputBase} border-red-300 focus:ring-red-300 focus:border-red-400 bg-red-50/30`;
+  // Theme maps `red` to a flat color (no red-300/500 scale), so use `text-red` / `border-red`.
+  const inputError = `${inputBase} border-red focus:ring-red/40 focus:border-red bg-red/5`;
+  const fieldError = 'mt-1 text-xs text-red flex items-center gap-1';
 
   return createPortal(
     <div
@@ -70,7 +72,7 @@ export default function ContactFormModal({ onClose, initialEmail = '' }: { onClo
         style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', animation: 'modalIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both' }}
       >
         <div className="h-1.5 w-full rounded-t-3xl" style={{ background: 'linear-gradient(90deg, #234C6A, #456882, #234C6A)', backgroundSize: '200%', animation: 'shimmer 3s linear infinite' }} />
-        <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-500 transition-all duration-200 z-10">
+        <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-red/10 text-slate-400 hover:text-red transition-all duration-200 z-10">
           <X size={16} />
         </button>
         <div className="p-7 pb-8">
@@ -94,7 +96,7 @@ export default function ContactFormModal({ onClose, initialEmail = '' }: { onClo
                   <input type="text" placeholder="e.g. Sarah Chen" value={form.name}
                     onChange={e => { setForm(f => ({ ...f, name: e.target.value })); setErrors(er => ({ ...er, name: '' })); }}
                     className={errors.name ? inputError : inputNormal} />
-                  {errors.name && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.name}</p>}
+                  {errors.name && <p className={fieldError} role="alert"><AlertCircle size={11} />{errors.name}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">
@@ -103,7 +105,7 @@ export default function ContactFormModal({ onClose, initialEmail = '' }: { onClo
                   <input type="email" placeholder="you@example.com" value={form.email}
                     onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setErrors(er => ({ ...er, email: '' })); }}
                     className={errors.email ? inputError : inputNormal} />
-                  {errors.email && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.email}</p>}
+                  {errors.email && <p className={fieldError} role="alert"><AlertCircle size={11} />{errors.email}</p>}
                 </div>
                 <div>
                   <label htmlFor="contact-phone" className="block text-xs font-semibold text-slate-600 mb-1.5">
@@ -120,7 +122,7 @@ export default function ContactFormModal({ onClose, initialEmail = '' }: { onClo
                     onCountryChange={setPhoneCountry}
                     invalid={!!errors.phone}
                   />
-                  {errors.phone && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.phone}</p>}
+                  {errors.phone && <p className={fieldError} role="alert"><AlertCircle size={11} />{errors.phone}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">
@@ -129,7 +131,7 @@ export default function ContactFormModal({ onClose, initialEmail = '' }: { onClo
                   <input type="text" placeholder="e.g. Graduate school application" value={form.subject}
                     onChange={e => { setForm(f => ({ ...f, subject: e.target.value })); setErrors(er => ({ ...er, subject: '' })); }}
                     className={errors.subject ? inputError : inputNormal} />
-                  {errors.subject && <p className="mt-1 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.subject}</p>}
+                  {errors.subject && <p className={fieldError} role="alert"><AlertCircle size={11} />{errors.subject}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">
@@ -141,8 +143,8 @@ export default function ContactFormModal({ onClose, initialEmail = '' }: { onClo
                     onChange={e => { setForm(f => ({ ...f, description: e.target.value })); setErrors(er => ({ ...er, description: '' })); }}
                     className={`${errors.description ? inputError : inputNormal} resize-none`} style={{ lineHeight: 1.6 }} />
                   <div className="flex items-center justify-between mt-1">
-                    {errors.description ? <p className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} />{errors.description}</p> : <span />}
-                    <span className={`text-xs ml-auto ${form.description.length >= CONTACT_MESSAGE_MAX_LENGTH ? 'text-red-500' : form.description.length > 0 ? 'text-slate-500' : 'text-slate-400'}`}>{form.description.length} / {CONTACT_MESSAGE_MAX_LENGTH}</span>
+                    {errors.description ? <p className={`text-xs text-red flex items-center gap-1`} role="alert"><AlertCircle size={11} />{errors.description}</p> : <span />}
+                    <span className={`text-xs ml-auto ${form.description.length >= CONTACT_MESSAGE_MAX_LENGTH ? 'text-red' : form.description.length > 0 ? 'text-slate-500' : 'text-slate-400'}`}>{form.description.length} / {CONTACT_MESSAGE_MAX_LENGTH}</span>
                   </div>
                 </div>
               </div>
