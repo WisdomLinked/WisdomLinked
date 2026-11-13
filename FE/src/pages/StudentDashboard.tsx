@@ -168,7 +168,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
     title: string,
     start: any,
     type: 'seminar' | 'session',
-    status: 'pending' | 'confirmed',
+    status: 'pending' | 'confirmed' | 'cancelled',
     withLabel: string,
     routing: Partial<Pick<CalendarMeeting, 'groupId' | 'peerUserId' | 'peerName' | 'peerImage' | 'recurrence' | 'seriesId' | 'details' | 'canCancel' | 'raw'>> = {},
   ) => {
@@ -198,7 +198,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
         g?.name || 'Seminar',
         g?.start,
         'seminar',
-        'confirmed',
+        gStatus === 'cancelled' ? 'cancelled' : 'confirmed',
         `Seminar host: ${host}`,
         {
           groupId: g?._id != null ? String(g._id) : undefined,
@@ -211,7 +211,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
           raw: g,
         },
       );
-    } else if (g?.type === 'individual' && gStatus !== 'cancelled') {
+    } else if (g?.type === 'individual') {
       // For a 1:1 group chat the admin is the expert (both expert- and student-created).
       pushMeeting(
         g?._id,
@@ -219,7 +219,7 @@ function deriveCalendarMeetings(u: any): CalendarMeeting[] {
         g?.name || '1:1 session',
         g?.start,
         'session',
-        gStatus === 'active' ? 'confirmed' : 'pending',
+        gStatus === 'active' ? 'confirmed' : gStatus === 'cancelled' ? 'cancelled' : 'pending',
         `Mentor: ${host}`,
         {
           peerUserId: g?.admin?._id != null ? String(g.admin._id) : undefined,

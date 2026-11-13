@@ -19,7 +19,7 @@ export type Meeting = {
   recurrence?: string | null;
   seriesId?: string | null;
   /** 1:1 sessions can be awaiting expert approval. Seminars are always confirmed. */
-  status?: 'pending' | 'confirmed' | 'draft' | 'declined' | 'accepted';
+  status?: 'pending' | 'confirmed' | 'draft' | 'declined' | 'accepted' | 'cancelled';
   /** Seminar: the GroupChat id used to open its seminar chat. */
   groupId?: string;
   /** 1:1 session: the expert's user id used to open a private chat. */
@@ -167,7 +167,20 @@ export default function StudentCalendar({
 
   const isPendingMeeting = (m: Meeting) => m.status === 'pending';
 
+  // A cancelled (or refunded) session is shown like a finished one, whatever its
+  // date — it must never look bookable or joinable.
+  const isCancelledMeeting = (m: Meeting) => m.status === 'cancelled';
+  const cancelledLabel = (m: Meeting) =>
+    m.type === 'seminar' ? 'Cancelled seminar' : 'Cancelled 1-1';
+
   const colorForMeeting = (m: Meeting) => {
+    if (isCancelledMeeting(m)) {
+      return {
+        bg: 'bg-slate-200 text-slate-600',
+        dot: 'bg-slate-400',
+        label: cancelledLabel(m),
+      };
+    }
     if (isPastMeeting(m)) {
       return {
         bg: 'bg-slate-200 text-slate-600',
@@ -452,7 +465,9 @@ export default function StudentCalendar({
               {upcomingMeetings
                 .map(m => {
                   const recurLabel = m.type === 'seminar' ? m.recurrence ?? null : null;
-                  const chip = m.status === 'draft'
+                  const chip = isCancelledMeeting(m)
+                    ? { cls: 'bg-slate-200 text-slate-600', text: cancelledLabel(m) }
+                    : m.status === 'draft'
                     ? { cls: 'bg-amber-100 text-amber-700', text: 'Draft' }
                     : isPendingMeeting(m)
                       ? { cls: 'bg-amber-100 text-amber-700', text: m.type === 'seminar' ? (recurLabel ? `Pending · ${recurLabel}` : 'Pending seminar') : 'Pending 1-1' }
@@ -510,6 +525,10 @@ export default function StudentCalendar({
                           View details →
                         </span>
                       </div>
+                    ) : isCancelledMeeting(m) ? (
+                      <p className="mt-2 text-[11px] font-semibold text-rose-600">
+                        Cancelled
+                      </p>
                     ) : isPendingMeeting(m) ? (
                       <p className="mt-2 text-[11px] font-medium text-amber-700">
                         Awaiting expert approval
@@ -555,7 +574,9 @@ export default function StudentCalendar({
                   pastMeetings.map(m => {
                     const active = m.id === selectedPast?.id;
                     const chipBg = 'bg-slate-200 text-slate-600';
-                    const label = m.type === 'seminar' ? 'Seminar' : '1-1';
+                    const label = isCancelledMeeting(m)
+                      ? cancelledLabel(m)
+                      : m.type === 'seminar' ? 'Seminar' : '1-1';
                     return (
                       <button
                         key={m.id}
@@ -615,6 +636,9 @@ export default function StudentCalendar({
                     <p className="text-slate-500">
                       {selectedPast.with}
                     </p>
+                    {isCancelledMeeting(selectedPast) ? (
+                      <p className="font-semibold text-rose-600">Cancelled</p>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -726,7 +750,7 @@ export default function StudentCalendar({
                                 {m.with}
                               </p>
                             )}
-                            {isExpert ? (
+                            {isExpert || isPastMeeting(m) || isCancelledMeeting(m) ? (
                               <p className="mt-2 text-[11px] font-semibold text-[#234C6A]">
                                 View details →
                               </p>
@@ -830,6 +854,11 @@ export default function StudentCalendar({
             <div className="mb-3 text-center text-lg font-semibold text-slate-900">
               {detailMeeting.type === 'seminar' ? 'Seminar Details' : 'Session Details'}
             </div>
+            {isCancelledMeeting(detailMeeting) ? (
+              <p className="-mt-2 mb-3 text-center text-[11px] font-semibold text-rose-600">
+                Cancelled
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={() => setDetailMeeting(null)}
@@ -884,6 +913,7 @@ export default function StudentCalendar({
 
             {!isPastMeeting(detailMeeting) &&
             !isPendingMeeting(detailMeeting) &&
+            !isCancelledMeeting(detailMeeting) &&
             onJoinMeeting ? (
               <button
                 type="button"
