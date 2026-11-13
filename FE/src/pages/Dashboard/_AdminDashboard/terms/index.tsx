@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { FileText, Plus, X } from 'lucide-react';
 import AgreementTabs from './AgreementTabs';
 import CurrentVersionCard, { type VersionActions } from './CurrentVersionCard';
 import PublishDrawer from './PublishDrawer';
 import SignatureLookup from './SignatureLookup';
 import TermsDialog from './TermsDialog';
+import FilePreviewModal from '../../FilePreviewModal';
 import VersionHistoryTable from './VersionHistoryTable';
 import TermsHtml from '../../../../components/terms/TermsHtml';
 import {
   downloadTermsDocx,
   getAdminTermsVersion,
+  getTermsDocxViewUrl,
   getTermsOverview,
   listVersionSigners,
   publishTerms,
@@ -31,8 +33,20 @@ import {
 
 type Notice = { tone: 'success' | 'error'; text: string };
 
+type DocumentDialog = Extract<Dialog, { kind: 'document' }>;
+type DocPreview = { url: string; fileName: string; title: string };
+
 type Dialog =
-  | { kind: 'document'; title: string; loading: boolean; error: string; html: string }
+  | {
+      kind: 'document';
+      key: AgreementKey;
+      number: number;
+      fileName: string;
+      title: string;
+      loading: boolean;
+      error: string;
+      html: string;
+    }
   | { kind: 'signers'; key: AgreementKey; title: string; loading: boolean; error: string; rows: TermsAcceptanceRow[] };
 
 function signersSubtitle(key: AgreementKey, rows: TermsAcceptanceRow[]) {
@@ -52,6 +66,8 @@ export default function TermsAgreementPage() {
   const [publishOpen, setPublishOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [docPreview, setDocPreview] = useState<DocPreview | null>(null);
+  const [docOpening, setDocOpening] = useState({ busy: false, error: '' });
   const [downloading, setDownloading] = useState<{ key: AgreementKey; number: number } | null>(null);
   const loadSeq = useRef<Partial<Record<AgreementKey, number>>>({});
   const dialogSeq = useRef(0);
@@ -86,6 +102,8 @@ export default function TermsAgreementPage() {
 
   const closeDialog = () => {
     dialogSeq.current += 1;
+    setDocPreview(null);
+    setDocOpening({ busy: false, error: '' });
     setDialog(null);
   };
 
@@ -97,6 +115,7 @@ export default function TermsAgreementPage() {
   ) => {
     const seq = dialogSeq.current + 1;
     dialogSeq.current = seq;
+    setDocOpening({ busy: false, error: '' });
     setDialog(initial);
     try {
       const result = await fetcher();
@@ -108,11 +127,36 @@ export default function TermsAgreementPage() {
     }
   };
 
+  /** Opens the uploaded .docx in the same viewer User Management uses for résumés. */
+  const openDocument = async (doc: DocumentDialog) => {
+    if (docOpening.busy) return;
+    const seq = dialogSeq.current;
+    setDocOpening({ busy: true, error: '' });
+    try {
+      const url = await getTermsDocxViewUrl(API_AUDIENCE[doc.key], doc.number);
+      if (dialogSeq.current !== seq) return;
+      setDocOpening({ busy: false, error: '' });
+      setDocPreview({ url, fileName: doc.fileName, title: doc.title });
+    } catch (err) {
+      if (dialogSeq.current !== seq) return;
+      setDocOpening({ busy: false, error: apiError(err, 'Could not open the document. Try Download instead.') });
+    }
+  };
+
   const actionsFor = (item: AgreementContract): VersionActions => ({
     downloadingVersion: downloading?.key === item.key ? downloading.number : null,
     onPreview: (version: AgreementVersion) => {
       void openDialog(
-        { kind: 'document', title: `${item.label} agreement · v${version.number}`, loading: true, error: '', html: '' },
+        {
+          kind: 'document',
+          key: item.key,
+          number: version.number,
+          fileName: version.originalFilename || `terms-${API_AUDIENCE[item.key]}-v${version.number}.docx`,
+          title: `${item.label} agreement · v${version.number}`,
+          loading: true,
+          error: '',
+          html: '',
+        },
         () => getAdminTermsVersion(API_AUDIENCE[item.key], version.number),
         (current, doc) => (current.kind === 'document' ? { ...current, loading: false, html: doc.html || '' } : current),
         'Could not load that agreement.',
@@ -223,11 +267,32 @@ export default function TermsAgreementPage() {
       {dialog ? (
         <TermsDialog
           title={dialog.title}
+          titleAction={
+            dialog.kind === 'document' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void openDocument(dialog)}
+                  disabled={docOpening.busy}
+                  className={`${FOCUS} inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-wl-brand hover:bg-slate-50 disabled:cursor-wait disabled:opacity-70`}
+                >
+                  <FileText className="h-3.5 w-3.5" aria-hidden />
+                  {docOpening.busy ? 'Opening…' : 'View document'}
+                </button>
+                {docOpening.error ? (
+                  <span className="text-xs text-rose-700" role="alert">
+                    {docOpening.error}
+                  </span>
+                ) : null}
+              </>
+            ) : undefined
+          }
           subtitle={
             dialog.kind === 'signers' && !dialog.loading && !dialog.error
               ? signersSubtitle(dialog.key, dialog.rows)
               : undefined
           }
+          escapeCloses={!docPreview}
           onClose={closeDialog}
         >
           {dialog.loading ? (
@@ -272,6 +337,15 @@ export default function TermsAgreementPage() {
             </ul>
           )}
         </TermsDialog>
+      ) : null}
+
+      {docPreview ? (
+        <FilePreviewModal
+          fileUrl={docPreview.url}
+          fileName={docPreview.fileName}
+          documentType={docPreview.title}
+          onClose={() => setDocPreview(null)}
+        />
       ) : null}
     </div>
   );

@@ -147,6 +147,14 @@ export async function getAdminTermsVersion(audience: TermsAudience, version: num
     return res.data as TermsContract & { publishedAt?: string };
 }
 
+/** Public link to that version's .docx for the "View document" viewer (copied to Spaces on first view). */
+export async function getTermsDocxViewUrl(audience: TermsAudience, version: number): Promise<string> {
+    const res = await apiClient.get(`admin/terms/${audience}/versions/${version}/docx-url`);
+    const url = String(res.data?.url || '');
+    if (!url) throw new Error('No document link returned.');
+    return url;
+}
+
 export async function downloadTermsDocx(audience: TermsAudience, version: number, filename?: string) {
     const res = await apiClient.get(`admin/terms/${audience}/versions/${version}/docx`, { responseType: 'blob' });
     const blob = res.data as Blob;

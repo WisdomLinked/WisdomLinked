@@ -19,10 +19,12 @@ const {
     listVersionMetas,
     listVersionOverview,
     listSigners,
+    ensureVersionDocxUrl,
+    getCurrentSharedPublic,
     TERMS_NOTES_MAX,
 } = require('../services/termsAgreement');
 const { register } = require('../controllers/auth.controller');
-const { listTermsVersions, publishTerms, downloadTermsDocx } = require('../controllers/terms.controller');
+const { listTermsVersions, publishTerms, downloadTermsDocx, getTermsDocxViewUrl } = require('../controllers/terms.controller');
 const { Binary } = require('mongoose').mongo;
 const adminAudit = require('../utils/adminAudit');
 
@@ -1028,5 +1030,155 @@ test('version signers carry each account\'s role and status, and a removed accou
         assert.deepEqual(selected.split(/\s+/).sort(), ['email', 'name', 'role', 'status', 'username']);
     } finally {
         restoreMemory();
+    }
+});
+
+test('View document: first view copies the .docx to Spaces once, keeps the link, and later views reuse it', async () => {
+    const original = docx('terms-v2.docx');
+    const row: any = { _id: 'ver2', audience: 'shared', version: 2, originalFilename: 'Shared Terms "v2".docx', docx: new Binary(original), docxUrl: '' };
+    const originalFindOne = TermsVersion.findOne;
+    const originalFindOneAndUpdate = TermsVersion.findOneAndUpdate;
+    TermsVersion.findOne = (filter: any) => chain(() => (filter._id || Number(filter.version) === 2 ? { ...row } : null));
+    TermsVersion.findOneAndUpdate = (filter: any, update: any) => chain(() => {
+        if (row.docxUrl) return null;
+        assert.equal(filter._id, 'ver2');
+        row.docxUrl = update.$set.docxUrl;
+        return { ...row };
+    });
+    const uploads: any[] = [];
+    const upload = async (file: any, folder: string) => {
+        uploads.push({ file, folder });
+        return 'https://bucket.example/termsDocuments/123_Shared_Terms_v2.docx';
+    };
+    try {
+        const first = await ensureVersionDocxUrl('shared', 2, upload);
+        assert.equal(first, 'https://bucket.example/termsDocuments/123_Shared_Terms_v2.docx');
+        assert.equal(uploads.length, 1);
+        assert.equal(uploads[0].folder, 'termsDocuments');
+        assert.equal(Buffer.compare(uploads[0].file.buffer, original), 0, 'uploads the exact stored bytes');
+        assert.equal(uploads[0].file.mimetype, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        assert.match(uploads[0].file.originalname, /\.docx$/);
+        assert.doesNotMatch(uploads[0].file.originalname, /"/);
+        assert.equal(row.docxUrl, first);
+
+        const again = await ensureVersionDocxUrl('shared', 2, upload);
+        assert.equal(again, first);
+        assert.equal(uploads.length, 1, 'a saved link is reused, nothing uploaded again');
+    } finally {
+        TermsVersion.findOne = originalFindOne;
+        TermsVersion.findOneAndUpdate = originalFindOneAndUpdate;
+    }
+});
+
+test('View document: when another admin saved a link first, that link wins', async () => {
+    const row: any = { _id: 'ver3', audience: 'shared', version: 3, originalFilename: 'v3.docx', docx: Buffer.from('PK'), docxUrl: '' };
+    const originalFindOne = TermsVersion.findOne;
+    const originalFindOneAndUpdate = TermsVersion.findOneAndUpdate;
+    TermsVersion.findOne = (filter: any) => chain(() => (filter._id ? { _id: 'ver3', docxUrl: 'https://bucket.example/first.docx' } : { ...row }));
+    TermsVersion.findOneAndUpdate = () => chain(() => null);
+    try {
+        const url = await ensureVersionDocxUrl('shared', 3, async () => 'https://bucket.example/second.docx');
+        assert.equal(url, 'https://bucket.example/first.docx');
+    } finally {
+        TermsVersion.findOne = originalFindOne;
+        TermsVersion.findOneAndUpdate = originalFindOneAndUpdate;
+    }
+});
+
+test('View document: an upload failure saves nothing and answers 503 (never 401/403, which log admins out)', async () => {
+    const row: any = { _id: 'ver2', audience: 'shared', version: 2, originalFilename: 'v2.docx', docx: Buffer.from('PK'), docxUrl: '' };
+    const originalFindOne = TermsVersion.findOne;
+    const originalFindOneAndUpdate = TermsVersion.findOneAndUpdate;
+    const auth = require('../controllers/auth.controller');
+    const originalUpload = auth.uploadFileToS3;
+    let saved = false;
+    TermsVersion.findOne = () => chain(() => ({ ...row }));
+    TermsVersion.findOneAndUpdate = () => chain(() => { saved = true; return null; });
+    auth.uploadFileToS3 = async () => { throw new Error('Spaces is not configured'); };
+    try {
+        await assert.rejects(ensureVersionDocxUrl('shared', 2, auth.uploadFileToS3), (err: any) => err.code === 'DOCX_VIEWER_UNAVAILABLE');
+        const res = createRes();
+        await getTermsDocxViewUrl({ params: { audience: 'shared', version: '2' } } as any, res);
+        assert.equal(res.statusCode, 503);
+        assert.match(res.body.error, /not available right now/);
+        assert.equal(saved, false);
+    } finally {
+        TermsVersion.findOne = originalFindOne;
+        TermsVersion.findOneAndUpdate = originalFindOneAndUpdate;
+        auth.uploadFileToS3 = originalUpload;
+    }
+});
+
+test('View document endpoint: a saved link is returned without uploading; bad input is 400, unknown version 404', async () => {
+    const originalFindOne = TermsVersion.findOne;
+    const auth = require('../controllers/auth.controller');
+    const originalUpload = auth.uploadFileToS3;
+    let uploaded = false;
+    auth.uploadFileToS3 = async () => { uploaded = true; return 'x'; };
+    TermsVersion.findOne = (filter: any) => chain(() =>
+        Number(filter.version) === 2 ? { _id: 'ver2', audience: 'shared', version: 2, originalFilename: 'v2.docx', docxUrl: 'https://bucket.example/v2.docx' } : null);
+    try {
+        const ok = createRes();
+        await getTermsDocxViewUrl({ params: { audience: 'shared', version: '2' } } as any, ok);
+        assert.equal(ok.statusCode, 200);
+        assert.deepEqual(ok.body, { url: 'https://bucket.example/v2.docx' });
+        assert.equal(uploaded, false);
+
+        const bad = createRes();
+        await getTermsDocxViewUrl({ params: { audience: 'nobody', version: '2' } } as any, bad);
+        assert.equal(bad.statusCode, 400);
+        const badVersion = createRes();
+        await getTermsDocxViewUrl({ params: { audience: 'shared', version: 'abc' } } as any, badVersion);
+        assert.equal(badVersion.statusCode, 400);
+        const missing = createRes();
+        await getTermsDocxViewUrl({ params: { audience: 'shared', version: '9' } } as any, missing);
+        assert.equal(missing.statusCode, 404);
+    } finally {
+        TermsVersion.findOne = originalFindOne;
+        auth.uploadFileToS3 = originalUpload;
+    }
+});
+
+test('public agreement responses never include the Spaces link', async () => {
+    const originalFindOne = TermsVersion.findOne;
+    TermsVersion.findOne = () => chain(() => ({ audience: 'shared', version: 2, html: '<p>x</p>', contentHash: 'h', originalFilename: 'v2.docx', docxUrl: 'https://bucket.example/v2.docx' }));
+    try {
+        const current = await getCurrentSharedPublic();
+        assert.equal('docxUrl' in current, false);
+        assert.equal(JSON.stringify(current).includes('bucket.example'), false);
+    } finally {
+        TermsVersion.findOne = originalFindOne;
+    }
+});
+
+test('View document endpoint: with Spaces configured it uploads through the shared uploader and returns the link', async () => {
+    const row: any = { _id: 'ver5', audience: 'shared', version: 5, originalFilename: 'v5.docx', docx: Buffer.from('PK'), docxUrl: '' };
+    const originalFindOne = TermsVersion.findOne;
+    const originalFindOneAndUpdate = TermsVersion.findOneAndUpdate;
+    const auth = require('../controllers/auth.controller');
+    const originalUpload = auth.uploadFileToS3;
+    const env = { b: process.env.DO_SPACES_BUCKET, k: process.env.DO_SPACES_KEY, s: process.env.DO_SPACES_SECRET };
+    process.env.DO_SPACES_BUCKET = 'bucket';
+    process.env.DO_SPACES_KEY = 'key';
+    process.env.DO_SPACES_SECRET = 'secret';
+    const folders: string[] = [];
+    auth.uploadFileToS3 = async (_file: any, folder: string) => { folders.push(folder); return 'https://bucket.example/termsDocuments/5_v5.docx'; };
+    TermsVersion.findOne = () => chain(() => ({ ...row }));
+    TermsVersion.findOneAndUpdate = (_f: any, update: any) => chain(() => { row.docxUrl = update.$set.docxUrl; return { ...row }; });
+    try {
+        const res = createRes();
+        await getTermsDocxViewUrl({ params: { audience: 'shared', version: '5' } } as any, res);
+        assert.equal(res.statusCode, 200);
+        assert.deepEqual(res.body, { url: 'https://bucket.example/termsDocuments/5_v5.docx' });
+        assert.deepEqual(folders, ['termsDocuments']);
+        assert.equal(row.docxUrl, 'https://bucket.example/termsDocuments/5_v5.docx');
+    } finally {
+        TermsVersion.findOne = originalFindOne;
+        TermsVersion.findOneAndUpdate = originalFindOneAndUpdate;
+        auth.uploadFileToS3 = originalUpload;
+        for (const [name, value] of [['DO_SPACES_BUCKET', env.b], ['DO_SPACES_KEY', env.k], ['DO_SPACES_SECRET', env.s]] as const) {
+            if (value === undefined) delete process.env[name];
+            else process.env[name] = value;
+        }
     }
 });

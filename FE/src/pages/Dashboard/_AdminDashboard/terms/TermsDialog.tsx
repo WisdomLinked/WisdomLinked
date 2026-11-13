@@ -7,22 +7,30 @@ import { OVERLAY_Z_DIALOG } from '../../../../utils/overlayLayers';
 export default function TermsDialog({
   title,
   subtitle,
+  titleAction,
+  escapeCloses = true,
   onClose,
   children,
 }: {
   title: string;
   subtitle?: string;
+  /** Shown beside the title, e.g. "View document" on an agreement preview. */
+  titleAction?: React.ReactNode;
+  /** False while something opened on top (the document viewer) should take Escape instead. */
+  escapeCloses?: boolean;
   onClose: () => void;
   children: React.ReactNode;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const escapeClosesRef = useRef(escapeCloses);
+  escapeClosesRef.current = escapeCloses;
 
   useEffect(() => {
     const id = window.requestAnimationFrame(() => closeRef.current?.focus());
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCloseRef.current();
+      if (event.key === 'Escape' && escapeClosesRef.current) onCloseRef.current();
     };
     document.addEventListener('keydown', onKey);
     return () => {
@@ -46,9 +54,12 @@ export default function TermsDialog({
       >
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div className="min-w-0">
-            <h2 id="terms-dialog-title" className="text-base font-semibold text-slate-900">
-              {title}
-            </h2>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h2 id="terms-dialog-title" className="text-base font-semibold text-slate-900">
+                {title}
+              </h2>
+              {titleAction}
+            </div>
             {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
           </div>
           <button

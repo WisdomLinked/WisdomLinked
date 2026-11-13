@@ -89,6 +89,7 @@ const {
     listTermsVersions,
     getTermsVersion,
     downloadTermsDocx,
+    getTermsDocxViewUrl,
     listVersionAcceptances,
     searchTermsUsersHandler,
     getUserTermsAcceptances,
@@ -160,6 +161,7 @@ router.post("/terms/:audience/preview", adminAuth, uploadsGeneral, previewTerms)
 router.post("/terms/:audience/publish", adminAuth, uploadsGeneral, publishTerms);
 router.get("/terms/:audience/versions", adminAuth, listTermsVersions);
 router.get("/terms/:audience/versions/:version/docx", adminAuth, downloadTermsDocx);
+router.get("/terms/:audience/versions/:version/docx-url", adminAuth, getTermsDocxViewUrl);
 router.get("/terms/:audience/versions/:version/acceptances", adminAuth, listVersionAcceptances);
 router.get("/terms/:audience/versions/:version", adminAuth, getTermsVersion);
 
