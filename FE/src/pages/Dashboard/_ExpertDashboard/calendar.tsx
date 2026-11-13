@@ -71,6 +71,7 @@ const ExpertCalendar: React.FC = () => {
         if (rawStatus === "draft") status = "draft";
         else if (rawStatus === "declined") status = "declined";
         else if (rawStatus === "pending") status = "pending";
+        else if (rawStatus === "cancelled") status = "cancelled";
 
         const withLabel = isSeminar
           ? `${Array.isArray(e.participants) ? e.participants.length : 0} attendees`
@@ -115,6 +116,9 @@ const ExpertCalendar: React.FC = () => {
       })
       .filter(Boolean) as Meeting[];
   }, [events, userDetails?._id]);
+
+  const selectedEventCancelled =
+    String(selectedEvent?.status || "").toLowerCase() === "cancelled";
 
   const handleSelectEvent = (event: any) => {
     if (!event) return;
@@ -404,16 +408,7 @@ const ExpertCalendar: React.FC = () => {
                   </button>
                 </div>
               ) : null
-            ) : (
-              <div className="w-full h-10 flex justify-center mt-6">
-                <button
-                  className="w-[calc(50%-8px)] bg-[#234C6A] hover:bg-[#1b3c53] text-white rounded-xl flex items-center justify-center disabled:opacity-50"
-                  onClick={() => navigateCustomer(selectedEvent?.customer)}
-                >
-                  Chat History
-                </button>
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -428,6 +423,11 @@ const ExpertCalendar: React.FC = () => {
             <div className="text-center text-slate-900 text-xl mb-3 font-semibold">
               {selectedEvent?.type === "seminar" ? "Seminar Details" : "Session Details"}
             </div>
+            {selectedEventCancelled ? (
+              <p className="-mt-2 mb-3 text-center text-[11px] font-semibold text-rose-600">
+                Cancelled
+              </p>
+            ) : null}
             <button
               className="absolute right-2 top-2 rounded-md hover:bg-slate-100 p-1"
               onClick={() => { setSelectedEvent(null); setSeminarModalShow(false); }}
@@ -457,28 +457,28 @@ const ExpertCalendar: React.FC = () => {
               <p className="mt-2 text-[11px] font-semibold text-rose-600">{cancelError}</p>
             ) : null}
 
-            <div className="w-full h-10 flex justify-center mt-4 space-x-4">
-              <button
-                className="w-fit px-4 rounded-xl bg-[#234C6A] hover:bg-[#1b3c53] text-white flex items-center justify-center"
-                onClick={() => {
-                  if (selectedEvent?.type === "individual" && selectedEvent?.status === "pending") {
-                    void cancelAppointment(selectedEvent._id);
-                  } else {
-                    enterChatForSelected(selectedEvent);
-                  }
-                }}
-              >
-                {eventIsUpcoming(selectedEvent)
-                  ? selectedEvent?.type === "pending seminar"
+            {eventIsUpcoming(selectedEvent) && !selectedEventCancelled ? (
+              <div className="w-full h-10 flex justify-center mt-4 space-x-4">
+                <button
+                  className="w-fit px-4 rounded-xl bg-[#234C6A] hover:bg-[#1b3c53] text-white flex items-center justify-center"
+                  onClick={() => {
+                    if (selectedEvent?.type === "individual" && selectedEvent?.status === "pending") {
+                      void cancelAppointment(selectedEvent._id);
+                    } else {
+                      enterChatForSelected(selectedEvent);
+                    }
+                  }}
+                >
+                  {selectedEvent?.type === "pending seminar"
                     ? "Cancel Request"
                     : selectedEvent?.type === "individual"
                     ? selectedEvent?.status === "pending"
                       ? "Withdraw offer"
                       : "Enter Chat"
-                    : "Enter Seminar Chat"
-                  : "Chat History"}
-              </button>
-            </div>
+                    : "Enter Seminar Chat"}
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
