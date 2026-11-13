@@ -279,6 +279,50 @@ function docxBytes(value: any): Buffer | null {
     return null;
 }
 
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/**
+ * Public link to a version's .docx for the admin "View document" button, which opens the same
+ * online Word viewer résumés use (that viewer has to fetch the file from a public URL). The file
+ * is copied to Spaces the first time it is viewed and the link is kept, so older versions need
+ * no backfill. The agreement text is already shown to every signer, so a public copy is fine.
+ * `upload` is the existing Spaces uploader; a failure throws `code: "DOCX_VIEWER_UNAVAILABLE"`.
+ */
+async function ensureVersionDocxUrl(
+    audience: string,
+    version: number,
+    upload: (file: { buffer: Buffer; originalname: string; mimetype: string }, folder: string) => Promise<string>,
+): Promise<string> {
+    const meta = await getVersionDocument(audience, version, false);
+    if (meta.docxUrl) return meta.docxUrl;
+    const doc = await getVersionDocument(audience, version, true);
+    let url = "";
+    try {
+        url = await upload(
+            { buffer: doc.docx, originalname: safeDownloadName(doc.originalFilename, audience, version), mimetype: DOCX_MIME },
+            "termsDocuments",
+        );
+    } catch (err: any) {
+        console.error("[terms] could not copy the agreement file to Spaces", err?.message);
+    }
+    if (!url) {
+        const err: any = new Error("Agreement file could not be uploaded for viewing.");
+        err.code = "DOCX_VIEWER_UNAVAILABLE";
+        throw err;
+    }
+    // Two admins opening the same old version at once: keep whichever link was saved first.
+    const saved = await TermsVersion.findOneAndUpdate(
+        { _id: doc._id, $or: [{ docxUrl: { $exists: false } }, { docxUrl: "" }, { docxUrl: null }] },
+        { $set: { docxUrl: url } },
+        { new: true },
+    )
+        .select("docxUrl")
+        .lean();
+    if (saved?.docxUrl) return saved.docxUrl;
+    const current = await TermsVersion.findOne({ _id: doc._id }).select("docxUrl").lean();
+    return current?.docxUrl || url;
+}
+
 function safeDownloadName(name: string, audience: string, version: number) {
     const cleaned = String(name || "")
         .replace(/[/\\"]/g, "")
@@ -610,6 +654,7 @@ module.exports = {
     listVersionMetas,
     listVersionOverview,
     getVersionDocument,
+    ensureVersionDocxUrl,
     safeDownloadName,
     listSigners,
     searchTermsUsers,

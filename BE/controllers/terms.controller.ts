@@ -5,6 +5,7 @@ const {
     publishTermsVersion,
     listVersionOverview,
     getVersionDocument,
+    ensureVersionDocxUrl,
     safeDownloadName,
     listSigners,
     searchTermsUsers,
@@ -127,6 +128,33 @@ const downloadTermsDocx = async (req: any, res: any) => {
     }
 };
 
+/** GET admin/terms/:audience/versions/:version/docx-url → { url } for the "View document" viewer. */
+const getTermsDocxViewUrl = async (req: any, res: any) => {
+    try {
+        const audience = normalizeAudience(req.params.audience);
+        const version = Number(req.params.version);
+        if (!audience || !Number.isInteger(version)) {
+            return res.status(400).json({ error: "Unknown agreement version." });
+        }
+        const { uploadFileToS3 } = require("./auth.controller");
+        const upload = (file: any, folder: string) => {
+            // No Spaces settings (e.g. a local machine): fail fast instead of calling out with blank keys.
+            if (!process.env.DO_SPACES_BUCKET || !process.env.DO_SPACES_KEY || !process.env.DO_SPACES_SECRET) {
+                throw new Error("DO Spaces is not configured");
+            }
+            return uploadFileToS3(file, folder);
+        };
+        const url = await ensureVersionDocxUrl(audience, version, upload);
+        return res.status(200).json({ url });
+    } catch (err: any) {
+        if (err?.code === "DOCX_VIEWER_UNAVAILABLE") {
+            // 503, never 401/403: those log the admin out on the frontend.
+            return res.status(503).json({ error: "The document viewer is not available right now. Use Download instead." });
+        }
+        return sendTermsError(res, err);
+    }
+};
+
 const listVersionAcceptances = async (req: any, res: any) => {
     try {
         const audience = normalizeAudience(req.params.audience);
@@ -204,6 +232,7 @@ const acceptTerms = async (req: any, res: any) => {
 };
 
 module.exports = {
+    getTermsDocxViewUrl,
     previewTerms,
     publishTerms,
     listTermsVersions,

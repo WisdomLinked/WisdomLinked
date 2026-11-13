@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   getAdminTermsVersion: vi.fn(),
   listVersionSigners: vi.fn(),
   downloadTermsDocx: vi.fn(),
+  getTermsDocxViewUrl: vi.fn(),
   searchTermsUsers: vi.fn(),
   getUserTermsAcceptances: vi.fn(),
   previewTerms: vi.fn(),
@@ -395,5 +396,94 @@ describe('TermsAgreementPage — signature lookup', () => {
     expect(api.searchTermsUsers).toHaveBeenCalledWith('ada');
     expect(await screen.findByText('Shared: signed v1, needs v2')).toBeInTheDocument();
     expect(screen.getByText(/^Expert: signed v1 on/)).toBeInTheDocument();
+  });
+});
+
+describe('TermsAgreementPage — View document', () => {
+  const LINK = 'https://bucket.example/termsDocuments/1731_shared-v2.docx';
+
+  beforeEach(() => {
+    api.getAdminTermsVersion.mockResolvedValue({ html: '<p>Refunds within 24 hours.</p>' });
+    api.getTermsDocxViewUrl.mockResolvedValue(LINK);
+  });
+
+  async function openPreview(versionNumber: number) {
+    const user = userEvent.setup();
+    await renderLoaded();
+    const history = screen.getByRole('heading', { name: 'Version history' }).closest('section') as HTMLElement;
+    await user.click(within(history).getByRole('button', { name: `Preview v${versionNumber}` }));
+    const preview = await screen.findByRole('dialog', { name: `Shared agreement · v${versionNumber}` });
+    return { user, preview };
+  }
+
+  it('the preview has a View document button beside its title; the signers list does not', async () => {
+    const { user, preview } = await openPreview(2);
+    const heading = within(preview).getByRole('heading', { name: 'Shared agreement · v2' });
+    expect(heading.parentElement).toContainElement(within(preview).getByRole('button', { name: 'View document' }));
+    await user.click(within(preview).getByRole('button', { name: 'Close dialog' }));
+
+    api.listVersionSigners.mockResolvedValue([]);
+    const card = screen.getByRole('heading', { name: 'Shared agreement · v2' }).closest('section') as HTMLElement;
+    await user.click(within(card).getByRole('button', { name: 'Signers' }));
+    const signers = await screen.findByRole('dialog', { name: 'Signers of Shared v2' });
+    expect(within(signers).queryByRole('button', { name: 'View document' })).not.toBeInTheDocument();
+  });
+
+  it('opens that exact version in the résumé viewer: Word viewer frame, title, file name and download', async () => {
+    const { user, preview } = await openPreview(1);
+    api.getTermsDocxViewUrl.mockResolvedValue('https://bucket.example/termsDocuments/9_shared-v1.docx');
+    await user.click(within(preview).getByRole('button', { name: 'View document' }));
+    expect(api.getTermsDocxViewUrl).toHaveBeenCalledWith('shared', 1);
+    const close = await screen.findByRole('button', { name: 'Close preview' });
+    const viewer = close.closest('[role="dialog"]') as HTMLElement;
+    expect(within(viewer).getByRole('heading', { name: 'Shared agreement · v1' })).toBeInTheDocument();
+    const frame = viewer.querySelector('iframe') as HTMLIFrameElement;
+    expect(frame.getAttribute('src')).toBe(
+      `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent('https://bucket.example/termsDocuments/9_shared-v1.docx')}`,
+    );
+    expect(within(viewer).getByText('shared-v1.docx')).toBeInTheDocument();
+    expect(within(viewer).getByRole('link', { name: 'Download' })).toHaveAttribute('href', 'https://bucket.example/termsDocuments/9_shared-v1.docx');
+  });
+
+  it('Escape and the close button close only the document, leaving the preview open', async () => {
+    const { user, preview } = await openPreview(2);
+    await user.click(within(preview).getByRole('button', { name: 'View document' }));
+    await screen.findByRole('button', { name: 'Close preview' });
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('button', { name: 'Close preview' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Shared agreement · v2' })).toBeInTheDocument();
+
+    await user.click(within(preview).getByRole('button', { name: 'View document' }));
+    await user.click(await screen.findByRole('button', { name: 'Close preview' }));
+    expect(screen.queryByRole('button', { name: 'Close preview' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Shared agreement · v2' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows the server reason when the document cannot be opened, and the preview stays usable', async () => {
+    api.getTermsDocxViewUrl.mockRejectedValue({
+      response: { data: { error: 'The document viewer is not available right now. Use Download instead.' } },
+    });
+    const { user, preview } = await openPreview(2);
+    await user.click(within(preview).getByRole('button', { name: 'View document' }));
+    expect(await within(preview).findByRole('alert')).toHaveTextContent('The document viewer is not available right now');
+    expect(screen.queryByRole('button', { name: 'Close preview' })).not.toBeInTheDocument();
+    expect(within(preview).getByText('Refunds within 24 hours.')).toBeInTheDocument();
+    expect(within(preview).getByRole('button', { name: 'View document' })).toBeEnabled();
+  });
+
+  it('a link that arrives after the preview was closed never opens a viewer', async () => {
+    let resolve: (url: string) => void = () => {};
+    api.getTermsDocxViewUrl.mockImplementation(() => new Promise<string>(r => { resolve = r; }));
+    const { user, preview } = await openPreview(2);
+    await user.click(within(preview).getByRole('button', { name: 'View document' }));
+    expect(within(preview).getByRole('button', { name: 'Opening…' })).toBeDisabled();
+    await user.click(within(preview).getByRole('button', { name: 'Close dialog' }));
+    resolve(LINK);
+    await new Promise(r => setTimeout(r, 0));
+    expect(screen.queryByRole('button', { name: 'Close preview' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
