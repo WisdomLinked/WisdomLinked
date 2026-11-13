@@ -54,4 +54,26 @@ describe('paymentRecord', () => {
     expect(screen.getByText('Refunded')).toBeInTheDocument();
     expect(screen.queryByText('Booking')).toBeNull();
   });
+
+  it('shows an empty Receipt ID row right below the payment intent, for charges and refunds', () => {
+    for (const variant of ['payment', 'refund'] as const) {
+      const { container, unmount } = render(
+        <PaymentDetailFields row={toPaymentRow({ ...charge, paymentType: variant === 'refund' ? 'refund' : 'charge' })} variant={variant} />,
+      );
+      const labels = Array.from(container.querySelectorAll('dt')).map(dt => dt.textContent);
+      const at = labels.indexOf('Receipt ID');
+      expect(at).toBeGreaterThan(-1);
+      expect(labels[at - 1]).toBe('Payment intent');
+      const value = container.querySelectorAll('dt')[at].nextElementSibling;
+      expect(value?.textContent).toBe('—');
+      unmount();
+    }
+  });
+
+  it('keeps the Receipt ID row even when there is no payment intent', () => {
+    const { container } = render(<PaymentDetailFields row={toPaymentRow({ ...charge, paymentIntent: '' })} variant="payment" />);
+    const labels = Array.from(container.querySelectorAll('dt')).map(dt => dt.textContent);
+    expect(labels).toContain('Receipt ID');
+    expect(labels).not.toContain('Payment intent');
+  });
 });
