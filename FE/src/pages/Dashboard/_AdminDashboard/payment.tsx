@@ -37,8 +37,23 @@ import {
 import SnapshotRangeControl from '../../../components/dashboard/SnapshotRangeControl';
 import SnapshotKpiStrip, { paymentKpis } from '../../../components/dashboard/SnapshotKpiStrip';
 import SnapshotMonthlyChart from '../../../components/dashboard/SnapshotMonthlyChart';
-import { snapshotRangePhrase, type SnapshotCustomRange, type SnapshotRangeKey } from '../../../utils/adminSnapshotRange';
+import { SnapshotMetricBody } from '../../../components/dashboard/AdminSnapshotMetricView';
+import {
+  alignMonthlyPoints,
+  snapshotChartMonthKeys,
+  snapshotRangePhrase,
+  type SnapshotCustomRange,
+  type SnapshotRangeKey,
+} from '../../../utils/adminSnapshotRange';
+import type { AdminSnapshotMonthlyPoint } from '../../../api/api';
 import { DASHBOARD_PAGE_TITLE } from '../../../components/dashboard/pageTitle';
+
+type SummaryView = 'payments' | 'refunds';
+
+const SUMMARY_VIEWS: ReadonlyArray<{ value: SummaryView; label: string }> = [
+  { value: 'payments', label: 'Payments' },
+  { value: 'refunds', label: 'Refunds' },
+];
 
 const Payment = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -169,6 +184,28 @@ const Payment = () => {
   const [paymentStats, setPaymentStats] = useState<AdminPaymentStatsData | null>(null);
   const [paymentStatsError, setPaymentStatsError] = useState(false);
   const statsSeq = useRef(0);
+
+  const [summaryView, setSummaryView] = useState<SummaryView>('payments');
+
+  /** Same month axis as the Overview charts: 3 months → 3 bars, not the 4 calendar months the dates touch. */
+  const chartMonthKeys = useMemo(() => {
+    if (!paymentStats) return undefined;
+    const custom = filters.range === 'custom' ? { startDate: filters.startDate, endDate: filters.endDate } : null;
+    return snapshotChartMonthKeys(
+      filters.range,
+      custom,
+      (paymentStats.monthly || []).map(p => p.month),
+    );
+  }, [paymentStats, filters.range, filters.startDate, filters.endDate]);
+  const chartPoints = useMemo(
+    () =>
+      chartMonthKeys && paymentStats
+        ? (alignMonthlyPoints(chartMonthKeys, paymentStats.monthly) as AdminSnapshotMonthlyPoint[])
+        : undefined,
+    [chartMonthKeys, paymentStats],
+  );
+  const rangeCustom: SnapshotCustomRange | null =
+    filters.range === 'custom' ? { startDate: filters.startDate, endDate: filters.endDate } : null;
 
   /** Summary follows the date range and the Stripe mode only, like the Overview Payments view. */
   const loadPaymentStats = useCallback(async () => {
@@ -469,20 +506,39 @@ const Payment = () => {
             </button>
           </div>
           <div className="space-y-4 border-b border-wl-line px-4 py-4" data-testid="payment-summary">
+            <div className="flex min-w-0 flex-wrap gap-2" role="group" aria-label="Summary view">
+              {SUMMARY_VIEWS.map(view => (
+                <button
+                  key={view.value}
+                  type="button"
+                  aria-pressed={summaryView === view.value}
+                  onClick={() => setSummaryView(view.value)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-wl-brand/50 ${
+                    summaryView === view.value ? 'bg-wl-brand text-white' : 'bg-surface text-muted ring-1 ring-line'
+                  }`}
+                >
+                  {view.label}
+                </button>
+              ))}
+            </div>
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-wl-muted">
-                Collected, count, chart and the list below all use this date range.
+                {summaryView === 'refunds'
+                  ? 'Money returned to students, from Stripe and admin actions. Everything below uses this date range.'
+                  : 'Collected, count, chart and the list below all use this date range.'}
               </p>
               <SnapshotRangeControl
                 id="payment-range"
                 value={filters.range}
-                customRange={
-                  filters.range === 'custom' ? { startDate: filters.startDate, endDate: filters.endDate } : null
-                }
+                customRange={rangeCustom}
                 onChange={changeRange}
               />
             </div>
-            {paymentStatsError ? (
+            {summaryView === 'refunds' ? (
+              <div data-testid="refunds-view">
+                <SnapshotMetricBody listType="refunds" rangeKey={filters.range} customRange={rangeCustom} />
+              </div>
+            ) : paymentStatsError ? (
               <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface p-4 text-sm text-rose-700">
                 Could not load the payment summary.
                 <button
@@ -499,7 +555,7 @@ const Payment = () => {
               <>
                 <SnapshotKpiStrip kpis={paymentKpis(paymentStats)} />
                 <SnapshotMonthlyChart
-                  points={paymentStats.monthly}
+                  points={chartPoints}
                   useAmount
                   title="Payments collected per month"
                   emptyLabel="No payments in this range"
@@ -507,44 +563,46 @@ const Payment = () => {
               </>
             )}
           </div>
-          <PaymentHistoryList
-            filters={filters}
-            searchDraft={searchDraft}
-            onSearchDraft={setSearchDraft}
-            onChange={patchFilters}
-            onClear={clearFilters}
-            activeCount={activeCount}
-            showStripeModeFilter={showStripeModeFilter}
-            rangePhrase={snapshotRangePhrase(
-              filters.range,
-              filters.range === 'custom' ? { startDate: filters.startDate, endDate: filters.endDate } : null,
-            )}
-            histories={histories}
-            totalCount={totalCount}
-            loading={loading}
-            loadError={loadError}
-            onRetryLoad={() => void loadHistories()}
-            hasLoaded={hasLoaded}
-            statusTotals={statusTotals}
-            currentPage={currentPage}
-            pageSize={pageSize}
-            onPage={page => {
-              parsedRef.current = { ...parsedRef.current, page };
-              writeParams(parsedRef.current.filters, page, parsedRef.current.pageSize);
-            }}
-            onPageSize={size => {
-              parsedRef.current = { ...parsedRef.current, page: 0, pageSize: size };
-              writeParams(parsedRef.current.filters, 0, size);
-            }}
-            onRetryPayment={item => {
-              setSelectedPaymentItem(item);
-              setIsRetryModalOpen(true);
-            }}
-            onRefundPayment={item => {
-              setSelectedRefundItem(item);
-              setIsRefundModalOpen(true);
-            }}
-          />
+          {summaryView === 'payments' ? (
+            <PaymentHistoryList
+              filters={filters}
+              searchDraft={searchDraft}
+              onSearchDraft={setSearchDraft}
+              onChange={patchFilters}
+              onClear={clearFilters}
+              activeCount={activeCount}
+              showStripeModeFilter={showStripeModeFilter}
+              rangePhrase={snapshotRangePhrase(
+                filters.range,
+                filters.range === 'custom' ? { startDate: filters.startDate, endDate: filters.endDate } : null,
+              )}
+              histories={histories}
+              totalCount={totalCount}
+              loading={loading}
+              loadError={loadError}
+              onRetryLoad={() => void loadHistories()}
+              hasLoaded={hasLoaded}
+              statusTotals={statusTotals}
+              currentPage={currentPage}
+              pageSize={pageSize}
+              onPage={page => {
+                parsedRef.current = { ...parsedRef.current, page };
+                writeParams(parsedRef.current.filters, page, parsedRef.current.pageSize);
+              }}
+              onPageSize={size => {
+                parsedRef.current = { ...parsedRef.current, page: 0, pageSize: size };
+                writeParams(parsedRef.current.filters, 0, size);
+              }}
+              onRetryPayment={item => {
+                setSelectedPaymentItem(item);
+                setIsRetryModalOpen(true);
+              }}
+              onRefundPayment={item => {
+                setSelectedRefundItem(item);
+                setIsRefundModalOpen(true);
+              }}
+            />
+          ) : null}
         </section>
       </div>
       <RetryPaymentModal

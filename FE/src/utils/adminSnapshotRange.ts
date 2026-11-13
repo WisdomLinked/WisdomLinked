@@ -77,12 +77,12 @@ export function snapshotRangeBounds(
     if (!custom || !snapshotCustomRangeValid(custom.startDate, custom.endDate)) return {};
     return snapshotCustomBounds(custom);
   }
-  const to = new Date(now);
-  const from = new Date(now);
-  if (key === '3m') from.setMonth(from.getMonth() - 3);
-  else if (key === '6m') from.setMonth(from.getMonth() - 6);
-  else from.setFullYear(from.getFullYear() - 1);
-  return { dateFrom: from.toISOString(), dateTo: to.toISOString() };
+  // Start at local midnight on the 1st of the first month the chart shows, so the cards and the
+  // bars cover the same days: 3 months on Nov 12 → Sep 1 to now. The server groups the bars by
+  // the same local months (the browser time zone is sent with the request).
+  const months = key === '3m' ? 3 : key === '6m' ? 6 : 12;
+  const from = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+  return { dateFrom: from.toISOString(), dateTo: new Date(now).toISOString() };
 }
 
 function formatDay(date: Date, withYear: boolean): string {
@@ -141,10 +141,10 @@ export function snapshotRangeQuery(
   return `?${params.toString()}`;
 }
 
-/** UTC `YYYY-MM` for a local/UTC date's calendar month. */
+/** `YYYY-MM` of the local calendar month `d` falls in (the same months the server groups by). */
 export function monthKeyFromDate(d: Date): string {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
   return `${y}-${m}`;
 }
 
@@ -152,13 +152,15 @@ export function monthKeyFromDate(d: Date): string {
 export function monthKeysInclusive(first: string, last: string): string[] {
   if (!/^\d{4}-\d{2}$/.test(first) || !/^\d{4}-\d{2}$/.test(last) || first > last) return [];
   const keys: string[] = [];
-  const [fy, fm] = first.split('-').map(Number);
+  let [y, m] = first.split('-').map(Number);
   const [ly, lm] = last.split('-').map(Number);
-  const cursor = new Date(Date.UTC(fy, fm - 1, 1));
-  const end = new Date(Date.UTC(ly, lm - 1, 1));
-  while (cursor.getTime() <= end.getTime()) {
-    keys.push(monthKeyFromDate(cursor));
-    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  while (y < ly || (y === ly && m <= lm)) {
+    keys.push(`${y}-${String(m).padStart(2, '0')}`);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
   }
   return keys;
 }
@@ -167,8 +169,8 @@ export function monthKeysInclusive(first: string, last: string): string[] {
 export function trailingMonthKeys(count: number, now: Date = new Date()): string[] {
   const n = Math.max(0, Math.floor(count));
   if (!n) return [];
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - (n - 1), 1));
+  const end = new Date(now.getFullYear(), now.getMonth(), 1);
+  const start = new Date(end.getFullYear(), end.getMonth() - (n - 1), 1);
   return monthKeysInclusive(monthKeyFromDate(start), monthKeyFromDate(end));
 }
 

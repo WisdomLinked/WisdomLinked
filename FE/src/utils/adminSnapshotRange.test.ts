@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   alignMonthlyPoints,
+  monthKeysInclusive,
   DEFAULT_SNAPSHOT_RANGE,
   parseSnapshotRangeKey,
   resolveSnapshotSelection,
@@ -26,14 +27,44 @@ describe('adminSnapshotRange', () => {
     expect(snapshotRangeDescription('all')).toBe('All time');
   });
 
-  it('6 months is calendar months before now', () => {
-    const now = new Date('2026-10-21T12:00:00.000Z');
+  it('6 months starts on the 1st of the first charted month, so cards and bars cover the same days', () => {
+    const now = new Date(2026, 9, 21, 12);
     const bounds = snapshotRangeBounds('6m', now);
     expect(bounds.dateTo).toBe(now.toISOString());
-    expect(bounds.dateFrom).toBe(new Date('2026-04-21T12:00:00.000Z').toISOString());
+    expect(bounds.dateFrom).toBe(new Date(2026, 4, 1).toISOString());
+    expect(trailingMonthKeys(6, now)[0]).toBe(bounds.dateFrom!.slice(0, 7));
     expect(snapshotRangeDescription('6m')).toBe('Last 6 months');
     expect(snapshotRangePhrase('6m')).toBe('last 6 months');
     expect(snapshotRangePhrase('all')).toBe('all time');
+  });
+
+  it.each([
+    ['3m', 3, new Date(2026, 8, 1), '2026-09'],
+    ['6m', 6, new Date(2026, 5, 1), '2026-06'],
+    ['1y', 12, new Date(2025, 11, 1), '2025-12'],
+  ] as const)('%s starts at local midnight on the 1st of the first of its %i chart months, across a year boundary too', (key, n, start, firstMonth) => {
+    const now = new Date(2026, 10, 12, 15);
+    const bounds = snapshotRangeBounds(key, now);
+    expect(bounds.dateFrom).toBe(start.toISOString());
+    expect(bounds.dateTo).toBe(now.toISOString());
+    expect(snapshotChartMonthKeys(key, null, [], now)[0]).toBe(firstMonth);
+    expect(snapshotChartMonthKeys(key, null, [], now)).toHaveLength(n);
+  });
+
+  it('the start and the chart months both follow the local calendar, so they always agree', () => {
+    // The last evening of November, local time: still November on both the start and the bars.
+    const now = new Date(2026, 10, 30, 23, 30);
+    expect(snapshotRangeBounds('3m', now).dateFrom).toBe(new Date(2026, 8, 1).toISOString());
+    expect(snapshotChartMonthKeys('3m', null, [], now)).toEqual(['2026-09', '2026-10', '2026-11']);
+    // Just after midnight on Dec 1, local: both move on together.
+    const next = new Date(2026, 11, 1, 0, 30);
+    expect(snapshotRangeBounds('3m', next).dateFrom).toBe(new Date(2026, 9, 1).toISOString());
+    expect(snapshotChartMonthKeys('3m', null, [], next)).toEqual(['2026-10', '2026-11', '2026-12']);
+  });
+
+  it('monthKeysInclusive walks months as plain calendar text, across a year boundary', () => {
+    expect(monthKeysInclusive('2026-11', '2027-02')).toEqual(['2026-11', '2026-12', '2027-01', '2027-02']);
+    expect(monthKeysInclusive('2026-05', '2026-04')).toEqual([]);
   });
 
   it('custom range maps calendar days to inclusive start and exclusive next-day end', () => {

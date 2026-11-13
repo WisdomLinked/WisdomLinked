@@ -90,11 +90,11 @@ describe('Payment History date range', () => {
     expect(bounds).toEqual({ dateFrom: new Date(2026, 9, 5).toISOString(), dateTo: new Date(2026, 9, 6).toISOString() });
   });
 
-  it('3 / 6 / 12 months send only a start, three months back, so later payments still show', () => {
+  it('3 / 6 / 12 months send only a start, on the 1st of the first charted month, so later payments still show', () => {
     const now = new Date(2026, 10, 9, 14, 30);
     const three = historyDateBounds({ ...EMPTY_FILTERS, range: '3m' }, now);
-    expect(three).toEqual({ dateFrom: new Date(2026, 7, 9, 14, 30).toISOString() });
-    expect(historyDateBounds({ ...EMPTY_FILTERS, range: '1y' }, now)).toEqual({ dateFrom: new Date(2025, 10, 9, 14, 30).toISOString() });
+    expect(three).toEqual({ dateFrom: new Date(2026, 8, 1).toISOString() });
+    expect(historyDateBounds({ ...EMPTY_FILTERS, range: '1y' }, now)).toEqual({ dateFrom: new Date(2025, 11, 1).toISOString() });
   });
 
   it('counts a range other than all time as one active filter', () => {

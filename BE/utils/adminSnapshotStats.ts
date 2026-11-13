@@ -10,11 +10,10 @@ import {
     heldStartFilter,
     monthlyFromAgg,
     allTimeMonthKeys,
-    monthKeyUTC,
-    monthsInRange,
     monthsInHalfOpenRange,
-    MONTH_GROUP_CREATED,
-    MONTH_GROUP_START,
+    monthGroup,
+    monthKeyInZone,
+    monthKeysBetween,
     keptChargesPipeline,
     paymentCompletedMatch,
     refundMatch,
@@ -59,12 +58,12 @@ function monthCountPipeline(match: Record<string, unknown>, dateGroup: unknown) 
     ];
 }
 
-function monthPaymentPipeline(match: Record<string, unknown>) {
+function monthPaymentPipeline(match: Record<string, unknown>, tz: string = "UTC") {
     return [
         { $match: match },
         {
             $group: {
-                _id: { month: MONTH_GROUP_CREATED, currency: currencyGroupId },
+                _id: { month: monthGroup("createdAt", tz), currency: currencyGroupId },
                 count: { $sum: 1 },
                 amount: { $sum: { $ifNull: ["$amount", 0] } },
             },
@@ -72,7 +71,7 @@ function monthPaymentPipeline(match: Record<string, unknown>) {
     ];
 }
 
-const MONTH_AND_CURRENCY = { month: MONTH_GROUP_CREATED, currency: currencyGroupId };
+const monthAndCurrency = (tz: string) => ({ month: monthGroup("createdAt", tz), currency: currencyGroupId });
 
 function paymentModeExtra(requestedMode?: unknown): Record<string, unknown> {
     return stripeModeMatch(requestedMode);
@@ -161,27 +160,28 @@ export async function computeMonthlyBreakdown(
     to: Date | null,
     now: Date,
     requestedStripeMode?: unknown,
+    tz: string = "UTC",
 ): Promise<SnapshotMonthly> {
     const createdAt = createdAtFilter(from, to);
     const mode = paymentModeExtra(requestedStripeMode);
     const held = heldStartFilter(from, to, now);
     const seminarHeld = { ...seminarBaseFilter(), ...held };
     const sessionHeld = heldSessionFilter(from, to, now);
-    const rangedKeys = from && to ? monthsInHalfOpenRange(from, to) : null;
+    const rangedKeys = from && to ? monthsInHalfOpenRange(from, to, tz) : null;
     const charges = paymentCompletedMatch(createdAt, mode);
     const refunds = refundMatch(createdAt, mode);
 
     const [experts, customers, legacySessions, groupSessions, seminars, paymentRows, refundRows] =
         await Promise.all([
-            models.User.aggregate(monthCountPipeline({ role: "expert", ...createdAt }, MONTH_GROUP_CREATED)),
-            models.User.aggregate(monthCountPipeline({ role: "customer", ...createdAt }, MONTH_GROUP_CREATED)),
-            models.Event.aggregate(monthCountPipeline(sessionHeld, MONTH_GROUP_START)),
+            models.User.aggregate(monthCountPipeline({ role: "expert", ...createdAt }, monthGroup("createdAt", tz))),
+            models.User.aggregate(monthCountPipeline({ role: "customer", ...createdAt }, monthGroup("createdAt", tz))),
+            models.Event.aggregate(monthCountPipeline(sessionHeld, monthGroup("start", tz))),
             models.GroupChat.aggregate(
-                monthCountPipeline({ ...oneToOneGroupFilter(), ...sessionHeld }, MONTH_GROUP_START),
+                monthCountPipeline({ ...oneToOneGroupFilter(), ...sessionHeld }, monthGroup("start", tz)),
             ),
-            models.GroupChat.aggregate(monthCountPipeline(seminarHeld, MONTH_GROUP_START)),
-            models.PaymentHistory.aggregate(keptChargesPipeline(charges, MONTH_AND_CURRENCY)),
-            models.PaymentHistory.aggregate(monthPaymentPipeline(refunds)),
+            models.GroupChat.aggregate(monthCountPipeline(seminarHeld, monthGroup("start", tz))),
+            models.PaymentHistory.aggregate(keptChargesPipeline(charges, monthAndCurrency(tz))),
+            models.PaymentHistory.aggregate(monthPaymentPipeline(refunds, tz)),
         ]);
 
     const expertPoints = monthlyFromAgg(experts, false);
@@ -204,6 +204,7 @@ export async function computeMonthlyBreakdown(
                 ...refundPoints,
             ],
             now,
+            tz,
         );
 
     return {
@@ -216,13 +217,32 @@ export async function computeMonthlyBreakdown(
     };
 }
 
+/**
+ * Runs a monthly computation in the admin time zone, falling back to UTC if the database
+ * rejects that zone, so an unusual zone name can only shift bars, never break the page.
+ */
+export async function inZoneOrUtc<T>(tz: string, run: (zone: string) => Promise<T>): Promise<T> {
+    if (tz === "UTC") return run("UTC");
+    try {
+        return await run(tz);
+    } catch (err: any) {
+        console.warn("[adminSnapshot] time zone rejected, using UTC:", tz, err?.message);
+        return run("UTC");
+    }
+}
+
 /** Range months; with no end, from the start (or the first data month) to now or a later data month. */
-function paymentMonthKeys(from: Date | null, to: Date | null, points: { month: string }[], now: Date): string[] {
-    if (from && to) return monthsInHalfOpenRange(from, to);
-    if (!from) return allTimeMonthKeys(points, now);
-    const latest = [...allTimeMonthKeys(points, now), monthKeyUTC(now)].sort().pop() as string;
-    const [y, m] = latest.split("-").map(Number);
-    return monthsInRange(from, new Date(Date.UTC(y, m - 1, 1)));
+function paymentMonthKeys(
+    from: Date | null,
+    to: Date | null,
+    points: { month: string }[],
+    now: Date,
+    tz: string = "UTC",
+): string[] {
+    if (from && to) return monthsInHalfOpenRange(from, to, tz);
+    if (!from) return allTimeMonthKeys(points, now, tz);
+    const latest = [...allTimeMonthKeys(points, now, tz), monthKeyInZone(now, tz)].sort().pop() as string;
+    return monthKeysBetween(monthKeyInZone(from, tz), latest);
 }
 
 /** COLLECTED, COUNT and the per-month COLLECTED series for payments only (the admin Payments page). */
@@ -232,6 +252,7 @@ export async function computePaymentSnapshot(
     to: Date | null,
     requestedStripeMode?: unknown,
     now: Date = new Date(),
+    tz: string = "UTC",
 ): Promise<{
     paymentsCount: number;
     paymentsAmountByCurrency: AmountByCurrency;
@@ -241,13 +262,13 @@ export async function computePaymentSnapshot(
     const [paymentsCount, amounts, monthRows] = await Promise.all([
         models.PaymentHistory.countDocuments(charges),
         models.PaymentHistory.aggregate(keptChargesPipeline(charges, currencyGroupId)),
-        models.PaymentHistory.aggregate(keptChargesPipeline(charges, MONTH_AND_CURRENCY)),
+        models.PaymentHistory.aggregate(keptChargesPipeline(charges, monthAndCurrency(tz))),
     ]);
     const points = monthlyFromAgg(monthRows, true);
     return {
         paymentsCount,
         paymentsAmountByCurrency: amountByCurrencyFromAgg(amounts),
-        monthly: fillMonthlySeries(paymentMonthKeys(from, to, points, now), points),
+        monthly: fillMonthlySeries(paymentMonthKeys(from, to, points, now, tz), points),
     };
 }
 

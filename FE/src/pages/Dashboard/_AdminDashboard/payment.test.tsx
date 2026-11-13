@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { MemoryRouter } from 'react-router-dom';
+import { formatMonthKey } from '../../../utils/adminSnapshotDisplay';
 
 vi.mock('../../../api/api', () => ({
   doFilterPaymentHistories: vi.fn(),
@@ -16,6 +17,10 @@ vi.mock('../../../api/api', () => ({
   doGetPaymentIntegrityReport: vi.fn(),
   doGetAdminPaymentStats: vi.fn(),
   listPayrollCheques: vi.fn(async () => ({ cheques: [] })),
+  doGetAdminDashboardStats: vi.fn(),
+  doFilterUsers: vi.fn(),
+  doGetAdminPlatformEvents: vi.fn(),
+  profileImageFetch: vi.fn(),
 }));
 
 vi.mock('../../../actions/appActions', () => ({
@@ -24,6 +29,7 @@ vi.mock('../../../actions/appActions', () => ({
 
 import {
   doFilterPaymentHistories,
+  doGetAdminDashboardStats,
   doGetAdminPaymentStats,
   doGetPaymentIntegrityReport,
   getStripeMode,
@@ -356,11 +362,207 @@ describe('Admin Payment Management', () => {
       expect(stats.dateFrom).toBe(list.dateFrom);
       expect(list.dateTo).toBeUndefined();
       expect(stats.dateTo).toBeUndefined();
-      const months = (now - new Date(list.dateFrom).getTime()) / (1000 * 60 * 60 * 24 * 30.4);
-      expect(months).toBeGreaterThan(2.8);
-      expect(months).toBeLessThan(3.2);
+      const d = new Date(now);
+      expect(list.dateFrom).toBe(new Date(d.getFullYear(), d.getMonth() - 2, 1).toISOString());
     });
     expect(screen.getByRole('radio', { name: '3 months' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it.each([
+    ['3m', 3],
+    ['6m', 6],
+    ['1y', 12],
+  ])('the chart shows exactly as many months as the %s range, not one extra', async (range, bars) => {
+    const now = new Date();
+    const monthKey = (back: number) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    };
+    const oldest = monthKey(bars);
+    vi.mocked(doGetAdminPaymentStats).mockResolvedValue({
+      status: 'SUCCESS',
+      data: {
+        paymentsCount: 2,
+        paymentsAmountByCurrency: { usd: 20000 },
+        monthly: [
+          { month: oldest, count: 1, amountsByCurrency: { usd: 10000 } },
+          { month: monthKey(0), count: 1, amountsByCurrency: { usd: 10000 } },
+        ],
+      },
+    });
+    renderPayment(`/user/admindashboard/payment?range=${range}`);
+    const summary = await screen.findByTestId('payment-summary');
+    const chart = (await within(summary).findByText('Payments collected per month')).closest('figure') as HTMLElement;
+    const monthBars = within(chart).getAllByRole('button');
+    expect(monthBars).toHaveLength(bars);
+    const labels = monthBars.map(b => b.getAttribute('aria-label') || '');
+    expect(labels.some(l => l.startsWith(`${formatMonthKey(oldest).long}:`))).toBe(false);
+    expect(labels[labels.length - 1].startsWith(`${formatMonthKey(monthKey(0)).long}:`)).toBe(true);
+  });
+
+  it('Payments / Refunds tabs sit under the heading, above the range, and start on Payments', async () => {
+    renderPayment('/user/admindashboard/payment?range=3m');
+    const summary = await screen.findByTestId('payment-summary');
+    await within(summary).findByText('Payments collected per month');
+    const tabs = within(summary).getByRole('group', { name: 'Summary view' });
+    const payments = within(tabs).getByRole('button', { name: 'Payments' });
+    const refunds = within(tabs).getByRole('button', { name: 'Refunds' });
+    expect(payments).toHaveAttribute('aria-pressed', 'true');
+    expect(refunds).toHaveAttribute('aria-pressed', 'false');
+    const range = screen.getByRole('radio', { name: '3 months' });
+    expect(tabs.compareDocumentPosition(range)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  describe('Refunds tab — the Overview Refunds view, reused', () => {
+    const thisMonth = (() => {
+      const d = new Date();
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    })();
+    const REFUND_ROWS = [
+      {
+        _id: 'r1',
+        amount: 9000,
+        currency: 'usd',
+        description: 'Refund — ZZTEST 9 live',
+        paymentType: 'refund',
+        status: 'refunded',
+        createdAt: new Date().toISOString(),
+        customer: { username: 'Sam Student', email: 'sam@example.com' },
+        paymentIntent: 'pi_zztest_9',
+      },
+      {
+        _id: 'r2',
+        amount: 2500,
+        currency: 'usd',
+        description: 'Refund — no account',
+        paymentType: 'refund',
+        status: 'refunded',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    beforeEach(() => {
+      HTMLElement.prototype.scrollIntoView = vi.fn();
+      vi.mocked(doGetAdminDashboardStats).mockResolvedValue({
+        status: 'SUCCESS',
+        data: {
+          pendingApprovals: 0,
+          newContactMessages: 0,
+          unansweredChatbotQuestions: 0,
+          expertCount: 0,
+          customerCount: 0,
+          oneOnOneSessions: 0,
+          seminarsHeld: 0,
+          totalPayments: 0,
+          refundCount: 0,
+          todayUpcomingEvents: 0,
+          range: {
+            expertsJoined: 0,
+            customersJoined: 0,
+            sessionsHeld: 0,
+            seminarsHeld: 0,
+            paymentsCount: 4,
+            refundsCount: 2,
+            paymentsAmountByCurrency: { usd: 30000 },
+            refundsAmountByCurrency: { usd: 11500 },
+            sessionsCancelled: 0,
+            seminarsAttendees: 0,
+            refundsUnlinked: 1,
+          },
+          monthly: {
+            experts: [],
+            customers: [],
+            sessions: [],
+            seminars: [],
+            payments: [],
+            refunds: [{ month: thisMonth, count: 2, amountsByCurrency: { usd: 11500 } }],
+          },
+        },
+      } as any);
+      const base = vi.mocked(doFilterPaymentHistories).getMockImplementation()!;
+      vi.mocked(doFilterPaymentHistories).mockImplementation(async (filter: any) =>
+        filter?.paymentType === 'refund' && filter?.numPerPage === 50
+          ? ({ result: REFUND_ROWS, totalCount: 2 } as any)
+          : base(filter),
+      );
+    });
+
+    const openRefunds = async (initial = '/user/admindashboard/payment?range=3m') => {
+      renderPayment(initial);
+      const summary = await screen.findByTestId('payment-summary');
+      await within(summary).findByText('Payments collected per month');
+      fireEvent.click(within(summary).getByRole('button', { name: 'Refunds' }));
+      return summary;
+    };
+
+    it('shows the Overview refund cards, chart and list, and hides the payments list', async () => {
+      const summary = await openRefunds();
+      const view = within(summary).getByTestId('refunds-view');
+      expect(await within(view).findAllByText('Sam Student')).not.toHaveLength(0);
+      const kpi = (label: string) => within(view).getByText(label).parentElement as HTMLElement;
+      expect(kpi('Count').textContent).toContain('2');
+      expect(kpi('Amount returned').textContent).toContain('$115');
+      expect(kpi('Refund rate').textContent).toContain('50%');
+      expect(kpi('No linked user').textContent).toContain('1');
+      expect(within(view).getByText('Refunds per month')).toBeInTheDocument();
+      const chart = within(view).getByText('Refunds per month').closest('figure') as HTMLElement;
+      expect(within(chart).getAllByRole('button')).toHaveLength(3);
+      for (const name of ['Refunded', 'User', 'Reason', 'Amount']) {
+        expect(within(view).getByRole('columnheader', { name })).toBeInTheDocument();
+      }
+      expect(within(view).getByText('2 refunds · last 3 months')).toBeInTheDocument();
+      expect(within(view).getAllByText('ZZTEST 9 live').length).toBeGreaterThan(0);
+      expect(within(view).getAllByText('Unknown user').length).toBeGreaterThan(0);
+      expect(screen.queryByTestId('payment-history-table')).toBeNull();
+      expect(screen.queryByTestId('payment-history-total')).toBeNull();
+      expect(within(summary).queryByText('Collected')).toBeNull();
+    });
+
+    it('asks the server exactly what the Overview asks: dashboard stats for the range, refund rows only', async () => {
+      await openRefunds();
+      await waitFor(() => expect(doGetAdminDashboardStats).toHaveBeenCalled());
+      const stats = vi.mocked(doGetAdminDashboardStats).mock.calls.at(-1)?.[0] as any;
+      const d = new Date();
+      expect(stats.dateFrom).toBe(new Date(d.getFullYear(), d.getMonth() - 2, 1).toISOString());
+      expect(stats.stripeMode).toBeUndefined();
+      const listCall = vi.mocked(doFilterPaymentHistories).mock.calls.find(c => (c[0] as any)?.paymentType === 'refund')?.[0] as any;
+      expect(listCall).toEqual(expect.objectContaining({ paymentType: 'refund', numPerPage: 50, currentPage: 0 }));
+      expect(listCall.dateFrom).toBe(stats.dateFrom);
+    });
+
+    it('follows the page date range, and All time sends no dates', async () => {
+      const summary = await openRefunds();
+      await waitFor(() => expect(doGetAdminDashboardStats).toHaveBeenCalled());
+      vi.mocked(doGetAdminDashboardStats).mockClear();
+      fireEvent.click(screen.getByRole('radio', { name: 'All time' }));
+      await waitFor(() => expect(doGetAdminDashboardStats).toHaveBeenCalled());
+      expect((vi.mocked(doGetAdminDashboardStats).mock.calls.at(-1)?.[0] as any).dateFrom).toBeUndefined();
+      await waitFor(() => expect(within(summary).getByText('2 refunds · all time')).toBeInTheDocument());
+    });
+
+    it('clicking a refund opens the same detail panel as the Overview', async () => {
+      const summary = await openRefunds();
+      const view = within(summary).getByTestId('refunds-view');
+      fireEvent.click((await within(view).findAllByText('Unknown user'))[0]);
+      expect((await within(view).findAllByText(/No account is linked to this refund/)).length).toBeGreaterThan(0);
+    });
+
+    it('switching back to Payments restores the payment cards, chart and list', async () => {
+      const summary = await openRefunds();
+      await within(summary).findByText('Refunds per month');
+      fireEvent.click(within(summary).getByRole('button', { name: 'Payments' }));
+      expect(within(summary).getByText('Collected')).toBeInTheDocument();
+      expect(within(summary).getByText('Payments collected per month')).toBeInTheDocument();
+      expect(within(summary).queryByTestId('refunds-view')).toBeNull();
+      expect(screen.getByLabelText('Payment type')).toBeInTheDocument();
+      expect(screen.getByLabelText('Status')).toBeInTheDocument();
+    });
+
+    it('the payments list and its filters are gone while Refunds is open', async () => {
+      await openRefunds('/user/admindashboard/payment');
+      expect(screen.queryByLabelText('Payment type')).toBeNull();
+      expect(screen.queryByTestId('payment-history-table')).toBeNull();
+    });
   });
 
   it('summary follows Stripe mode but not email, status or type', async () => {
