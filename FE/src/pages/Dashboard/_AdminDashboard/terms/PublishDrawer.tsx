@@ -199,7 +199,7 @@ export default function PublishDrawer({
               ) : null}
               <div>
                 <label htmlFor="terms-change-notes" className="mb-1 block text-sm font-medium text-slate-700">
-                  What changed (optional)
+                  What changed (Hint to display to users)
                 </label>
                 <textarea
                   id="terms-change-notes"

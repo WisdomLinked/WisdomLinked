@@ -179,7 +179,7 @@ describe('TermsAgreementPage — current version', () => {
     const file = new File(['terms'], 'student-v2.docx', { type: DOCX_MIME });
     fireEvent.change(screen.getByLabelText('Agreement document'), { target: { files: [file] } });
     await screen.findByText('Doc preview text');
-    await user.type(screen.getByLabelText('What changed (optional)'), 'No-show policy');
+    await user.type(screen.getByLabelText('What changed (Hint to display to users)'), 'No-show policy');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     expect(screen.getByText('v1 → v2')).toBeInTheDocument();
     expect(screen.getByText('2 users')).toBeInTheDocument();

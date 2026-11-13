@@ -135,6 +135,7 @@ export function PaymentDetailFields({
         {reason ? <Field label={refund ? 'Reason' : 'Description'} value={reason} wide /> : null}
         <Field label={refund ? 'Refunded' : 'Date'} value={<DateCell value={row.createdAt} />} />
         {intent ? <Field label="Payment intent" value={<CopyIntent value={intent} />} /> : null}
+        <Field label="Receipt ID" value="—" />
         {receiptUrl ? (
           <Field
             label="Receipt"
